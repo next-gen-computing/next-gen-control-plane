@@ -1,0 +1,45 @@
+version: '3.9'
+
+services:
+  control-plane:
+    build: ./java-control-plane
+    ports:
+      - "50051:50051"
+    networks:
+      - nextgen-net
+
+  node1:
+    build: ./java-control-plane
+    environment:
+      - NODE_ID=node1
+      - CONTROL_PLANE_HOST=control-plane
+    networks:
+      - nextgen-net
+
+  node2:
+    build: ./java-control-plane
+    environment:
+      - NODE_ID=node2
+      - CONTROL_PLANE_HOST=control-plane
+    networks:
+      - nextgen-net
+
+  node3:
+    build: ./java-control-plane
+    environment:
+      - NODE_ID=node3
+      - CONTROL_PLANE_HOST=control-plane
+    networks:
+      - nextgen-net
+
+  predictor:
+    build: ./python-predictor
+    ports:
+      - "50052:50052"
+      - "9091:9091"   # Prometheus
+    networks:
+      - nextgen-net
+
+networks:
+  nextgen-net:
+    driver: bridge
