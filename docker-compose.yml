@@ -1,44 +1,91 @@
-version: '3.9'
-
 services:
+  # ── Control Plane (Java gRPC server + API) ────────
   control-plane:
-    build: ./java-control-plane
+    build:
+      context: .
+      dockerfile: java-control-plane/Dockerfile
+    environment:
+      - ROLE=server
+      - PREDICTOR_HOST=predictor
     ports:
-      - "50051:50051"
+      - "50051:50051"   # gRPC
+      - "9090:9090"     # Prometheus metrics
     networks:
       - nextgen-net
+    depends_on:
+      - predictor
+    healthcheck:
+      test: ["CMD", "sh", "-c", "echo | timeout 2 bash -c 'cat < /dev/null > /dev/tcp/localhost/50051'"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
+  # ── Node Agents (3 instances, real OS metrics) ────
   node1:
-    build: ./java-control-plane
+    build:
+      context: .
+      dockerfile: java-control-plane/Dockerfile
     environment:
+      - ROLE=agent
       - NODE_ID=node1
       - CONTROL_PLANE_HOST=control-plane
     networks:
       - nextgen-net
+    depends_on:
+      control-plane:
+        condition: service_started
 
   node2:
-    build: ./java-control-plane
+    build:
+      context: .
+      dockerfile: java-control-plane/Dockerfile
     environment:
+      - ROLE=agent
       - NODE_ID=node2
       - CONTROL_PLANE_HOST=control-plane
     networks:
       - nextgen-net
+    depends_on:
+      control-plane:
+        condition: service_started
 
   node3:
-    build: ./java-control-plane
+    build:
+      context: .
+      dockerfile: java-control-plane/Dockerfile
     environment:
+      - ROLE=agent
       - NODE_ID=node3
       - CONTROL_PLANE_HOST=control-plane
     networks:
       - nextgen-net
+    depends_on:
+      control-plane:
+        condition: service_started
 
+  # ── Python Predictor (gRPC stub) ─────────────────
   predictor:
-    build: ./python-predictor
+    build:
+      context: .
+      dockerfile: python-predictor/Dockerfile
     ports:
-      - "50052:50052"
-      - "9091:9091"   # Prometheus
+      - "50052:50052"   # gRPC
+      - "9091:9091"     # Prometheus metrics
     networks:
       - nextgen-net
+
+  # ── Dashboard (nginx frontend) ───────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    ports:
+      - "8085:80"       # Dashboard UI
+    networks:
+      - nextgen-net
+    depends_on:
+      control-plane:
+        condition: service_started
 
 networks:
   nextgen-net:
