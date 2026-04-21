@@ -1,0 +1,46 @@
+syntax = "proto3";
+package com.nextgen.controlplane.grpc;
+option java_multiple_files = true;
+option java_outer_classname = "NodeAgentProto";
+
+service NodeAgentService {
+  rpc RegisterNode(RegisterRequest) returns (RegisterResponse);
+  rpc SendHeartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  rpc DeregisterNode(DeregisterRequest) returns (DeregisterResponse);
+}
+
+message RegisterRequest {
+  string node_id = 1;
+  string hostname = 2;
+  string ip_address = 3;
+}
+
+message RegisterResponse {
+  string cluster_id = 1;
+  string assigned_node_id = 2;
+  int32 heartbeat_cadence_ms = 3;
+  map<string, string> config = 4;
+}
+
+message HeartbeatRequest {
+  string node_id = 1;
+  int64 sequence_counter = 2;
+  float cpu_percent = 3;
+  float heap_percent = 4;
+  float disk_percent = 5;
+}
+
+message HeartbeatResponse {
+  bool acknowledged = 1;
+  int32 new_heartbeat_cadence_ms = 2; 
+  string target_state = 3; 
+  map<string, string> config_deltas = 4;
+}
+
+message DeregisterRequest {
+  string node_id = 1;
+}
+
+message DeregisterResponse {
+  bool success = 1;
+}

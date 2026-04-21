@@ -6,18 +6,23 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.nextgen</groupId>
-    <artifactId>control-plane</artifactId>
+    <artifactId>node-agent</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <properties>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <grpc.version>1.80.0</grpc.version>
+        <protobuf.version>3.25.8</protobuf.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+<<<<<<< HEAD
         <grpc.version>1.68.0</grpc.version>
         <protobuf.version>3.25.5</protobuf.version>
         <slf4j.version>2.0.13</slf4j.version>
         <logback.version>1.5.6</logback.version>
+=======
+>>>>>>> efcd0a19ad2e017e4fbd78ac46b8c89db8b30dcb
     </properties>
 
     <dependencies>
@@ -38,6 +43,7 @@
             <version>${grpc.version}</version>
         </dependency>
 
+<<<<<<< HEAD
         <!-- Annotation API (required by generated gRPC stubs) -->
         <dependency>
             <groupId>javax.annotation</groupId>
@@ -58,26 +64,54 @@
         </dependency>
 
         <!-- Prometheus metrics -->
+=======
+        <!-- Logging -->
+>>>>>>> efcd0a19ad2e017e4fbd78ac46b8c89db8b30dcb
         <dependency>
-            <groupId>io.prometheus</groupId>
-            <artifactId>simpleclient</artifactId>
-            <version>0.16.0</version>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>2.0.16</version>
+        </dependency>
+
+        <!-- Testing -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>5.10.2</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>io.prometheus</groupId>
-            <artifactId>simpleclient_hotspot</artifactId>
-            <version>0.16.0</version>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <version>5.10.2</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>io.prometheus</groupId>
-            <artifactId>simpleclient_httpserver</artifactId>
-            <version>0.16.0</version>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>5.11.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-testing</artifactId>
+            <version>${grpc.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-inprocess</artifactId>
+            <version>${grpc.version}</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 
     <build>
         <extensions>
+<<<<<<< HEAD
             <!-- OS detection for protoc binary -->
+=======
+>>>>>>> efcd0a19ad2e017e4fbd78ac46b8c89db8b30dcb
             <extension>
                 <groupId>kr.motd.maven</groupId>
                 <artifactId>os-maven-plugin</artifactId>
@@ -86,16 +120,25 @@
         </extensions>
 
         <plugins>
-            <!-- Protobuf & gRPC code generation -->
+            <!-- Protobuf + gRPC code generation -->
             <plugin>
                 <groupId>org.xolstice.maven.plugins</groupId>
                 <artifactId>protobuf-maven-plugin</artifactId>
                 <version>0.6.1</version>
                 <configuration>
-                    <protocArtifact>com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}</protocArtifact>
+                    <protocArtifact>
+                        com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}
+                    </protocArtifact>
                     <pluginId>grpc-java</pluginId>
+<<<<<<< HEAD
                     <pluginArtifact>io.grpc:protoc-gen-grpc-java:${grpc.version}:exe:${os.detected.classifier}</pluginArtifact>
                     <protoSourceRoot>${project.basedir}/../proto</protoSourceRoot>
+=======
+                    <pluginArtifact>
+                        io.grpc:protoc-gen-grpc-java:${grpc.version}:exe:${os.detected.classifier}
+                    </pluginArtifact>
+                    <protoSourceRoot>src/main/proto</protoSourceRoot>
+>>>>>>> efcd0a19ad2e017e4fbd78ac46b8c89db8b30dcb
                 </configuration>
                 <executions>
                     <execution>
