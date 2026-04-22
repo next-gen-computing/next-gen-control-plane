@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Overview — Task Manager</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+
+    <link rel="stylesheet" href="../css/styles.css">
+
+</head>
+
+
+
+<body>
+
+    <header class="titlebar">
+
+        <div class="titlebar-left">
+
+            <div class="titlebar-logo">⚡</div>
+
+            <h1>Next-Gen Control Plane <span>— Task Manager</span></h1>
+
+        </div>
+
+        <div class="status-badge" id="connectionStatus">
+
+            <span class="dot"></span>
+
+            <span>Connected</span>
+
+        </div>
+
+    </header>
+
+
+
+    <nav class="tabs">
+
+        <a href="overview.html" class="tab active">Overview</a>
+
+        <a href="performance.html" class="tab">Performance</a>
+
+        <a href="nodes.html" class="tab">Nodes</a>
+
+    </nav>
+
+
+
+    <main class="main-content">
+
+        <section class="tab-panel active">
+
+            <div class="overview-grid">
+
+                <div class="stat-card cpu">
+
+                    <div class="label">Avg CPU</div>
+
+                    <div class="value" id="avg-cpu">—<span class="unit">%</span></div>
+
+                </div>
+
+                <div class="stat-card mem">
+
+                    <div class="label">Avg Memory</div>
+
+                    <div class="value" id="avg-mem">—<span class="unit">%</span></div>
+
+                </div>
+
+                <div class="stat-card nodes">
+
+                    <div class="label">Total Nodes</div>
+
+                    <div class="value" id="total-nodes">—</div>
+
+                </div>
+
+                <div class="stat-card alive">
+
+                    <div class="label">Alive</div>
+
+                    <div class="value" id="alive-nodes">—</div>
+
+                </div>
+
+                <div class="stat-card dead">
+
+                    <div class="label">Dead</div>
+
+                    <div class="value" id="dead-nodes">—</div>
+
+                </div>
+
+            </div>
+
+
+
+            <div class="perf-grid">
+
+                <div class="chart-panel">
+
+                    <div class="chart-header">
+
+                        <div class="title">
+
+                            <div class="icon cpu-icon">⬢</div>
+
+                            <h3>CPU Usage</h3>
+
+                        </div>
+
+                        <div class="live-value cpu" id="cpu-live">—%</div>
+
+                    </div>
+
+                    <div class="chart-container">
+
+                        <canvas id="cpuOverviewChart"></canvas>
+
+                    </div>
+
+                    <div class="chart-legend" id="cpuLegend"></div>
+
+                </div>
+
+                <div class="chart-panel">
+
+                    <div class="chart-header">
+
+                        <div class="title">
+
+                            <div class="icon mem-icon">⬡</div>
+
+                            <h3>Memory Usage</h3>
+
+                        </div>
+
+                        <div class="live-value mem" id="mem-live">—%</div>
+
+                    </div>
+
+                    <div class="chart-container">
+
+                        <canvas id="memOverviewChart"></canvas>
+
+                    </div>
+
+                    <div class="chart-legend" id="memLegend"></div>
+
+                </div>
+
+            </div>
+
+
+
+            <div class="section-title">Registered Nodes</div>
+
+            <div class="nodes-table-container">
+
+                <table class="nodes-table" id="overview-nodes-table">
+
+                    <thead>
+
+                        <tr>
+
+                            <th>Node</th>
+
+                            <th>Status</th>
+
+                            <th>CPU</th>
+
+                            <th>Memory</th>
+
+                            <th>Last Heartbeat</th>
+
+                        </tr>
+
+                    </thead>
+
+                    <tbody id="overview-nodes-body">
+
+                        <tr>
+
+                            <td colspan="5" class="empty-state">
+
+                                <p>Waiting for nodes...</p>
+
+                            </td>
+
+                        </tr>
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+
+    <footer class="footer">
+
+        <div class="refresh-info"><span class="refresh-dot"></span><span>Live — 2s</span></div>
+
+        <div id="last-update">Last update: —</div>
+
+    </footer>
+
+    <script src="../js/app.js"></script>
+
+</body>
+
+
+
+</html>

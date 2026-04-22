@@ -40,7 +40,9 @@ Chart.defaults.font.size = 11;
 // ═══════════════════════════════════════════════════
 // Tab Navigation
 // ═══════════════════════════════════════════════════
-document.querySelectorAll('.tab').forEach(tab => {
+// Note: Tab navigation is now handled by separate HTML pages with href links
+// This code is only for the single-page index.html if needed
+document.querySelectorAll('.tab[data-tab]').forEach(tab => {
     tab.addEventListener('click', () => {
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -72,7 +74,7 @@ function createChartConfig(type, isOverview) {
                     padding: 10,
                     cornerRadius: 8,
                     callbacks: {
-                        label: function(ctx) {
+                        label: function (ctx) {
                             return ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(1) + '%';
                         }
                     }
@@ -127,11 +129,16 @@ function getNodeColor(nodeId) {
 // Initialize Overview Charts
 // ═══════════════════════════════════════════════════
 function initOverviewCharts() {
-    const cpuCtx = document.getElementById('cpuOverviewChart').getContext('2d');
-    cpuOverviewChart = new Chart(cpuCtx, createChartConfig('cpu', true));
+    const cpuCanvas = document.getElementById('cpuOverviewChart');
+    const memCanvas = document.getElementById('memOverviewChart');
+    
+    if (cpuCanvas && memCanvas) {
+        const cpuCtx = cpuCanvas.getContext('2d');
+        cpuOverviewChart = new Chart(cpuCtx, createChartConfig('cpu', true));
 
-    const memCtx = document.getElementById('memOverviewChart').getContext('2d');
-    memOverviewChart = new Chart(memCtx, createChartConfig('mem', true));
+        const memCtx = memCanvas.getContext('2d');
+        memOverviewChart = new Chart(memCtx, createChartConfig('mem', true));
+    }
 }
 
 // ═══════════════════════════════════════════════════
@@ -144,6 +151,7 @@ function ensurePerNodeCharts(nodeId) {
 
     // CPU card
     const cpuGrid = document.getElementById('cpu-perf-grid');
+    if (!cpuGrid) return;
     const cpuCard = document.createElement('div');
     cpuCard.className = 'node-chart-card';
     cpuCard.id = 'cpu-card-' + nodeId;
@@ -241,30 +249,36 @@ function updateLegends(nodes) {
 }
 
 // ═══════════════════════════════════════════════════
-// Main Fetch & Update Loop — ALL REAL DATA
+// Main Fetch & Update Loop
 // ═══════════════════════════════════════════════════
 async function fetchAndUpdate() {
     try {
+        console.log('Fetching from:', API_URL);
         const resp = await fetch(API_URL);
+        console.log('Response status:', resp.status);
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const data = await resp.json();
+        console.log('Received data:', data);
 
         // Update connection status
         const badge = document.getElementById('connectionStatus');
-        badge.querySelector('span:last-child').textContent = 'Connected';
-        badge.style.borderColor = 'rgba(63, 185, 80, 0.2)';
-        badge.style.color = 'var(--accent-green)';
-
+        if (badge) {
+            badge.querySelector('span:last-child').textContent = 'Connected';
+            badge.style.borderColor = 'rgba(63, 185, 80, 0.2)';
+            badge.style.color = 'var(--accent-green)';
+        }
         // Update summary cards
         const s = data.summary;
-        document.getElementById('avg-cpu').innerHTML = s.avgCpu.toFixed(1) + '<span class="unit">%</span>';
-        document.getElementById('avg-mem').innerHTML = s.avgMemory.toFixed(1) + '<span class="unit">%</span>';
-        document.getElementById('total-nodes').textContent = s.totalNodes;
-        document.getElementById('alive-nodes').textContent = s.aliveNodes;
-        document.getElementById('dead-nodes').textContent = s.deadNodes;
-        document.getElementById('cpu-live').textContent = s.avgCpu.toFixed(1) + '%';
-        document.getElementById('mem-live').textContent = s.avgMemory.toFixed(1) + '%';
-
+        const avgCpuEl = document.getElementById('avg-cpu');
+        if (avgCpuEl) {
+            document.getElementById('avg-cpu').innerHTML = s.avgCpu.toFixed(1) + '<span class="unit">%</span>';
+            document.getElementById('avg-mem').innerHTML = s.avgMemory.toFixed(1) + '<span class="unit">%</span>';
+            document.getElementById('total-nodes').textContent = s.totalNodes;
+            document.getElementById('alive-nodes').textContent = s.aliveNodes;
+            document.getElementById('dead-nodes').textContent = s.deadNodes;
+            document.getElementById('cpu-live').textContent = s.avgCpu.toFixed(1) + '%';
+            document.getElementById('mem-live').textContent = s.avgMemory.toFixed(1) + '%';
+        }
         const now = timeLabel();
 
         // Process each node
@@ -277,7 +291,7 @@ async function fetchAndUpdate() {
             // Init history if new node
             if (!nodeHistory[id]) {
                 nodeHistory[id] = { cpu: [], mem: [], labels: [] };
-                knownNodeIds.add(id);
+                if (typeof knownNodeIds !== 'undefined') knownNodeIds.add(id);
             }
 
             // Push real data
@@ -297,21 +311,44 @@ async function fetchAndUpdate() {
         });
 
         // Update all chart views
-        updateOverviewCharts(nodes);
-        updatePerNodeCharts(nodes);
-        updateLegends(nodes);
-        updateOverviewTable(nodes);
-        updateProcessesTable(nodes);
+        // updateOverviewCharts(nodes);
+        // updatePerNodeCharts(nodes);
+        // updateLegends(nodes);
+        // updateOverviewTable(nodes);
+        // updateProcessesTable(nodes);
+
+        // 3. Conditional View Updates (CRITICAL)
+        // Only update charts if the chart objects exist
+        if (cpuOverviewChart && memOverviewChart) {
+            updateOverviewCharts(nodes);
+        }
+
+        // Only update per-node charts if we are on the performance page
+        if (Object.keys(perNodeCpuCharts).length > 0) {
+            updatePerNodeCharts(nodes);
+        }
+
+        // Only update tables/legends if their specific containers exist
+        if (document.getElementById('cpuLegend')) updateLegends(nodes);
+        if (document.getElementById('overview-nodes-body')) updateOverviewTable(nodes);
+        if (document.getElementById('processes-nodes-body')) updateProcessesTable(nodes);
 
         // Footer timestamp
-        document.getElementById('last-update').textContent = 'Last update: ' + now;
+        //document.getElementById('last-update').textContent = 'Last update: ' + now;
+
+        // 4. Footer timestamp (Shared)
+        const lastUpdateEl = document.getElementById('last-update');
+        if (lastUpdateEl) lastUpdateEl.textContent = 'Last update: ' + now;
 
     } catch (err) {
         console.error('Fetch error:', err);
+        console.error('Error details:', err.message);
         const badge = document.getElementById('connectionStatus');
-        badge.querySelector('span:last-child').textContent = 'Disconnected';
-        badge.style.borderColor = 'rgba(248, 81, 73, 0.2)';
-        badge.style.color = 'var(--accent-red)';
+        if (badge) {
+            badge.querySelector('span:last-child').textContent = 'Disconnected';
+            badge.style.borderColor = 'rgba(248, 81, 73, 0.2)';
+            badge.style.color = 'var(--accent-red)';
+        }
     }
 }
 
