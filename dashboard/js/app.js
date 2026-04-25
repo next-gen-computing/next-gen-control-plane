@@ -457,6 +457,8 @@ function updateOverviewTable(nodes) {
 
 function updateProcessesTable(nodes) {
     const tbody = document.getElementById('processes-nodes-body');
+    if (!tbody) return;
+
     if (nodes.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><p>Waiting for nodes to register...</p></td></tr>';
         return;
@@ -494,7 +496,180 @@ function updateProcessesTable(nodes) {
         </tr>`;
     });
     tbody.innerHTML = html;
+
+    // Also update card grid view and summary strip
+    updateNodeCards(nodes);
+    updateNodesSummaryStrip(nodes);
 }
+
+// ═══════════════════════════════════════════════════
+// Node Cards — Card Grid View
+// ═══════════════════════════════════════════════════
+const RING_RADIUS = 33;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+function updateNodeCards(nodes) {
+    const grid = document.getElementById('nodes-card-grid');
+    if (!grid) return;
+
+    const emptyState = document.getElementById('nodes-cards-empty');
+
+    if (nodes.length === 0) {
+        if (emptyState) emptyState.style.display = '';
+        // Remove all cards
+        grid.querySelectorAll('.node-card').forEach(c => c.remove());
+        return;
+    }
+
+    if (emptyState) emptyState.style.display = 'none';
+
+    const cardAvatarColors = [
+        'linear-gradient(135deg, #58a6ff, #39d2c0)',
+        'linear-gradient(135deg, #3fb950, #39d2c0)',
+        'linear-gradient(135deg, #d29922, #f0883e)',
+        'linear-gradient(135deg, #bc8cff, #e87de8)',
+        'linear-gradient(135deg, #f85149, #d29922)',
+        'linear-gradient(135deg, #39d2c0, #58a6ff)',
+    ];
+
+    nodes.forEach((n, idx) => {
+        const statusClass = n.status === 'ALIVE' ? 'alive' : 'dead';
+        const ageCls = ageClass(n.heartbeatAgeMs);
+        const cpuPct = n.cpuUsage;
+        const memPct = n.memoryUsage;
+        const cpuOffset = RING_CIRCUMFERENCE - (cpuPct / 100) * RING_CIRCUMFERENCE;
+        const memOffset = RING_CIRCUMFERENCE - (memPct / 100) * RING_CIRCUMFERENCE;
+        const avatarBg = cardAvatarColors[idx % cardAvatarColors.length];
+        const nodeNum = n.nodeId.replace(/\D/g, '') || (idx + 1);
+
+        let card = document.getElementById('node-card-' + n.nodeId);
+
+        if (!card) {
+            card = document.createElement('div');
+            card.className = 'node-card' + (statusClass === 'dead' ? ' dead' : '');
+            card.id = 'node-card-' + n.nodeId;
+            grid.appendChild(card);
+        }
+
+        card.className = 'node-card' + (statusClass === 'dead' ? ' dead' : '');
+
+        card.innerHTML = `
+            <div class="node-card-header">
+                <div class="node-card-identity">
+                    <div class="node-card-avatar" style="background:${avatarBg};">
+                        N${nodeNum}
+                        <span class="pulse-ring" style="color:${statusClass === 'alive' ? 'var(--accent-green)' : 'var(--accent-red)'}"></span>
+                    </div>
+                    <div>
+                        <div class="node-card-name">${n.nodeId}</div>
+                        <div class="node-card-hostname">${n.hostname}</div>
+                    </div>
+                </div>
+                <div class="node-card-status ${statusClass}">
+                    <span class="status-dot-sm"></span>
+                    ${n.status}
+                </div>
+            </div>
+            <div class="node-card-body">
+                <div class="usage-ring-wrapper">
+                    <div class="usage-ring">
+                        <svg viewBox="0 0 80 80">
+                            <circle class="ring-bg" cx="40" cy="40" r="${RING_RADIUS}"/>
+                            <circle class="ring-fill cpu" cx="40" cy="40" r="${RING_RADIUS}"
+                                stroke-dasharray="${RING_CIRCUMFERENCE}"
+                                stroke-dashoffset="${cpuOffset}"/>
+                        </svg>
+                        <div class="usage-ring-value" style="color:var(--cpu-color)">${cpuPct.toFixed(1)}%</div>
+                    </div>
+                    <div class="usage-ring-label">CPU</div>
+                </div>
+                <div class="usage-ring-wrapper">
+                    <div class="usage-ring">
+                        <svg viewBox="0 0 80 80">
+                            <circle class="ring-bg" cx="40" cy="40" r="${RING_RADIUS}"/>
+                            <circle class="ring-fill mem" cx="40" cy="40" r="${RING_RADIUS}"
+                                stroke-dasharray="${RING_CIRCUMFERENCE}"
+                                stroke-dashoffset="${memOffset}"/>
+                        </svg>
+                        <div class="usage-ring-value" style="color:var(--mem-color)">${memPct.toFixed(1)}%</div>
+                    </div>
+                    <div class="usage-ring-label">Memory</div>
+                </div>
+            </div>
+            <div class="node-card-footer">
+                <div class="node-meta-item">
+                    <span class="node-meta-label">IP Address</span>
+                    <span class="node-meta-value">${n.ip}</span>
+                </div>
+                <div class="node-meta-item">
+                    <span class="node-meta-label">Port</span>
+                    <span class="node-meta-value">${n.port}</span>
+                </div>
+                <div class="node-meta-item">
+                    <span class="node-meta-label">Heartbeat</span>
+                    <span class="node-meta-value heartbeat-age ${ageCls}">${formatAge(n.heartbeatAgeMs)}</span>
+                </div>
+                <div class="node-meta-item">
+                    <span class="node-meta-label">Hostname</span>
+                    <span class="node-meta-value">${n.hostname}</span>
+                </div>
+            </div>
+        `;
+    });
+}
+
+// ═══════════════════════════════════════════════════
+// Nodes Summary Strip
+// ═══════════════════════════════════════════════════
+function updateNodesSummaryStrip(nodes) {
+    const totalEl = document.getElementById('nodes-total-count');
+    const aliveEl = document.getElementById('nodes-alive-count');
+    const deadEl = document.getElementById('nodes-dead-count');
+    const cpuEl = document.getElementById('nodes-avg-cpu');
+    const memEl = document.getElementById('nodes-avg-mem');
+
+    if (!totalEl) return;
+
+    const alive = nodes.filter(n => n.status === 'ALIVE').length;
+    const dead = nodes.length - alive;
+    const avgCpu = nodes.length > 0
+        ? nodes.reduce((s, n) => s + n.cpuUsage, 0) / nodes.length
+        : 0;
+    const avgMem = nodes.length > 0
+        ? nodes.reduce((s, n) => s + n.memoryUsage, 0) / nodes.length
+        : 0;
+
+    totalEl.textContent = nodes.length;
+    aliveEl.textContent = alive;
+    deadEl.textContent = dead;
+    cpuEl.textContent = avgCpu.toFixed(1) + '%';
+    memEl.textContent = avgMem.toFixed(1) + '%';
+}
+
+// ═══════════════════════════════════════════════════
+// View Toggle (Card ↔ Table)
+// ═══════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+    const cardsBtn = document.getElementById('btn-cards-view');
+    const tableBtn = document.getElementById('btn-table-view');
+    const cardGrid = document.getElementById('nodes-card-grid');
+    const tableView = document.getElementById('nodes-table-view');
+
+    if (cardsBtn && tableBtn) {
+        cardsBtn.addEventListener('click', () => {
+            cardsBtn.classList.add('active');
+            tableBtn.classList.remove('active');
+            if (cardGrid) cardGrid.style.display = '';
+            if (tableView) tableView.style.display = 'none';
+        });
+        tableBtn.addEventListener('click', () => {
+            tableBtn.classList.add('active');
+            cardsBtn.classList.remove('active');
+            if (cardGrid) cardGrid.style.display = 'none';
+            if (tableView) tableView.style.display = '';
+        });
+    }
+});
 
 // ═══════════════════════════════════════════════════
 // Utility

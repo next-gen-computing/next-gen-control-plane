@@ -119,8 +119,74 @@
 
         <!-- ── PROCESSES (NODES) TAB ── -->
         <section class="tab-panel" id="tab-processes">
-            <div class="section-title">All Registered Nodes</div>
-            <div class="nodes-table-container">
+
+            <!-- ── Node Summary Strip ── -->
+            <div class="nodes-summary-strip">
+                <div class="strip-stat">
+                    <span class="strip-icon" style="color:var(--accent-cyan)">⬡</span>
+                    <div class="strip-info">
+                        <span class="strip-value" id="nodes-total-count">0</span>
+                        <span class="strip-label">Total Nodes</span>
+                    </div>
+                </div>
+                <div class="strip-divider"></div>
+                <div class="strip-stat">
+                    <span class="strip-icon" style="color:var(--accent-green)">●</span>
+                    <div class="strip-info">
+                        <span class="strip-value" id="nodes-alive-count">0</span>
+                        <span class="strip-label">Alive</span>
+                    </div>
+                </div>
+                <div class="strip-divider"></div>
+                <div class="strip-stat">
+                    <span class="strip-icon" style="color:var(--accent-red)">●</span>
+                    <div class="strip-info">
+                        <span class="strip-value" id="nodes-dead-count">0</span>
+                        <span class="strip-label">Dead</span>
+                    </div>
+                </div>
+                <div class="strip-divider"></div>
+                <div class="strip-stat">
+                    <span class="strip-icon" style="color:var(--cpu-color)">⬢</span>
+                    <div class="strip-info">
+                        <span class="strip-value" id="nodes-avg-cpu">—%</span>
+                        <span class="strip-label">Avg CPU</span>
+                    </div>
+                </div>
+                <div class="strip-divider"></div>
+                <div class="strip-stat">
+                    <span class="strip-icon" style="color:var(--mem-color)">⬢</span>
+                    <div class="strip-info">
+                        <span class="strip-value" id="nodes-avg-mem">—%</span>
+                        <span class="strip-label">Avg Memory</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Section Header with View Toggle ── -->
+            <div class="nodes-section-header">
+                <div class="section-title" style="margin-bottom:0; border-bottom:none; padding-bottom:0;">All Registered Nodes</div>
+                <div class="view-toggle" id="viewToggle">
+                    <button class="view-btn active" data-view="cards" id="btn-cards-view" title="Card View">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+                    </button>
+                    <button class="view-btn" data-view="table" id="btn-table-view" title="Table View">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="2" width="14" height="2" rx="0.5"/><rect x="1" y="7" width="14" height="2" rx="0.5"/><rect x="1" y="12" width="14" height="2" rx="0.5"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── Card Grid View (default) ── -->
+            <div class="nodes-card-grid" id="nodes-card-grid">
+                <div class="empty-state" id="nodes-cards-empty">
+                    <div class="icon">🖥️</div>
+                    <h3>No Nodes Detected</h3>
+                    <p>Waiting for node agents to register...</p>
+                </div>
+            </div>
+
+            <!-- ── Table View (hidden by default) ── -->
+            <div class="nodes-table-container" id="nodes-table-view" style="display:none;">
                 <table class="nodes-table">
                     <thead>
                         <tr>
