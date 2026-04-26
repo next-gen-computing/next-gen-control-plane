@@ -22,7 +22,7 @@ public class ControlPlaneServer {
 
     private static final int GRPC_PORT = 50051;
     private static final int METRICS_PORT = 9090;
-    private static final int DASHBOARD_PORT = 8080;
+    private static final int DASHBOARD_PORT = 8085;
 
     public static void start() throws IOException, InterruptedException {
         // Shared node registry
@@ -38,13 +38,21 @@ public class ControlPlaneServer {
         HTTPServer metricsServer = new HTTPServer.Builder().withPort(METRICS_PORT).build();
         LOG.info("📊 Prometheus metrics server started on port {}", METRICS_PORT);
 
-        // ── Dashboard API server (JSON data for frontend) ─────
+        // ── Dashboard HTTP server (static files + API) ─────
         HttpServer dashboardServer = HttpServer.create(new InetSocketAddress(DASHBOARD_PORT), 0);
+        
+        // Static files (HTML, CSS, JS) - production-grade for physical nodes
+        String dashboardBase = System.getProperty("user.dir") + "/../dashboard/html";
+        dashboardServer.createContext("/", new StaticFileHandler(dashboardBase));
+        
+        // API endpoint for live node data
         dashboardServer.createContext("/api/nodes", new DashboardApiHandler(registry));
+        
         dashboardServer.setExecutor(null); // default executor
         dashboardServer.start();
         LOG.info("══════════════════════════════════════════════════");
-        LOG.info("  📡 Dashboard API on port {}                    ", DASHBOARD_PORT);
+        LOG.info("  📡 Dashboard on http://localhost:{}             ", DASHBOARD_PORT);
+        LOG.info("  📊 API endpoint: http://localhost:{}/api/nodes   ", DASHBOARD_PORT);
         LOG.info("══════════════════════════════════════════════════");
 
         // gRPC server

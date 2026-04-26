@@ -1,11 +1,7 @@
 <!DOCTYPE html>
 
 <html lang="en">
-
-
-
 <head>
-
     <meta charset="UTF-8">
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -21,11 +17,7 @@
     <link rel="stylesheet" href="css/styles.css">
 
 </head>
-
-
-
 <body>
-
     <header class="titlebar">
 
         <div class="titlebar-left">
@@ -45,9 +37,6 @@
         </div>
 
     </header>
-
-
-
     <nav class="tabs">
 
         <a href="overview.html" class="tab">Overview</a>
@@ -57,9 +46,6 @@
         <a href="nodes.html" class="tab active">Nodes</a>
 
     </nav>
-
-
-
     <main class="main-content">
 
         <section class="tab-panel active">
@@ -71,45 +57,28 @@
                 <table class="nodes-table">
 
                     <thead>
-
                         <tr>
-
                             <th>Node ID</th>
-
                             <th>IP Address</th>
-
                             <th>Hostname</th>
-
                             <th>Port</th>
-
                             <th>CPU Usage</th>
-
                             <th>Memory Usage</th>
-
                             <th>Status</th>
-
                             <th>Last Heartbeat</th>
-
                         </tr>
-
                     </thead>
-
                     <tbody id="processes-nodes-body">
-
-                        <tr><td colspan="8" class="empty-state"><p>Waiting for nodes to register...</p></td></tr>
-
+                        <tr>
+                            <td colspan="8" class="empty-state">
+                                <p>Waiting for nodes to register...</p>
+                            </td>
+                        </tr>
                     </tbody>
-
                 </table>
-
             </div>
-
         </section>
-
     </main>
-
-
-
     <footer class="footer">
 
         <div class="refresh-info"><span class="refresh-dot"></span><span>Live — 2s</span></div>
@@ -118,10 +87,7 @@
 
     </footer>
 
-    <script src="../js/app.js"></script>
+    <script src="js/app.js"></script>
 
 </body>
-
-
-
 </html>

@@ -1,77 +1,190 @@
-# Development Setup (Phase-1)
+# Development Setup — Next-Gen Control Plane
 
-## Prerequisites
+**Version:** v0.2.0 | **Status:** Phase-1 Complete + Desktop App
 
-| Tool | Minimum Version | Purpose |
-|------|----------------|---------|
-| Docker Desktop | 24.x+ | Container runtime |
-| Docker Compose | v2.x+ | Multi-container orchestration |
-| Java JDK | 21 | ControlPlane & NodeAgent development |
-| Maven | 3.9+ | Java build system |
-| Python | 3.11+ | Predictor service |
+## 📋 Prerequisites
 
-## Running the Full Cluster (One Command)
+| Tool | Minimum Version | Purpose | Verification |
+|------|----------------|---------|--------------|
+| Docker Desktop | 24.x+ | Container runtime | `docker --version` |
+| Docker Compose | v2.x+ | Multi-container orchestration | `docker compose version` |
+| Java JDK | 21 | ControlPlane, NodeAgent & Desktop App | `java -version` |
+| Maven | 3.9+ | Java build system | `mvn -version` |
+| Python | 3.11+ | Predictor service | `python --version` |
+| JavaFX | 21.0.2 | Desktop GUI (bundled via Maven) | Included in pom.xml |
+
+## 🚀 Quick Start (One Command)
 
 ```bash
+# Clone repository
+git clone https://github.com/YOUR_USERNAME/next-gen-control-plane.git
+cd next-gen-control-plane
+
+# Start everything (Docker mode)
 docker compose up --build
 ```
 
 This will:
-1. Build the Java fat JAR (ControlPlane + NodeAgent) via Maven
-2. Build the Python predictor with gRPC stubs
-3. Start all 5 services on the `nextgen-net` Docker network
+1. Build Java fat JAR (ControlPlane + NodeAgent) via Maven
+2. Build Python predictor with gRPC stubs
+3. Start all 5 services on `nextgen-net` Docker network
+4. Dashboard available at http://localhost:8085
 
-## Service Endpoints
+## 🖥️ Desktop Application (GUI Mode)
 
-| Service | Port | Protocol |
-|---------|------|----------|
-| ControlPlane gRPC | 50051 | gRPC |
-| ControlPlane Metrics | 9090 | HTTP (Prometheus) |
-| Predictor gRPC | 50052 | gRPC |
-| Predictor Metrics | 9091 | HTTP (Prometheus) |
+The project includes a JavaFX desktop application with a Docker Desktop-style UI.
 
-## Local Development (Without Docker)
+### Build & Launch
 
-### 1. Build Java project
+```bash
+cd java-control-plane
+mvn clean compile
+
+# Launch Desktop GUI
+mvn javafx:run
+```
+
+Or build a fat JAR and run directly:
+
+```bash
+cd java-control-plane
+mvn clean package -DskipTests
+
+# Launch with GUI (default on Windows/macOS)
+java -jar target/control-plane-1.0-SNAPSHOT.jar
+
+# Force CLI mode
+java -jar target/control-plane-1.0-SNAPSHOT.jar --cli
+```
+
+### Desktop App Features
+
+- **Mode Selection** — Choose between Server Mode or Node Mode at launch
+- **Server Mode** — Starts ControlPlane gRPC server with built-in dashboard
+- **Node Mode** — Starts NodeAgent connecting to a ControlPlane server
+- **Real-time Metrics** — Live CPU & memory monitoring via `com.sun.management.OperatingSystemMXBean`
+- **Configuration Dialogs** — GUI forms for server/node configuration
+- **Auto-fallback** — Falls back to CLI mode in headless environments (Docker/Linux without DISPLAY)
+
+### Entry Points
+
+| Entry Point | Class | Purpose |
+|-------------|-------|---------|
+| Desktop GUI | `com.nextgen.desktop.DesktopLauncher` | JavaFX GUI with CLI fallback |
+| CLI / Docker | `com.nextgen.Main` | ROLE-based CLI entry (server/agent) |
+
+## 🔧 Local Development (Without Docker)
+
+### Step 1: Build Java Project
+
 ```bash
 cd java-control-plane
 mvn clean package -DskipTests
 ```
 
-### 2. Start ControlPlane
-```bash
-ROLE=server PREDICTOR_HOST=localhost java -jar target/control-plane-1.0-SNAPSHOT.jar
+### Step 2: Start ControlPlane Server
+
+**PowerShell (Windows):**
+```powershell
+cd java-control-plane
+$env:ROLE="server"; $env:PREDICTOR_HOST="localhost"; java -cp target/control-plane-1.0-SNAPSHOT.jar com.nextgen.Main
 ```
 
-### 3. Start a NodeAgent
+**Bash (Linux/Mac):**
 ```bash
-ROLE=agent NODE_ID=node1 CONTROL_PLANE_HOST=localhost java -jar target/control-plane-1.0-SNAPSHOT.jar
+cd java-control-plane
+ROLE=server PREDICTOR_HOST=localhost java -cp target/control-plane-1.0-SNAPSHOT.jar com.nextgen.Main
 ```
 
-### 4. Start Python Predictor
+**Expected output:**
+```
+=== Next-Gen Control Plane | Role: SERVER ===
+📊 Prometheus metrics server started on port 9090
+📡 Dashboard on http://localhost:8085
+📊 API endpoint: http://localhost:8085/api/nodes
+🚀 ControlPlane gRPC server RUNNING on port 50051
+```
+
+### Step 3: Start NodeAgent(s)
+
+Terminal 1 (Node 1):
+
+**PowerShell:**
+```powershell
+$env:ROLE="agent"; $env:NODE_ID="node1"; $env:CONTROL_PLANE_HOST="localhost"
+java -cp java-control-plane/target/control-plane-1.0-SNAPSHOT.jar com.nextgen.Main
+```
+
+**Bash:**
+```bash
+ROLE=agent NODE_ID=node1 CONTROL_PLANE_HOST=localhost \
+  java -cp java-control-plane/target/control-plane-1.0-SNAPSHOT.jar com.nextgen.Main
+```
+
+**Expected output:**
+```
+🖥  NodeAgent 'node1' starting...
+Hostname: your-host, IP: 192.168.x.x
+📊 Prometheus metrics on port 9090
+✅ Registered with ControlPlane: status=REGISTERED
+💓 Heartbeat #1: cpu=12.3%, mem=45.6% → OK
+```
+
+### Step 4: Start Python Predictor
+
 ```bash
 cd python-predictor
 pip install -r requirements.txt
+
+# Generate stubs (if not present)
 python -m grpc_tools.protoc -I../proto --python_out=. --grpc_python_out=. ../proto/control_plane.proto
+
 python predictor_service.py
 ```
 
-## Proto Code Generation
-
-Java stubs are auto-generated by Maven during `mvn compile` via `protobuf-maven-plugin`.
-
-Python stubs are auto-generated during Docker build or manually:
-```bash
-python -m grpc_tools.protoc -I proto --python_out=python-predictor --grpc_python_out=python-predictor proto/control_plane.proto
+**Expected output:**
+```
+📊 Prometheus metrics server started on port 9091
+🐍 Predictor gRPC server RUNNING on port 50052
 ```
 
-## Testing
+## 📊 Service Endpoints
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| Dashboard | http://localhost:8085 | Live monitoring UI |
+| Dashboard API | http://localhost:8085/api/nodes | JSON node data |
+| ControlPlane gRPC | localhost:50051 | Node registration & heartbeats |
+| ControlPlane Metrics | http://localhost:9090/metrics | Prometheus |
+| Predictor gRPC | localhost:50052 | ML predictions |
+| Predictor Metrics | http://localhost:9091/metrics | Prometheus |
+
+## 🧪 Testing
+
+### Unit Tests (Java)
 
 ```bash
-# Start the cluster
+cd java-control-plane
+mvn clean test
+
+# View coverage report
+# Windows:
+start target/site/jacoco/index.html
+# macOS:
+open target/site/jacoco/index.html
+```
+
+**Coverage Requirements:**
+- Minimum 60% instruction coverage (enforced by JaCoCo)
+- Target: 80%+ for all components
+
+### Integration Tests
+
+```bash
+# Start cluster in background
 docker compose up --build -d
 
-# Wait for startup (~15 seconds)
+# Wait for services to start
 sleep 15
 
 # Run integration test
@@ -81,8 +194,245 @@ python scripts/integration-test.py
 docker compose down
 ```
 
-## Commit Rules
+### Manual Testing Checklist
 
-- Use **Conventional Commits**: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`
-- Every change must go through PR review
-- All values must be **real OS readings** — never random or fake data
+- [ ] `mvn clean compile` produces BUILD SUCCESS with no errors
+- [ ] Dashboard loads at http://localhost:8085
+- [ ] Overview page shows real-time charts
+- [ ] Performance page shows per-node metrics
+- [ ] Nodes page shows individual node details
+- [ ] All 3 nodes registered (check logs)
+- [ ] Heartbeats flowing every 2 seconds
+- [ ] Prometheus metrics accessible
+- [ ] Desktop GUI launches with `mvn javafx:run`
+
+## 🏗️ Proto Code Generation
+
+### Java (Auto-generated by Maven)
+
+```bash
+cd java-control-plane
+mvn compile
+```
+
+Stubs generated at:
+- `target/generated-sources/protobuf/java/` — Protobuf message classes
+- `target/generated-sources/protobuf/grpc-java/` — gRPC service stubs
+
+### Python (Manual or Docker build)
+
+```bash
+python -m grpc_tools.protoc \
+  -I proto \
+  --python_out=python-predictor \
+  --grpc_python_out=python-predictor \
+  proto/control_plane.proto
+```
+
+Output files:
+- `control_plane_pb2.py` - Message classes
+- `control_plane_pb2_grpc.py` - Service stubs
+
+## 🔍 Debugging
+
+### View Service Logs
+
+```bash
+# All services
+docker compose logs -f
+
+# Specific service
+docker compose logs -f control-plane
+docker compose logs -f node1
+docker compose logs -f predictor
+```
+
+### Common Issues
+
+**Issue:** `docker: not found`
+**Fix:** Start Docker Desktop
+
+**Issue:** `Port 50051 already in use`
+**Fix:** `docker compose down` then retry, or check `netstat -ano | findstr 50051` (Windows)
+
+**Issue:** `Could not register after 10 attempts`
+**Fix:** Ensure ControlPlane is running before starting NodeAgents
+
+**Issue:** Dashboard shows no data
+**Fix:** Check browser console (F12), verify API call to `http://localhost:8085/api/nodes`
+
+**Issue:** JavaFX not found or GUI fails to start
+**Fix:** Ensure JDK 21 is installed. On headless Linux, use `--cli` flag or set `ROLE` env var.
+
+### Enable Debug Logging
+
+Java services use SLF4J simple logger. Set level in environment:
+```bash
+# Debug mode
+_JAVA_OPTIONS="-Dorg.slf4j.simpleLogger.defaultLogLevel=debug"
+```
+
+## 📁 Project Structure
+
+```
+next-gen-control-plane/
+├── proto/                                  # gRPC contract
+│   └── control_plane.proto
+├── java-control-plane/                     # Java backend + Desktop App
+│   ├── pom.xml                             # Maven config (gRPC, JavaFX, Prometheus)
+│   ├── Dockerfile
+│   └── src/main/java/com/nextgen/
+│       ├── Main.java                       # CLI entry point (ROLE-based)
+│       ├── controlplane/                   # ControlPlane Server
+│       │   ├── ControlPlaneServer.java     # gRPC + HTTP + Prometheus startup
+│       │   ├── ControlPlaneServiceImpl.java# gRPC service (4 RPCs)
+│       │   ├── DashboardApiHandler.java    # /api/nodes JSON endpoint
+│       │   ├── HeartbeatMonitor.java       # Dead node detection (6s timeout)
+│       │   ├── NodeRecord.java             # Thread-safe node data record
+│       │   └── StaticFileHandler.java      # Dashboard static file server
+│       ├── agent/                          # Node Agent
+│       │   └── NodeAgent.java              # Real OS metrics + heartbeats
+│       └── desktop/                        # JavaFX Desktop Application
+│           ├── DesktopLauncher.java         # GUI/CLI entry point
+│           ├── DesktopApp.java              # Main JavaFX Application
+│           ├── ProcessService.java          # Server/Node process lifecycle
+│           ├── OverviewView.java            # Cluster overview dashboard
+│           ├── NodeStatusView.java          # Node agent status view
+│           ├── NodeConfig.java              # Node mode configuration
+│           ├── ServerConfig.java            # Server mode configuration
+│           ├── NodeConfigDialog.java        # Node config dialog
+│           ├── ServerConfigDialog.java      # Server config dialog
+│           ├── model/                       # Data models (NodeStatus, configs)
+│           ├── repository/                  # NodeRepository (observable data)
+│           ├── service/                     # Background services
+│           │   ├── MetricsService.java      # System metrics collection
+│           │   ├── ApiPollingService.java    # Dashboard API poller
+│           │   ├── ServerProcessService.java# Server lifecycle
+│           │   ├── NodeProcessService.java  # Node lifecycle
+│           │   ├── ConfigurationService.java# JSON config persistence
+│           │   └── ErrorHandler.java        # Error handling
+│           ├── viewmodel/                   # MVVM ViewModels
+│           └── exception/                   # Custom exceptions
+├── python-predictor/                       # Python ML service
+│   ├── predictor_service.py
+│   ├── requirements.txt
+│   └── Dockerfile
+├── dashboard/                              # Web UI (served by ControlPlane)
+│   ├── html/
+│   │   ├── overview.html
+│   │   ├── performance.html
+│   │   └── nodes.html
+│   ├── css/styles.css
+│   ├── js/app.js
+│   ├── nginx.conf
+│   └── Dockerfile
+├── scripts/                                # Utilities
+│   ├── integration-test.py
+│   ├── monitor.py
+│   └── start-cluster.sh
+├── docs/                                   # Documentation
+│   ├── ARCHITECTURE.md
+│   └── codingpromt.md
+├── docker-compose.yml
+├── README.md
+├── DEVELOPMENT.md                          # This file
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+└── LICENSE
+```
+
+## 🔄 Git Workflow
+
+### Branch Naming
+
+```
+feature/add-health-checks
+bugfix/dashboard-loading
+refactor/predictor-service
+docs/api-examples
+```
+
+### Commit Messages (Conventional Commits)
+
+```bash
+feat: add health check endpoints
+fix: resolve dashboard CSS loading issue
+docs: update API documentation
+refactor: simplify heartbeat monitor logic
+test: add NodeRecord unit tests
+```
+
+### Pull Request Process
+
+1. Create feature branch: `git checkout -b feature/name`
+2. Make changes and commit
+3. Push branch: `git push -u origin feature/name`
+4. Open PR with description
+5. Ensure CI passes
+6. Request review
+7. Merge after approval
+
+## 📝 Code Standards
+
+### Java
+- Java 21 features (switch expressions, var, etc.)
+- Compiler configured with `--release 21` for proper system module resolution
+- No `System.out.println()` — use SLF4J logging
+- All metrics must be **real OS readings** — never fake
+- Thread-safe by default (volatile, ConcurrentHashMap, AtomicInteger)
+- Use `com.sun.management.OperatingSystemMXBean` for CPU/memory metrics
+- Use `URI.create().toURL()` instead of deprecated `new URL(String)`
+
+### Python
+- Type hints where possible
+- f-strings for formatting
+- `logging` module (not print)
+- Follow PEP 8 style
+
+### General
+- No random/fake data in production code
+- All public methods need tests
+- Update README.md for user-facing changes
+- Update DEVELOPMENT.md for dev-facing changes
+
+## 🌐 Environment Variables
+
+| Variable | Default | Used By | Description |
+|----------|---------|---------|-------------|
+| `ROLE` | `server` | Main.java | `server` = ControlPlane, `agent` = NodeAgent |
+| `NODE_ID` | `unknown` | NodeAgent | Unique identifier for this node |
+| `CONTROL_PLANE_HOST` | `control-plane` | NodeAgent | Hostname of ControlPlane |
+| `PREDICTOR_HOST` | `predictor` | ControlPlane | Hostname of Predictor service |
+
+## 🚀 Releasing
+
+### Version Bump Process
+
+1. Update `pom.xml` version: `<version>X.Y.Z</version>`
+2. Update `README.md` version badge
+3. Update `CHANGELOG.md` with changes
+4. Create git tag: `git tag -a vX.Y.Z -m "Release vX.Y.Z"`
+5. Push tag: `git push origin vX.Y.Z`
+6. GitHub Actions will build and create release
+
+### Current Version
+
+**v0.2.0** — Phase-1 Complete + Desktop Application
+
+## 📚 Additional Resources
+
+- [README.md](README.md) — Project overview and quick start
+- [CHANGELOG.md](CHANGELOG.md) — Version history
+- [CONTRIBUTING.md](CONTRIBUTING.md) — Contribution guidelines
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Architecture decisions
+
+## ❓ Getting Help
+
+- Open an issue on GitHub
+- Check existing issues and discussions
+- Review troubleshooting section above
+- Check logs with `docker compose logs -f [service]`
+
+---
+
+**Last Updated:** April 2026 | **Maintainers:** Team Next-Gen
