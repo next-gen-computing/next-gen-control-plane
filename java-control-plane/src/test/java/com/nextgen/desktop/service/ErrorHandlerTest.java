@@ -65,11 +65,12 @@ class ErrorHandlerTest {
 
     @Test
     void testCircuitBreakerOpensAfterFailures() {
-        // Simulate multiple failures to open circuit
+        // Reset circuit before testing
+        errorHandler.resetCircuit("circuit-test");
+        
+        // Simulate multiple failures to open circuit (need 5 failures)
         for (int i = 0; i < 5; i++) {
             final int attempt = i;
-
-            errorHandler.resetCircuit("circuit-test");
             try {
                 errorHandler.executeWithRetry("circuit-test", () -> {
                     throw new RuntimeException("Error " + attempt);

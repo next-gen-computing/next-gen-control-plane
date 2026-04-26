@@ -110,6 +110,12 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.2.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-testing</artifactId>
             <version>${grpc.version}</version>
@@ -141,6 +147,7 @@
                 <version>3.3.2</version>
                 <configuration>
                     <retryOnError>true</retryOnError>
+                    <argLine>-Dnet.bytebuddy.experimental=true</argLine>
                     <failOnError>false</failOnError>
                 </configuration>
             </plugin>
@@ -230,6 +237,9 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
+                <configuration>
+                    <argLine>-XX:+EnableDynamicAgentLoading -Dnet.bytebuddy.experimental=true</argLine>
+                </configuration>
             </plugin>
 
             <!-- JaCoCo for test coverage reporting -->

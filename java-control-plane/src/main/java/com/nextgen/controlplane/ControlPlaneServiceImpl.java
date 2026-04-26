@@ -30,7 +30,8 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
     private final AtomicInteger roundRobinIndex = new AtomicInteger(0);
 
     // ── Predictor gRPC Channel ──────────────────────
-    private final PredictorServiceGrpc.PredictorServiceBlockingStub predictorStub;
+    private PredictorServiceGrpc.PredictorServiceBlockingStub predictorStub;
+    private volatile boolean predictorInitialized = false;
 
     // ── Prometheus Metrics ──────────────────────────
     private static final Counter REGISTRATIONS = Counter.build()
@@ -56,15 +57,25 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
 
     public ControlPlaneServiceImpl(ConcurrentHashMap<String, NodeRecord> registry) {
         this.registry = registry;
+        // Predictor connection is lazy - initialized on first use
+    }
 
-        // Connect to Python predictor
-        String predictorHost = System.getenv().getOrDefault("PREDICTOR_HOST", "predictor");
-        ManagedChannel channel = ManagedChannelBuilder
-                .forAddress(predictorHost, 50052)
-                .usePlaintext()
-                .build();
-        this.predictorStub = PredictorServiceGrpc.newBlockingStub(channel);
-        LOG.info("Predictor stub configured → {}:50052", predictorHost);
+    private synchronized PredictorServiceGrpc.PredictorServiceBlockingStub getPredictorStub() {
+        if (!predictorInitialized) {
+            String predictorHost = System.getenv().getOrDefault("PREDICTOR_HOST", "predictor");
+            try {
+                ManagedChannel channel = ManagedChannelBuilder
+                        .forAddress(predictorHost, 50052)
+                        .usePlaintext()
+                        .build();
+                predictorStub = PredictorServiceGrpc.newBlockingStub(channel);
+                LOG.info("Predictor stub configured → {}:50052", predictorHost);
+            } catch (Exception e) {
+                LOG.warn("Could not connect to predictor at {}:50052 - {}", predictorHost, e.getMessage());
+            }
+            predictorInitialized = true;
+        }
+        return predictorStub;
     }
 
     // ── RegisterNode ─────────────────────────────────
@@ -145,15 +156,18 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
         // Call predictor for insight (best-effort, don't fail the task if predictor is down)
         String prediction = "N/A";
         try {
-            PredictionRequest predReq = PredictionRequest.newBuilder()
-                    .setNodeId(selectedNode.getNodeId())
-                    .setCpu(selectedNode.getCpuUsage())
-                    .setMemory(selectedNode.getMemoryUsage())
-                    .build();
-            PredictionResponse predResp = predictorStub.getPrediction(predReq);
-            prediction = String.format("load=%.2f, fail_prob=%.2f, rec=%s",
-                    predResp.getPredictedLoad(), predResp.getFailureProbability(), predResp.getRecommendation());
-            LOG.info("🔮 Prediction for {}: {}", selectedNode.getNodeId(), prediction);
+            PredictorServiceGrpc.PredictorServiceBlockingStub stub = getPredictorStub();
+            if (stub != null) {
+                PredictionRequest predReq = PredictionRequest.newBuilder()
+                        .setNodeId(selectedNode.getNodeId())
+                        .setCpu(selectedNode.getCpuUsage())
+                        .setMemory(selectedNode.getMemoryUsage())
+                        .build();
+                PredictionResponse predResp = stub.getPrediction(predReq);
+                prediction = String.format("load=%.2f, fail_prob=%.2f, rec=%s",
+                        predResp.getPredictedLoad(), predResp.getFailureProbability(), predResp.getRecommendation());
+                LOG.info("🔮 Prediction for {}: {}", selectedNode.getNodeId(), prediction);
+            }
         } catch (Exception e) {
             LOG.warn("⚠ Predictor unavailable: {}", e.getMessage());
         }

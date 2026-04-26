@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Timeout;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.lang.reflect.Method;
 
 /**
  * Unit tests for HeartbeatMonitor - ensures nodes are marked dead after timeout.
@@ -12,35 +13,27 @@ import java.util.concurrent.ConcurrentHashMap;
 class HeartbeatMonitorTest {
 
     @Test
-    void testNodeMarkedDeadAfterTimeout() throws InterruptedException {
+    void testNodeMarkedDeadAfterTimeout() throws Exception {
         ConcurrentHashMap<String, NodeRecord> registry = new ConcurrentHashMap<>();
         NodeRecord record = new NodeRecord("node1", "192.168.1.1", 50051, "host1");
         registry.put("node1", record);
         
-        // Simulate old heartbeat
-        record.setLastHeartbeatMillis(System.currentTimeMillis() - 10_000); // 10 seconds ago
+        // Simulate old heartbeat (10 seconds ago)
+        record.setLastHeartbeatMillis(System.currentTimeMillis() - 10_000);
         
         HeartbeatMonitor monitor = new HeartbeatMonitor(registry);
         
-        // Run check once
-        Thread monitorThread = new Thread(() -> {
-            try {
-                Thread.sleep(100); // Let monitor start
-                monitor.run(); // This will loop, so interrupt it
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
-        monitorThread.start();
-        Thread.sleep(500); // Let monitor check once
-        monitorThread.interrupt();
+        // Use reflection to call private checkHeartbeats method directly
+        Method checkMethod = HeartbeatMonitor.class.getDeclaredMethod("checkHeartbeats");
+        checkMethod.setAccessible(true);
+        checkMethod.invoke(monitor);
         
         // Status should be SUSPECTED_DEAD after timeout
         assertEquals("SUSPECTED_DEAD", record.getStatus());
     }
 
     @Test
-    void testNodeRemainsAliveWithRecentHeartbeat() throws InterruptedException {
+    void testNodeRemainsAliveWithRecentHeartbeat() throws Exception {
         ConcurrentHashMap<String, NodeRecord> registry = new ConcurrentHashMap<>();
         NodeRecord record = new NodeRecord("node1", "192.168.1.1", 50051, "host1");
         registry.put("node1", record);
@@ -50,22 +43,22 @@ class HeartbeatMonitorTest {
         
         HeartbeatMonitor monitor = new HeartbeatMonitor(registry);
         
-        Thread monitorThread = new Thread(monitor);
-        monitorThread.start();
-        Thread.sleep(500); // Let monitor check
-        monitorThread.interrupt();
+        // Use reflection to call checkHeartbeats directly
+        Method checkMethod = HeartbeatMonitor.class.getDeclaredMethod("checkHeartbeats");
+        checkMethod.setAccessible(true);
+        checkMethod.invoke(monitor);
         
         // Status should still be ALIVE
         assertEquals("ALIVE", record.getStatus());
     }
 
     @Test
-    void testDeadNodeRecovers() throws InterruptedException {
+    void testDeadNodeRecovers() throws Exception {
         ConcurrentHashMap<String, NodeRecord> registry = new ConcurrentHashMap<>();
         NodeRecord record = new NodeRecord("node1", "192.168.1.1", 50051, "host1");
         registry.put("node1", record);
         
-        // Set to dead
+        // Set to dead with old heartbeat
         record.setStatus("SUSPECTED_DEAD");
         record.setLastHeartbeatMillis(System.currentTimeMillis() - 10_000);
         
@@ -74,10 +67,10 @@ class HeartbeatMonitorTest {
         
         HeartbeatMonitor monitor = new HeartbeatMonitor(registry);
         
-        Thread monitorThread = new Thread(monitor);
-        monitorThread.start();
-        Thread.sleep(500);
-        monitorThread.interrupt();
+        // Use reflection to call checkHeartbeats directly
+        Method checkMethod = HeartbeatMonitor.class.getDeclaredMethod("checkHeartbeats");
+        checkMethod.setAccessible(true);
+        checkMethod.invoke(monitor);
         
         // Should recover to ALIVE
         assertEquals("ALIVE", record.getStatus());
