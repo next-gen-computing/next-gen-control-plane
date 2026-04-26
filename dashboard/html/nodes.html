@@ -1,61 +1,117 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <meta name="description" content="Next-Gen Control Plane — Nodes Dashboard">
-
     <title>Nodes — Task Manager</title>
-
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-
     <link rel="stylesheet" href="css/styles.css">
-
 </head>
 <body>
+<<<<<<< HEAD
+=======
+
+    <!-- ═══ TITLE BAR ═══ -->
+>>>>>>> 3cb4ac30c88e01d17b94bc5edeeb52355a8224c2
     <header class="titlebar">
-
         <div class="titlebar-left">
-
             <div class="titlebar-logo">⚡</div>
-
             <h1>Next-Gen Control Plane <span>— Task Manager</span></h1>
-
         </div>
-
         <div class="status-badge" id="connectionStatus">
-
             <span class="dot"></span>
-
             <span>Connected</span>
-
         </div>
-
     </header>
+<<<<<<< HEAD
+=======
+
+    <!-- ═══ TABS ═══ -->
+>>>>>>> 3cb4ac30c88e01d17b94bc5edeeb52355a8224c2
     <nav class="tabs">
-
         <a href="overview.html" class="tab">Overview</a>
-
         <a href="performance.html" class="tab">Performance</a>
-
         <a href="nodes.html" class="tab active">Nodes</a>
-
     </nav>
-    <main class="main-content">
+<<<<<<< HEAD
+=======
 
+    <!-- ═══ MAIN CONTENT ═══ -->
+>>>>>>> 3cb4ac30c88e01d17b94bc5edeeb52355a8224c2
+    <main class="main-content">
         <section class="tab-panel active">
 
-            <div class="section-title">All Registered Nodes</div>
+            <!-- ── Node Summary Strip ── -->
+            <div class="nodes-summary-strip">
+                <div class="strip-stat">
+                    <span class="strip-icon" style="color:var(--accent-cyan)">⬡</span>
+                    <div class="strip-info">
+                        <span class="strip-value" id="nodes-total-count">0</span>
+                        <span class="strip-label">Total Nodes</span>
+                    </div>
+                </div>
+                <div class="strip-divider"></div>
+                <div class="strip-stat">
+                    <span class="strip-icon" style="color:var(--accent-green)">●</span>
+                    <div class="strip-info">
+                        <span class="strip-value" id="nodes-alive-count">0</span>
+                        <span class="strip-label">Alive</span>
+                    </div>
+                </div>
+                <div class="strip-divider"></div>
+                <div class="strip-stat">
+                    <span class="strip-icon" style="color:var(--accent-red)">●</span>
+                    <div class="strip-info">
+                        <span class="strip-value" id="nodes-dead-count">0</span>
+                        <span class="strip-label">Dead</span>
+                    </div>
+                </div>
+                <div class="strip-divider"></div>
+                <div class="strip-stat">
+                    <span class="strip-icon" style="color:var(--cpu-color)">⬢</span>
+                    <div class="strip-info">
+                        <span class="strip-value" id="nodes-avg-cpu">—%</span>
+                        <span class="strip-label">Avg CPU</span>
+                    </div>
+                </div>
+                <div class="strip-divider"></div>
+                <div class="strip-stat">
+                    <span class="strip-icon" style="color:var(--mem-color)">⬢</span>
+                    <div class="strip-info">
+                        <span class="strip-value" id="nodes-avg-mem">—%</span>
+                        <span class="strip-label">Avg Memory</span>
+                    </div>
+                </div>
+            </div>
 
-            <div class="nodes-table-container">
+            <!-- ── Section Header with View Toggle ── -->
+            <div class="nodes-section-header">
+                <div class="section-title" style="margin-bottom:0; border-bottom:none; padding-bottom:0;">All Registered Nodes</div>
+                <div class="view-toggle" id="viewToggle">
+                    <button class="view-btn active" data-view="cards" id="btn-cards-view" title="Card View">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+                    </button>
+                    <button class="view-btn" data-view="table" id="btn-table-view" title="Table View">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="2" width="14" height="2" rx="0.5"/><rect x="1" y="7" width="14" height="2" rx="0.5"/><rect x="1" y="12" width="14" height="2" rx="0.5"/></svg>
+                    </button>
+                </div>
+            </div>
 
+            <!-- ── Card Grid View (default) ── -->
+            <div class="nodes-card-grid" id="nodes-card-grid">
+                <!-- Cards are rendered dynamically by JS -->
+                <div class="empty-state" id="nodes-cards-empty">
+                    <div class="icon">🖥️</div>
+                    <h3>No Nodes Detected</h3>
+                    <p>Waiting for node agents to register...</p>
+                </div>
+            </div>
+
+            <!-- ── Table View (hidden by default) ── -->
+            <div class="nodes-table-container" id="nodes-table-view" style="display:none;">
                 <table class="nodes-table">
-
                     <thead>
                         <tr>
                             <th>Node ID</th>
@@ -69,25 +125,35 @@
                         </tr>
                     </thead>
                     <tbody id="processes-nodes-body">
+<<<<<<< HEAD
                         <tr>
                             <td colspan="8" class="empty-state">
                                 <p>Waiting for nodes to register...</p>
                             </td>
                         </tr>
+=======
+                        <tr><td colspan="8" class="empty-state"><p>Waiting for nodes to register...</p></td></tr>
+>>>>>>> 3cb4ac30c88e01d17b94bc5edeeb52355a8224c2
                     </tbody>
                 </table>
             </div>
         </section>
     </main>
+<<<<<<< HEAD
+=======
+
+    <!-- ═══ FOOTER ═══ -->
+>>>>>>> 3cb4ac30c88e01d17b94bc5edeeb52355a8224c2
     <footer class="footer">
-
         <div class="refresh-info"><span class="refresh-dot"></span><span>Live — 2s</span></div>
-
         <div id="last-update">Last update: —</div>
-
     </footer>
 
+<<<<<<< HEAD
     <script src="js/app.js"></script>
 
+=======
+    <script src="../js/app.js"></script>
+>>>>>>> 3cb4ac30c88e01d17b94bc5edeeb52355a8224c2
 </body>
 </html>
