@@ -164,7 +164,7 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
                         .setMemory(selectedNode.getMemoryUsage())
                         .build();
                 PredictionResponse predResp = stub.getPrediction(predReq);
-                prediction = String.format("load=%.2f, fail_prob=%.2f, rec=%s",
+                prediction = String.format(java.util.Locale.US, "load=%.2f, fail_prob=%.2f, rec=%s",
                         predResp.getPredictedLoad(), predResp.getFailureProbability(), predResp.getRecommendation());
                 LOG.info("🔮 Prediction for {}: {}", selectedNode.getNodeId(), prediction);
             }

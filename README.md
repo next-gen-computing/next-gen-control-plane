@@ -1,10 +1,10 @@
 <div align="center">
 
-# ⚡ Next-Gen Control Plane v0.2.0
+# ⚡ Next-Gen Control Plane v1.0.0
 
 **Production-grade distributed control plane with real-time predictive scheduling under failure conditions**
 
-[![Version](https://img.shields.io/badge/version-v0.2.0-blue.svg)](https://github.com/YOUR_USERNAME/next-gen-control-plane/releases)
+[![Version](https://img.shields.io/badge/version-v1.0.0-blue.svg)](https://github.com/YOUR_USERNAME/next-gen-control-plane/releases)
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org)
 [![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://python.org)
 [![gRPC](https://img.shields.io/badge/gRPC-1.68-green.svg)](https://grpc.io)
@@ -13,7 +13,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 <p align="center">
-  <b>Phase-1 Complete</b> • Distributed Cluster • Real OS Metrics • Predictive Scheduling • Desktop GUI
+  <b>V2 Complete</b> • Glassmorphism UI • SQLite Persistence • Registration Flow • Bidirectional Streaming
 </p>
 
 [Quick Start](#quick-start) • [Features](#features) • [Architecture](#architecture) • [Desktop App](#-desktop-application) • [Documentation](#documentation)
@@ -30,7 +30,11 @@
 - **⚡ Predictive Scheduling** — ML-ready architecture with predictor service
 - **🔒 Fault Tolerance** — Automatic node failure detection & recovery (6s timeout)
 - **📊 Live Monitoring** — Real-time web dashboard with 2-second refresh
-- **🖥️ Desktop Application** — JavaFX GUI (Docker Desktop-style) with Server/Node modes
+- **🖥️ V2 Desktop Application** — Glassmorphism UI with Server/Node registration flows
+- **💾 SQLite Persistence** — Embedded database for servers, nodes, memberships, join requests
+- **🔐 TLS Certificates** — Self-signed certificate generation for secure communication
+- **🎫 Connection Tokens** — Token-based node joining with approval workflow
+- **🔄 Bidirectional Streaming** — Real-time gRPC streaming for heartbeats and commands
 - **🔄 Round-Robin Load Balancing** — Fair task distribution across healthy nodes
 - **📈 Prometheus Metrics** — Full observability on all services
 - **🔧 gRPC Communication** — High-performance binary protocol (proto3)
@@ -51,7 +55,7 @@
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    NEXT-GEN CONTROL PLANE                        │
-│                       v0.2.0 (Phase-1)                           │
+│                       v1.0.0 (V2 Complete)                         │
 └─────────────────────────────────────────────────────────────────┘
            │                                        │
            ▼ JavaFX Desktop                         ▼ HTTP/REST
@@ -108,15 +112,78 @@ This starts 5 services:
 | `node1`, `node2`, `node3` | Node agents with real OS metrics | Internal only |
 | `predictor` | Python prediction stub | 50052, 9091 |
 
-### 🖥️ Desktop Application
+### 🖥️ V2 Desktop Application
 
+The V2 desktop application features a modern glassmorphism UI with SQLite persistence and registration flows.
+
+#### Option 1: Maven JavaFX Plugin (Recommended for Development)
+
+**Windows Command Prompt (cmd):**
+```cmd
+cd java-control-plane
+mvn clean compile
+mvn javafx:run
+```
+
+**Windows PowerShell:**
+```powershell
+cd java-control-plane
+mvn clean compile
+mvn javafx:run
+```
+
+**Linux/macOS Bash:**
 ```bash
 cd java-control-plane
 mvn clean compile
 mvn javafx:run
 ```
 
-The desktop app lets you choose between **Server Mode** and **Node Mode** with a modern dark-themed UI.
+#### Option 2: Fat JAR (Recommended for Production)
+
+**Build the JAR:**
+```bash
+cd java-control-plane
+mvn clean package -DskipTests
+```
+
+**Run the JAR:**
+
+**Windows Command Prompt (cmd):**
+```cmd
+cd java-control-plane
+java -jar target/control-plane-1.0-SNAPSHOT.jar
+```
+
+**Windows PowerShell:**
+```powershell
+cd java-control-plane
+java -jar target/control-plane-1.0-SNAPSHOT.jar
+```
+
+**Linux/macOS Bash:**
+```bash
+cd java-control-plane
+java -jar target/control-plane-1.0-SNAPSHOT.jar
+```
+
+#### Automatic File Cleanup
+
+The V2 desktop application automatically cleans up SQLite WAL (Write-Ahead Logging) files on shutdown to prevent locked file issues on subsequent launches. When the application closes, it deletes:
+- `~/.nextgen-cp-v2/cluster.db-wal` (WAL file)
+- `~/.nextgen-cp-v2/cluster.db-shm` (Shared memory file)
+
+This ensures that the database is in a clean state for the next launch, preventing "file is locked" errors.
+
+#### V2 Desktop App Features
+
+- **Glassmorphism UI** — Modern dark theme with neon accents
+- **Registration Flow** — Server/Node registration with auto-detected system specs
+- **TLS Certificate Generation** — Automatic self-signed certificate creation
+- **Connection Tokens** — Secure token-based node joining
+- **Server Dashboard** — Real-time node monitoring, join request approval
+- **Node Dashboard** — Server discovery, join flow, membership management
+- **SQLite Database** — Embedded persistence at `~/.nextgen-cp-v2/cluster.db`
 
 ### Local CLI
 
@@ -180,20 +247,36 @@ next-gen-control-plane/
 ├── proto/
 │   └── control_plane.proto          # Shared gRPC contract (2 services, 9 messages)
 ├── java-control-plane/
-│   ├── pom.xml                      # Maven (gRPC, JavaFX, Prometheus, JaCoCo)
+│   ├── pom.xml                      # Maven (gRPC, JavaFX, Prometheus, JaCoCo, SQLite, Hibernate)
 │   ├── Dockerfile                   # Multi-stage build
 │   └── src/main/java/com/nextgen/
 │       ├── Main.java                # CLI entry point (ROLE-based)
 │       ├── controlplane/            # ControlPlane Server (6 classes)
 │       ├── agent/                   # NodeAgent (1 class)
-│       └── desktop/                 # JavaFX Desktop App (20+ classes)
-│           ├── DesktopLauncher.java  # GUI/CLI entry with headless detection
-│           ├── DesktopApp.java       # Main JavaFX Application
-│           ├── model/                # Data models
-│           ├── repository/           # Observable data store
-│           ├── service/              # Background services
-│           ├── viewmodel/            # MVVM ViewModels
-│           └── exception/            # Custom exception hierarchy
+│       ├── desktop/                 # V1 JavaFX Desktop App (20+ classes)
+│       │   ├── DesktopLauncher.java  # GUI/CLI entry with headless detection
+│       │   ├── DesktopApp.java       # Main JavaFX Application
+│       │   ├── model/                # Data models
+│       │   ├── repository/           # Observable data store
+│       │   ├── service/              # Background services
+│       │   ├── viewmodel/            # MVVM ViewModels
+│       │   └── exception/            # Custom exception hierarchy
+│       └── desktop/v2/              # V2 Desktop App (Glassmorphism UI)
+│           ├── DesktopAppV2.java     # V2 main entry point
+│           ├── db/                   # Database layer
+│           │   ├── DatabaseManager.java
+│           │   ├── entities/         # JPA entities (Server, Node, Membership, JoinRequest)
+│           │   └── repositories/     # JPA repositories
+│           ├── grpc/                 # gRPC services
+│           │   └── ClusterManagerServiceImpl.java
+│           ├── service/              # Business logic
+│           │   └── RegistrationService.java
+│           ├── util/                 # Utilities
+│           │   ├── TlsCertificateGenerator.java
+│           │   └── SystemSpecDetector.java
+│           └── view/                 # UI components
+│               ├── registration/     # Registration dialogs
+│               └── dashboard/        # Server/Node dashboards
 ├── python-predictor/                # Python ML service
 ├── dashboard/                       # Web UI (HTML/CSS/JS)
 ├── scripts/                         # Utilities & testing
@@ -210,7 +293,8 @@ next-gen-control-plane/
 | Component | Technology |
 |-----------|-----------|
 | Control Plane & Agents | Java 21, gRPC 1.68, Protobuf 3.25.5, Prometheus 0.16.0 |
-| Desktop Application | JavaFX 21.0.2, Jackson 2.17.0 |
+| V2 Desktop App | JavaFX 21.0.2, SQLite 3.46.0.0, Hibernate 6.4.4, JPA 3.1.0 |
+| Desktop Application (V1) | JavaFX 21.0.2, Jackson 2.17.0 |
 | Predictor | Python 3.11, grpcio, prometheus-client |
 | Communication | Protocol Buffers 3 (proto3) |
 | OS Metrics | `com.sun.management.OperatingSystemMXBean` (real readings) |
@@ -220,9 +304,11 @@ next-gen-control-plane/
 
 ## Phase Roadmap
 
-- **Phase-1** ✅ (Current): 3-node cluster, real heartbeats, round-robin, predictor stub, desktop app
-- **Phase-2**: Consensus protocols, leader election, fault tolerance
-- **Phase-3**: ML-based predictive scheduling, real-time anomaly detection
+- **Phase-1** ✅: 3-node cluster, real heartbeats, round-robin, predictor stub, V1 desktop app
+- **V2** ✅ (Current): Glassmorphism UI, SQLite persistence, registration flow, bidirectional streaming, join request/approval
+- **Phase-3**: mTLS authentication, real-time metrics charts, UI animations
+- **Phase-4**: Consensus protocols, leader election, fault tolerance
+- **Phase-5**: ML-based predictive scheduling, real-time anomaly detection
 
 ---
 

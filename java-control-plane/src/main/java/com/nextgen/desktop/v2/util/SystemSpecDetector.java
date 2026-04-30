@@ -16,7 +16,7 @@ import java.util.Map;
  */
 public class SystemSpecDetector {
     private static final Logger LOG = LoggerFactory.getLogger(SystemSpecDetector.class);
-    
+
     /**
      * Detect system specifications.
      * 
@@ -24,47 +24,47 @@ public class SystemSpecDetector {
      */
     public static Map<String, Object> detectSystemSpecs() {
         Map<String, Object> specs = new HashMap<>();
-        
+
         try {
             // CPU information
             int cpuCores = Runtime.getRuntime().availableProcessors();
             specs.put("cpuCores", cpuCores);
-            
+
             // Memory information
             OperatingSystemMXBean osBean = (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
-            long totalMemoryBytes = osBean.getTotalMemorySize();
+            long totalMemoryBytes = osBean.getTotalPhysicalMemorySize();
             double totalMemoryGb = totalMemoryBytes / (1024.0 * 1024.0 * 1024.0);
             specs.put("memoryGb", Math.round(totalMemoryGb * 100.0) / 100.0);
-            
+
             // Disk information (total disk space)
             long totalDiskBytes = 0;
             try {
                 java.nio.file.FileStore store = java.nio.file.Files.getFileStore(
-                    java.nio.file.FileSystems.getDefault().getRootDirectories().iterator().next());
+                        java.nio.file.FileSystems.getDefault().getRootDirectories().iterator().next());
                 totalDiskBytes = store.getTotalSpace();
             } catch (Exception e) {
                 totalDiskBytes = 100 * 1024 * 1024 * 1024L; // Default 100GB
             }
             double totalDiskGb = totalDiskBytes / (1024.0 * 1024.0 * 1024.0);
             specs.put("diskGb", Math.round(totalDiskGb * 100.0) / 100.0);
-            
+
             // OS information
             String osName = System.getProperty("os.name");
             String osVersion = System.getProperty("os.version");
             String osArch = System.getProperty("os.arch");
             specs.put("osInfo", String.format("%s %s (%s)", osName, osVersion, osArch));
-            
+
             // Hostname
             String hostname = InetAddress.getLocalHost().getHostName();
             specs.put("hostname", hostname);
-            
+
             // IP address
             String ipAddress = InetAddress.getLocalHost().getHostAddress();
             specs.put("ipAddress", ipAddress);
-            
-            LOG.info("Detected system specs: CPU={}, Memory={}GB, Disk={}GB, OS={}", 
+
+            LOG.info("Detected system specs: CPU={}, Memory={}GB, Disk={}GB, OS={}",
                     cpuCores, totalMemoryGb, totalDiskGb, osName);
-            
+
         } catch (Exception e) {
             LOG.error("Failed to detect system specs", e);
             // Provide default values on error
@@ -75,10 +75,10 @@ public class SystemSpecDetector {
             specs.put("hostname", "unknown");
             specs.put("ipAddress", "127.0.0.1");
         }
-        
+
         return specs;
     }
-    
+
     /**
      * Get a suggested name based on hostname.
      * 
@@ -93,7 +93,7 @@ public class SystemSpecDetector {
             return "nextgen-node";
         }
     }
-    
+
     /**
      * Check if a port is available.
      * 
@@ -109,7 +109,7 @@ public class SystemSpecDetector {
             return false;
         }
     }
-    
+
     /**
      * Find an available port starting from the given port.
      * 

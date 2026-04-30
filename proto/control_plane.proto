@@ -15,6 +15,20 @@ service ControlPlaneService {
 }
 
 // ────────────────────────────────────────────────
+// Cluster Manager Service (V2 - for node-server joining)
+// ────────────────────────────────────────────────
+service ClusterManager {
+  // Node → Server: Request to join a server
+  rpc RequestJoin(JoinRequest) returns (JoinResponse);
+  
+  // Bidirectional streaming for real-time communication
+  rpc EstablishStream(stream NodeMessage) returns (stream ServerMessage);
+  
+  // Server → Node: Send command
+  rpc SendCommand(CommandRequest) returns (CommandResponse);
+}
+
+// ────────────────────────────────────────────────
 // Predictor Service (Python, port 50052)
 // ────────────────────────────────────────────────
 service PredictorService {
@@ -72,4 +86,93 @@ message Empty {}
 
 message NodeList {
   repeated NodeInfo nodes = 1;
+}
+
+// ────────────────────────────────────────────────
+// V2 Cluster Management Messages
+// ────────────────────────────────────────────────
+message JoinRequest {
+  string node_id = 1;
+  string server_id = 2;
+  string node_name = 3;
+  string message = 4;
+  bytes tls_certificate = 5;
+  NodeSpec spec = 6;
+}
+
+message JoinResponse {
+  bool approved = 1;
+  string message = 2;
+  bytes server_certificate = 3;
+}
+
+message NodeSpec {
+  int32 cpu_cores = 1;
+  double memory_gb = 2;
+  double disk_gb = 3;
+  string os_info = 4;
+}
+
+message NodeMessage {
+  oneof payload {
+    Heartbeat heartbeat = 1;
+    TaskResult task_result = 2;
+    StatusUpdate status = 3;
+  }
+}
+
+message ServerMessage {
+  oneof payload {
+    Command command = 1;
+    ConfigUpdate config = 2;
+    TaskAssignment task = 3;
+  }
+}
+
+message Heartbeat {
+  string node_id = 1;
+  float cpu_usage = 2;
+  float memory_usage = 3;
+  int64 timestamp = 4;
+}
+
+message TaskResult {
+  string task_id = 1;
+  bool success = 2;
+  string result = 3;
+  string error = 4;
+}
+
+message StatusUpdate {
+  string node_id = 1;
+  string status = 2; // ONLINE, OFFLINE, BUSY
+}
+
+message Command {
+  string command_id = 1;
+  string command_type = 2; // START, STOP, RESTART
+  string payload = 3;
+}
+
+message ConfigUpdate {
+  string config_key = 1;
+  string config_value = 2;
+}
+
+message TaskAssignment {
+  string task_id = 1;
+  string task_type = 2;
+  string payload = 3;
+  int64 deadline = 4;
+}
+
+message CommandRequest {
+  string node_id = 1;
+  string command = 2;
+  string payload = 3;
+}
+
+message CommandResponse {
+  bool success = 1;
+  string message = 2;
 }

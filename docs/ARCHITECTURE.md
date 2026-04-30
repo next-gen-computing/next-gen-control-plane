@@ -1,51 +1,130 @@
-# Phase-1 Architecture – Next-Gen Control Plane
+# Next-Gen Control Plane V2 Architecture
 
-## High-Level Overview (Phase-1 Scope)
-A 3-node simulated distributed cluster running in Docker Compose.
-- All nodes use **real** OS metrics (CPU % and memory % from OperatingSystemMXBean / psutil).
-- No random or fake values anywhere.
-- Communication is purely gRPC (proto-defined contracts).
-- Control Plane maintains live node registry and round-robin scheduler.
-- Python predictor is a stub that returns real prediction placeholders (hard-coded for Phase-1; real ML in Phase-3).
+## Overview
+V2 introduces a complete desktop application with SQLite persistence, glassmorphism UI, and secure node-server joining with bidirectional gRPC streaming.
 
-## Component Diagram (Text Version)
+## Architecture Diagram
 
-User / Integration Test
-↓ (gRPC)
-ControlPlane (Java, port 50051)
-├── Node Registry (in-memory, thread-safe)
-├── Round-Robin Scheduler
-├── Heartbeat Monitor (6s timeout → mark suspected_dead)
-└── Prometheus metrics endpoint
-↓ (gRPC)
-NodeAgent (Java, 3 instances: node1, node2, node3)
-├── Registers on startup
-├── Sends real CPU/memory heartbeat every 2s
-├── Listens for tasks
-└── Exposes Prometheus metrics
-↓ (gRPC)
-Predictor (Python, port 50052 + 9091)
-├── Dummy GetPrediction (returns structured prediction)
-└── Prometheus /metrics
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           V2 DESKTOP APPLICATION                            │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────┐  │
+│  │  Server Mode    │    │   Node Mode     │    │   Registration Flow     │  │
+│  │  ┌───────────┐  │    │  ┌───────────┐  │    │  ┌─────────────────┐   │  │
+│  │  │Dashboard  │  │    │  │Dashboard  │  │    │  │ Server/Node     │   │  │
+│  │  │ - Nodes   │  │    │  │ - Server  │  │    │  │ Registration    │   │  │
+│  │  │ - Metrics │  │    │  │ - Status  │  │    │  │                 │   │  │
+│  │  │ - Approvals│  │    │  │ - Join    │  │    │  │ TLS Certificate │   │  │
+│  │  └─────┬─────┘  │    │  └─────┬─────┘  │    │  │ Generation      │   │  │
+│  └────────┼─────────┘    └────────┼─────────┘    │  │ Connection Token│   │  │
+│           │                       │              │  └─────────────────┘   │  │
+│           └───────────────────────┘              └─────────────────────────┘  │
+│                          │                                                   │
+│                   ┌──────▼──────┐                                            │
+│                   │   SQLite    │                                            │
+│                   │  Database   │  ~/.nextgen-cp-v2/cluster.db               │
+│                   │  (Hibernate)│                                            │
+│                   └──────┬──────┘                                            │
+│                          │                                                   │
+└──────────────────────────┼───────────────────────────────────────────────────┘
+                           │
+          ┌────────────────┼────────────────┐
+          │                │                │
+     ┌────▼────┐    ┌─────▼─────┐    ┌─────▼─────┐
+     │  gRPC   │    │  gRPC     │    │   gRPC    │
+     │ Server  │    │  Node     │    │  Stream   │
+     │ Service │    │  Agent    │    │ (Bi-dir)  │
+     └────┬────┘    └─────┬─────┘    └─────┬─────┘
+          │               │                │
+          └───────────────┴────────────────┘
+                    gRPC Protocol
+```
 
+## Core Components
 
-text## Data Flow (Real Readings Only)
-1. NodeAgent starts → calls RegisterNode (real hostname, IP from Docker).
-2. Every 2s: reads **real** CPU % and Memory % via OS MXBean → SendHeartbeat.
-3. ControlPlane stores nodes and validates heartbeats.
-4. On SubmitTask → ControlPlane calls Predictor → applies round-robin → forwards to best node.
-5. Terminal monitor (scripts/monitor.sh) shows live table of nodes + last heartbeat + real CPU/memory.
+### 1. Desktop Application (V2)
+- **Entry Point**: `com.nextgen.desktop.v2.DesktopAppV2`
+- **UI Framework**: JavaFX with glassmorphism styling
+- **Database**: SQLite via Hibernate ORM
+- **Security**: Self-signed TLS certificates, connection tokens
 
-## Technology Stack (Phase-1)
-- Java 21 + gRPC + Prometheus simpleclient (Control Plane & NodeAgent)
-- Python 3.11 + grpcio + prometheus-client (Predictor)
-- Docker Compose (single host simulation)
-- Maven + Poetry
-- Real OS metrics only (no Math.random, no fake data)
+### 2. Database Layer
+**Entities:**
+- `ServerEntity` - Server registration data
+- `NodeEntity` - Node registration data
+- `ClusterMembershipEntity` - Node-Server relationships
+- `JoinRequestEntity` - Pending join approvals
 
-## Non-Functional Requirements for Phase-1
-- All values must be real OS readings or empty until first heartbeat.
-- Zero random values in any log, metric, or response.
-- Cluster must start with `docker compose up --build`.
-- Integration test must pass end-to-end.
+**Repositories:**
+- CRUD operations with Hibernate
+- Query methods for status filtering
+- Transaction support
+
+### 3. gRPC Services
+**ClusterManager Service:**
+- `RequestJoin` - Node requests to join server
+- `RespondToJoin` - Server approves/rejects request
+- `EstablishStream` - Bidirectional streaming for heartbeats/commands
+- `GetPendingJoinRequests` - Server views pending requests
+- `GetClusterNodes` - Server views cluster members
+- `SendCommand` - Server sends commands to nodes
+
+### 4. Security Model
+- **TLS Certificates**: Self-signed RSA-2048 certificates
+- **Connection Tokens**: 128-bit secure random tokens
+- **Approval Workflow**: Manual approval for node joining
+
+## Data Flow
+
+### Server Registration Flow:
+1. User enters server name and gRPC port
+2. System specs auto-detected (CPU, memory, OS)
+3. TLS certificate generated
+4. Connection token generated
+5. Server saved to SQLite database
+6. Dashboard launched with server view
+
+### Node Registration Flow:
+1. User enters node name
+2. System specs auto-detected
+3. TLS certificate generated
+4. Node saved to database
+5. Node dashboard launched with server discovery
+
+### Join Request Flow:
+1. Node enters server connection token
+2. Node sends `RequestJoin` gRPC call
+3. Server stores pending join request
+4. Server admin sees request in dashboard
+5. Admin approves/rejects via `RespondToJoin`
+6. On approval, `ClusterMembership` created
+7. Bidirectional stream established
+8. Node sends heartbeats, server sends commands
+
+## Technology Stack (V2)
+- **Java 21** - Modern language features
+- **JavaFX 21** - Desktop GUI
+- **SQLite + Hibernate 6.4** - Persistence
+- **gRPC 1.68** - Communication
+- **Prometheus** - Metrics
+- **Maven** - Build tool
+
+## File Locations
+- **Database**: `~/.nextgen-cp-v2/cluster.db`
+- **TLS Certs**: `~/.nextgen-cp-v2/certs/`
+- **Config**: In-database, no external files
+
+## Key Features
+- **100% Real Data**: All metrics from actual OS readings
+- **SQLite Persistence**: Data survives application restart
+- **Secure Joining**: Token-based with manual approval
+- **Real-time Streaming**: Bidirectional gRPC for live updates
+- **Glassmorphism UI**: Modern translucent design
+- **No Docker Required**: Runs directly on host OS
+
+## Performance Characteristics
+- **UI Response**: <100ms for local operations
+- **Database**: Sub-millisecond queries (local SQLite)
+- **gRPC Latency**: <5ms for in-process, <50ms for local network
+- **Heartbeat Interval**: Configurable (default 2s)
 - Terminal-like monitor must show live node health.

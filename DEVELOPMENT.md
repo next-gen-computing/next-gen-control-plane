@@ -1,6 +1,6 @@
 # Development Setup — Next-Gen Control Plane
 
-**Version:** v0.2.0 | **Status:** Phase-1 Complete + Desktop App
+**Version:** v1.0.0 | **Status:** V2 Complete
 
 ## 📋 Prerequisites
 
@@ -30,47 +30,122 @@ This will:
 3. Start all 5 services on `nextgen-net` Docker network
 4. Dashboard available at http://localhost:8085
 
-## 🖥️ Desktop Application (GUI Mode)
+## 🖥️ Desktop Application (V2 - Glassmorphism UI)
 
-The project includes a JavaFX desktop application with a Docker Desktop-style UI.
+The V2 desktop application features a modern glassmorphism UI with SQLite persistence and registration flows.
 
 ### Build & Launch
 
-```bash
+#### Option 1: Maven JavaFX Plugin (Recommended for Development)
+
+**Windows Command Prompt (cmd):**
+```cmd
 cd java-control-plane
 mvn clean compile
-
-# Launch Desktop GUI
 mvn javafx:run
 ```
 
-Or build a fat JAR and run directly:
+**Windows PowerShell:**
+```powershell
+cd java-control-plane
+mvn clean compile
+mvn javafx:run
+```
 
+**Linux/macOS Bash:**
+```bash
+cd java-control-plane
+mvn clean compile
+mvn javafx:run
+```
+
+#### Option 2: Fat JAR (Recommended for Production)
+
+**Build the JAR:**
 ```bash
 cd java-control-plane
 mvn clean package -DskipTests
-
-# Launch with GUI (default on Windows/macOS)
-java -jar target/control-plane-1.0-SNAPSHOT.jar
-
-# Force CLI mode
-java -jar target/control-plane-1.0-SNAPSHOT.jar --cli
 ```
 
-### Desktop App Features
+**Run the JAR:**
 
-- **Mode Selection** — Choose between Server Mode or Node Mode at launch
-- **Server Mode** — Starts ControlPlane gRPC server with built-in dashboard
-- **Node Mode** — Starts NodeAgent connecting to a ControlPlane server
-- **Real-time Metrics** — Live CPU & memory monitoring via `com.sun.management.OperatingSystemMXBean`
-- **Configuration Dialogs** — GUI forms for server/node configuration
-- **Auto-fallback** — Falls back to CLI mode in headless environments (Docker/Linux without DISPLAY)
+**Windows Command Prompt (cmd):**
+```cmd
+cd java-control-plane
+java -jar target/control-plane-1.0-SNAPSHOT.jar
+```
+
+**Windows PowerShell:**
+```powershell
+cd java-control-plane
+java -jar target/control-plane-1.0-SNAPSHOT.jar
+```
+
+**Linux/macOS Bash:**
+```bash
+cd java-control-plane
+java -jar target/control-plane-1.0-SNAPSHOT.jar
+```
+
+#### Automatic File Cleanup
+
+The V2 desktop application automatically cleans up SQLite WAL (Write-Ahead Logging) files on shutdown to prevent locked file issues on subsequent launches. When the application closes, it deletes:
+- `~/.nextgen-cp-v2/cluster.db-wal` (WAL file)
+- `~/.nextgen-cp-v2/cluster.db-shm` (Shared memory file)
+
+This ensures that the database is in a clean state for the next launch, preventing "file is locked" errors that can occur when the application is terminated abruptly or when multiple instances are run.
+
+### V2 Desktop App Features
+
+- **Glassmorphism UI** — Modern dark theme with neon accents and glass-like panels
+- **Registration Flow** — Server/Node registration with auto-detected system specs
+- **TLS Certificate Generation** — Automatic self-signed certificate creation for secure communication
+- **Connection Tokens** — Secure token-based node joining with approval workflow
+- **Server Dashboard** — Real-time node monitoring, join request approval panel
+- **Node Dashboard** — Server discovery, join flow, membership management
+- **SQLite Database** — Embedded persistence at `~/.nextgen-cp-v2/cluster.db`
+- **Auto-refresh** — 5-second auto-refresh for real-time metrics
+
+### V2 Control Flow
+
+**Registration Flow:**
+1. User launches V2 app → `RegistrationView`
+2. Chooses Server or Node mode
+3. `RegistrationDialog` auto-detects system specs via `SystemSpecDetector`
+4. Generates TLS certificate via `TlsCertificateGenerator`
+5. Persists to SQLite database via `RegistrationService`
+6. Launches appropriate dashboard (`ServerDashboard` or `NodeDashboard`)
+
+**Join Request Flow:**
+1. Node enters connection token in `NodeDashboard`
+2. gRPC `RequestJoin` to server's `ClusterManagerServiceImpl`
+3. Server creates `JoinRequestEntity` (PENDING)
+4. Auto-approval (or manual via dashboard's approve/reject buttons)
+5. Creates `ClusterMembershipEntity` (APPROVED)
+6. Returns server certificate to node
+
+**Dashboard Flow:**
+1. Dashboard loads with 5-second auto-refresh timeline
+2. Queries database via JPA repositories for nodes/memberships
+3. Updates tables with real-time metrics (CPU, memory, heartbeat)
+4. Approve/reject actions update database status
+
+### Database Schema
+
+**Location:** `~/.nextgen-cp-v2/cluster.db`
+
+**Tables:**
+- `servers` — Server configurations, specs, TLS certificates, connection tokens
+- `nodes` — Node configurations, specs, TLS certificates
+- `cluster_memberships` — Node-server relationships, status, metrics
+- `join_requests` — Join request workflow, approval status
 
 ### Entry Points
 
 | Entry Point | Class | Purpose |
 |-------------|-------|---------|
-| Desktop GUI | `com.nextgen.desktop.DesktopLauncher` | JavaFX GUI with CLI fallback |
+| V2 Desktop GUI | `com.nextgen.desktop.v2.DesktopAppV2` | Glassmorphism UI with registration flow |
+| V1 Desktop GUI | `com.nextgen.desktop.DesktopLauncher` | JavaFX GUI with CLI fallback |
 | CLI / Docker | `com.nextgen.Main` | ROLE-based CLI entry (server/agent) |
 
 ## 🔧 Local Development (Without Docker)
@@ -87,7 +162,8 @@ mvn clean package -DskipTests
 **PowerShell (Windows):**
 ```powershell
 cd java-control-plane
-$env:ROLE="server"; $env:PREDICTOR_HOST="localhost"; java -cp target/control-plane-1.0-SNAPSHOT.jar com.nextgen.Main
+$env:ROLE="server"; $env:PREDICTOR_HOST="localhost"; 
+java -cp target/control-plane-1.0-SNAPSHOT.jar com.nextgen.Main
 ```
 
 **Bash (Linux/Mac):**
@@ -264,6 +340,12 @@ docker compose logs -f predictor
 **Issue:** JavaFX not found or GUI fails to start
 **Fix:** Ensure JDK 21 is installed. On headless Linux, use `--cli` flag or set `ROLE` env var.
 
+**Issue:** V2 database not found at `~/.nextgen-cp-v2/cluster.db`
+**Fix:** Database is auto-created on first launch. Check file permissions.
+
+**Issue:** Lombok compilation errors
+**Fix:** V2 does not use Lombok. Ensure no Lombok annotations remain in V2 code.
+
 ### Enable Debug Logging
 
 Java services use SLF4J simple logger. Set level in environment:
@@ -279,7 +361,7 @@ next-gen-control-plane/
 ├── proto/                                  # gRPC contract
 │   └── control_plane.proto
 ├── java-control-plane/                     # Java backend + Desktop App
-│   ├── pom.xml                             # Maven config (gRPC, JavaFX, Prometheus)
+│   ├── pom.xml                             # Maven config (gRPC, JavaFX, Prometheus, SQLite, Hibernate)
 │   ├── Dockerfile
 │   └── src/main/java/com/nextgen/
 │       ├── Main.java                       # CLI entry point (ROLE-based)
@@ -292,27 +374,56 @@ next-gen-control-plane/
 │       │   └── StaticFileHandler.java      # Dashboard static file server
 │       ├── agent/                          # Node Agent
 │       │   └── NodeAgent.java              # Real OS metrics + heartbeats
-│       └── desktop/                        # JavaFX Desktop Application
-│           ├── DesktopLauncher.java         # GUI/CLI entry point
-│           ├── DesktopApp.java              # Main JavaFX Application
-│           ├── ProcessService.java          # Server/Node process lifecycle
-│           ├── OverviewView.java            # Cluster overview dashboard
-│           ├── NodeStatusView.java          # Node agent status view
-│           ├── NodeConfig.java              # Node mode configuration
-│           ├── ServerConfig.java            # Server mode configuration
-│           ├── NodeConfigDialog.java        # Node config dialog
-│           ├── ServerConfigDialog.java      # Server config dialog
-│           ├── model/                       # Data models (NodeStatus, configs)
-│           ├── repository/                  # NodeRepository (observable data)
-│           ├── service/                     # Background services
-│           │   ├── MetricsService.java      # System metrics collection
-│           │   ├── ApiPollingService.java    # Dashboard API poller
-│           │   ├── ServerProcessService.java# Server lifecycle
-│           │   ├── NodeProcessService.java  # Node lifecycle
-│           │   ├── ConfigurationService.java# JSON config persistence
-│           │   └── ErrorHandler.java        # Error handling
-│           ├── viewmodel/                   # MVVM ViewModels
-│           └── exception/                   # Custom exceptions
+│       ├── desktop/                        # V1 JavaFX Desktop Application
+│       │   ├── DesktopLauncher.java         # GUI/CLI entry point
+│       │   ├── DesktopApp.java              # Main JavaFX Application
+│       │   ├── ProcessService.java          # Server/Node process lifecycle
+│       │   ├── OverviewView.java            # Cluster overview dashboard
+│       │   ├── NodeStatusView.java          # Node agent status view
+│       │   ├── NodeConfig.java              # Node mode configuration
+│       │   ├── ServerConfig.java            # Server mode configuration
+│       │   ├── NodeConfigDialog.java        # Node config dialog
+│       │   ├── ServerConfigDialog.java      # Server config dialog
+│       │   ├── model/                       # Data models (NodeStatus, configs)
+│       │   ├── repository/                  # NodeRepository (observable data)
+│       │   ├── service/                     # Background services
+│       │   │   ├── MetricsService.java      # System metrics collection
+│       │   │   ├── ApiPollingService.java    # Dashboard API poller
+│       │   │   ├── ServerProcessService.java# Server lifecycle
+│       │   │   ├── NodeProcessService.java  # Node lifecycle
+│       │   │   ├── ConfigurationService.java# JSON config persistence
+│       │   │   └── ErrorHandler.java        # Error handling
+│       │   ├── viewmodel/                   # MVVM ViewModels
+│       │   └── exception/                   # Custom exceptions
+│       └── desktop/v2/                      # V2 Desktop App (Glassmorphism UI)
+│           ├── DesktopAppV2.java             # V2 main entry point
+│           ├── db/                           # Database layer
+│           │   ├── DatabaseManager.java      # SQLite + Hibernate initialization
+│           │   ├── entities/                 # JPA entities
+│           │   │   ├── ServerEntity.java
+│           │   │   ├── NodeEntity.java
+│           │   │   ├── ClusterMembershipEntity.java
+│           │   │   └── JoinRequestEntity.java
+│           │   └── repositories/             # JPA repositories
+│           │       ├── ServerRepository.java
+│           │       ├── NodeRepository.java
+│           │       ├── ClusterMembershipRepository.java
+│           │       └── JoinRequestRepository.java
+│           ├── grpc/                         # gRPC services
+│           │   └── ClusterManagerServiceImpl.java  # Join requests, streaming, commands
+│           ├── service/                      # Business logic
+│           │   └── RegistrationService.java   # Server/Node registration
+│           ├── util/                         # Utilities
+│           │   ├── TlsCertificateGenerator.java  # Certificate/token generation
+│           │   └── SystemSpecDetector.java       # System spec detection
+│           └── view/                         # UI components
+│               ├── registration/             # Registration dialogs
+│               │   ├── RegistrationView.java
+│               │   ├── ServerRegistrationDialog.java
+│               │   └── NodeRegistrationDialog.java
+│               └── dashboard/                # Server/Node dashboards
+│                   ├── ServerDashboard.java
+│                   └── NodeDashboard.java
 ├── python-predictor/                       # Python ML service
 │   ├── predictor_service.py
 │   ├── requirements.txt
@@ -417,7 +528,7 @@ test: add NodeRecord unit tests
 
 ### Current Version
 
-**v0.2.0** — Phase-1 Complete + Desktop Application
+**v1.0.0** — V2 Complete (Glassmorphism UI, SQLite Persistence, Registration Flow, Bidirectional Streaming)
 
 ## 📚 Additional Resources
 
