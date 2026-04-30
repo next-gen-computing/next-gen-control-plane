@@ -114,26 +114,33 @@ public class ServerDashboard {
         HBox header = new HBox();
         header.setAlignment(Pos.CENTER_LEFT);
         header.setPadding(new Insets(0, 0, 20, 0));
-        
+
         Label title = new Label("Server Dashboard");
         title.setFont(Font.font("Inter", FontWeight.BOLD, 32));
         title.setTextFill(Color.web(TEXT_PRIMARY));
-        
+
         Label serverLabel = new Label("Server ID: " + serverId);
         serverLabel.setFont(Font.font("Inter", FontWeight.NORMAL, 14));
         serverLabel.setTextFill(Color.web(TEXT_SECONDARY));
         serverLabel.setPadding(new Insets(0, 0, 0, 20));
-        
+
+        // Connection Token display
+        Button showTokenButton = new Button("Show Connection Token");
+        showTokenButton.setStyle(String.format(
+            "-fx-background-color: %s; -fx-text-fill: white; -fx-background-radius: 8px; -fx-padding: 8px 16px; -fx-cursor: hand;",
+            ACCENT_BLUE));
+        showTokenButton.setOnAction(e -> showConnectionToken());
+
         Button stopButton = new Button("Stop Server");
         stopButton.setStyle(String.format(
             "-fx-background-color: %s; -fx-text-fill: white; -fx-background-radius: 8px; -fx-padding: 10px 20px; -fx-cursor: hand;",
             ACCENT_RED));
         stopButton.setOnAction(e -> handleStopServer());
-        
+
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        
-        header.getChildren().addAll(title, serverLabel, spacer, stopButton);
+
+        header.getChildren().addAll(title, serverLabel, showTokenButton, spacer, stopButton);
         return header;
     }
     
@@ -382,6 +389,37 @@ public class ServerDashboard {
                 refreshTimeline.stop();
             }
             primaryStage.close();
+        }
+    }
+
+    private void showConnectionToken() {
+        try {
+            var server = serverRepository.findById(serverId);
+            if (server.isPresent()) {
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("Connection Token");
+                alert.setHeaderText("Server Connection Token");
+                
+                TextArea tokenArea = new TextArea(server.get().getConnectionToken());
+                tokenArea.setEditable(false);
+                tokenArea.setWrapText(true);
+                tokenArea.setPrefRowCount(3);
+                tokenArea.setPrefColumnCount(50);
+                
+                VBox content = new VBox(10);
+                content.getChildren().addAll(
+                    new Label("Share this token with nodes to allow them to join your server:"),
+                    tokenArea
+                );
+                
+                alert.getDialogPane().setContent(content);
+                alert.showAndWait();
+            } else {
+                new Alert(Alert.AlertType.ERROR, "Server not found").showAndWait();
+            }
+        } catch (Exception e) {
+            LOG.error("Error retrieving connection token", e);
+            new Alert(Alert.AlertType.ERROR, "Failed to retrieve connection token: " + e.getMessage()).showAndWait();
         }
     }
     

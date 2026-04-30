@@ -73,16 +73,16 @@ public class TlsCertificateGenerator {
     
     /**
      * Generate a connection token for server-node pairing.
+     * Generates a short 8-character token for easy manual entry.
      * 
-     * @return A unique 32-character hex token
+     * @return A unique 8-character alphanumeric token
      */
     public static String generateConnectionToken() {
         SecureRandom random = new SecureRandom();
-        byte[] tokenBytes = new byte[16];
-        random.nextBytes(tokenBytes);
-        StringBuilder sb = new StringBuilder();
-        for (byte b : tokenBytes) {
-            sb.append(String.format("%02x", b));
+        String chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // No I, O, 0, 1 to avoid confusion
+        StringBuilder sb = new StringBuilder(8);
+        for (int i = 0; i < 8; i++) {
+            sb.append(chars.charAt(random.nextInt(chars.length())));
         }
         return sb.toString();
     }

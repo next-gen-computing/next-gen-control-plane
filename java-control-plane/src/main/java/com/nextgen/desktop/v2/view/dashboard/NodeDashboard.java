@@ -197,31 +197,69 @@ public class NodeDashboard {
                         "-fx-border-color: %s; -fx-border-radius: 16px; -fx-border-width: 1px;",
                 BG_CARD, BORDER_GLASS));
 
-        Label titleLabel = new Label("Available Servers");
+        Label titleLabel = new Label("Join Server Manually");
         titleLabel.setFont(Font.font("Inter", FontWeight.BOLD, 20));
         titleLabel.setTextFill(Color.web(TEXT_PRIMARY));
 
-        // Join server section
-        HBox joinSection = new HBox(10);
-        joinSection.setAlignment(Pos.CENTER_LEFT);
+        Label instructionLabel = new Label("Enter server IP address and connection token to join:");
+        instructionLabel.setTextFill(Color.web(TEXT_SECONDARY));
+        instructionLabel.setFont(Font.font(12));
+
+        // Server IP section
+        HBox ipSection = new HBox(10);
+        ipSection.setAlignment(Pos.CENTER_LEFT);
+
+        Label ipLabel = new Label("Server IP:");
+        ipLabel.setTextFill(Color.web(TEXT_SECONDARY));
+        ipLabel.setPrefWidth(80);
+
+        TextField ipField = new TextField();
+        ipField.setPromptText("e.g., 192.168.1.100");
+        ipField.setStyle("-fx-background-color: rgba(255,255,255,0.1); -fx-text-fill: " + TEXT_PRIMARY
+                + "; -fx-background-radius: 8px;");
+        ipField.setPrefWidth(200);
+
+        ipSection.getChildren().addAll(ipLabel, ipField);
+
+        // Token section
+        HBox tokenSection = new HBox(10);
+        tokenSection.setAlignment(Pos.CENTER_LEFT);
+
+        Label tokenLabel = new Label("Token:");
+        tokenLabel.setTextFill(Color.web(TEXT_SECONDARY));
+        tokenLabel.setPrefWidth(80);
 
         TextField tokenField = new TextField();
-        tokenField.setPromptText("Enter connection token");
+        tokenField.setPromptText("8-character token");
         tokenField.setStyle("-fx-background-color: rgba(255,255,255,0.1); -fx-text-fill: " + TEXT_PRIMARY
                 + "; -fx-background-radius: 8px;");
-        tokenField.setPrefWidth(300);
+        tokenField.setPrefWidth(150);
 
+        Button pasteButton = new Button("Paste");
+        pasteButton.setStyle(String.format(
+                "-fx-background-color: rgba(255,255,255,0.2); -fx-text-fill: " + TEXT_PRIMARY + "; -fx-background-radius: 8px; -fx-padding: 6px 12px; -fx-cursor: hand;"));
+        pasteButton.setOnAction(e -> {
+            String clipboardContent = javafx.scene.input.Clipboard.getSystemClipboard().getString();
+            if (clipboardContent != null && !clipboardContent.isEmpty()) {
+                tokenField.setText(clipboardContent.trim());
+            }
+        });
+
+        tokenSection.getChildren().addAll(tokenLabel, tokenField, pasteButton);
+
+        // Join button
         Button joinButton = new Button("Join Server");
         joinButton.setStyle(String.format(
-                "-fx-background-color: %s; -fx-text-fill: white; -fx-background-radius: 8px; -fx-padding: 8px 16px; -fx-cursor: hand;",
+                "-fx-background-color: %s; -fx-text-fill: white; -fx-background-radius: 8px; -fx-padding: 10px 20px; -fx-cursor: hand;",
                 ACCENT_GREEN));
-        joinButton.setOnAction(e -> handleJoinServer(tokenField.getText()));
+        joinButton.setOnAction(e -> handleJoinServer(ipField.getText(), tokenField.getText()));
 
-        joinSection.getChildren().addAll(tokenField, joinButton);
+        VBox joinForm = new VBox(10);
+        joinForm.getChildren().addAll(ipSection, tokenSection, joinButton);
 
         availableServersTable = createAvailableServersTable();
 
-        panel.getChildren().addAll(titleLabel, joinSection, availableServersTable);
+        panel.getChildren().addAll(titleLabel, instructionLabel, joinForm, availableServersTable);
         return panel;
     }
 
@@ -379,24 +417,55 @@ public class NodeDashboard {
         });
     }
 
-    private void handleJoinServer(String token) {
+    private void handleJoinServer(String ipAddress, String token) {
+        if (ipAddress == null || ipAddress.trim().isEmpty()) {
+            new Alert(Alert.AlertType.WARNING, "Please enter the server IP address").showAndWait();
+            return;
+        }
+
         if (token == null || token.trim().isEmpty()) {
             new Alert(Alert.AlertType.WARNING, "Please enter a connection token").showAndWait();
             return;
         }
 
-        // Find server by token
-        var serverOpt = serverRepository.findByConnectionToken(token.trim());
-        if (serverOpt.isEmpty()) {
-            new Alert(Alert.AlertType.ERROR, "Invalid connection token").showAndWait();
+        // Validate IP address format
+        if (!isValidIpAddress(ipAddress.trim())) {
+            new Alert(Alert.AlertType.ERROR, "Invalid IP address format. Use format: 192.168.1.100").showAndWait();
             return;
         }
 
-        ServerEntity server = serverOpt.get();
+        // Validate token format (8 characters)
+        if (token.trim().length() != 8) {
+            new Alert(Alert.AlertType.ERROR, "Invalid token. Token must be 8 characters.").showAndWait();
+            return;
+        }
 
-        // TODO: Implement gRPC join request
-        new Alert(Alert.AlertType.INFORMATION, "Join request sent to server: " + server.getName()).showAndWait();
+        // TODO: Implement gRPC connection to server using IP and token
+        // For now, show a success message with the connection details
+        new Alert(Alert.AlertType.INFORMATION, 
+            "Connection request sent to server at " + ipAddress.trim() + "\n" +
+            "Token: " + token.trim() + "\n\n" +
+            "Note: Actual gRPC connection will be implemented in the next phase.").showAndWait();
+        
         refreshData();
+    }
+
+    private boolean isValidIpAddress(String ip) {
+        String[] parts = ip.split("\\.");
+        if (parts.length != 4) {
+            return false;
+        }
+        try {
+            for (String part : parts) {
+                int num = Integer.parseInt(part);
+                if (num < 0 || num > 255) {
+                    return false;
+                }
+            }
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     private void handleLeaveServer() {
