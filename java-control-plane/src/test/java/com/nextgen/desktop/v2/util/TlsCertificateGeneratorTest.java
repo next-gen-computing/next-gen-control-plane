@@ -49,10 +49,10 @@ class TlsCertificateGeneratorTest {
         String token = TlsCertificateGenerator.generateConnectionToken();
         
         assertNotNull(token);
-        assertEquals(32, token.length()); // 16 bytes = 32 hex chars
+        assertEquals(8, token.length()); // 8 alphanumeric chars
         
-        // Should be valid hex
-        assertTrue(token.matches("^[0-9a-fA-F]+$"));
+        // Should be valid chars (ABCDEFGHJKLMNPQRSTUVWXYZ23456789)
+        assertTrue(token.matches("^[A-HJ-NP-Z2-9]+$"));
     }
 
     @Test
@@ -72,7 +72,7 @@ class TlsCertificateGeneratorTest {
     @Test
     void testGenerateConnectionTokenLength() {
         String token = TlsCertificateGenerator.generateConnectionToken();
-        assertEquals(32, token.length());
+        assertEquals(8, token.length());
     }
 
     @Test
@@ -105,9 +105,9 @@ class TlsCertificateGeneratorTest {
         // Two consecutive tokens should be different
         assertNotEquals(token1, token2);
         
-        // Both should be hex strings of expected length
-        assertEquals(32, token1.length());
-        assertEquals(32, token2.length());
+        // Both should be strings of expected length
+        assertEquals(8, token1.length());
+        assertEquals(8, token2.length());
     }
 
     @Test
