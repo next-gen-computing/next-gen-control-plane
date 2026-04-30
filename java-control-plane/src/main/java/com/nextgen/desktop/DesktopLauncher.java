@@ -18,7 +18,7 @@ public class DesktopLauncher {
         if (useGui) {
             try {
                 LOG.info("Starting Desktop GUI...");
-                Application.launch(DesktopApp.class, args);
+                Application.launch(com.nextgen.desktop.v2.DesktopAppV2.class, args);
             } catch (Exception e) {
                 LOG.warn("Failed to start GUI, falling back to CLI mode", e);
                 startCliMode(args);

@@ -358,7 +358,7 @@
                         <configuration>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>com.nextgen.desktop.v2.DesktopAppV2</mainClass>
+                                    <mainClass>com.nextgen.desktop.DesktopLauncher</mainClass>
                                 </transformer>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                             </transformers>
