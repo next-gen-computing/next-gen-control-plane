@@ -20,8 +20,9 @@
 git clone https://github.com/YOUR_USERNAME/next-gen-control-plane.git
 cd next-gen-control-plane
 
-# Start everything (Docker mode)
-docker compose up --build
+# Start everything (Docker mode on server laptop)
+docker compose up --build control-plane predictor dashboard
+
 ```
 
 This will:
@@ -39,6 +40,7 @@ The Phase-2 desktop application is a modern JavaFX UI in a separate `desktop-ui`
 #### Option 1: Maven JavaFX Plugin (Recommended for Development)
 
 ```bash
+#on node laptop
 cd desktop-ui
 mvn clean compile
 mvn javafx:run
