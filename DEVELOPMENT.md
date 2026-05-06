@@ -510,6 +510,7 @@ test: add NodeRecord unit tests
 - [CHANGELOG.md](CHANGELOG.md) — Version history
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Contribution guidelines
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Architecture decisions
+- [docs/CODE_SNIPPETS.md](docs/CODE_SNIPPETS.md) — Chapter 6.2: Annotated code snippets & technology reference
 
 ## ❓ Getting Help
 
