@@ -195,6 +195,8 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
                     .setIp(record.getIp())
                     .setPort(record.getPort())
                     .setHostname(record.getHostname())
+                    .setCpu(record.getCpuUsage())
+                    .setMemory(record.getMemoryUsage())
                     .build());
         }
 

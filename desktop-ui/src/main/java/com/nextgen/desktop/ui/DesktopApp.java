@@ -17,6 +17,11 @@ import javafx.util.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.management.ManagementFactory;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
 /**
  * Next-Gen Control Plane Phase-2 Desktop Application.
  * 
@@ -37,6 +42,10 @@ public class DesktopApp extends Application {
     // Track the chosen role and server info
     private String chosenRole;
     private String serverId;
+
+    // Heartbeat scheduler for node mode
+    private ScheduledExecutorService heartbeatScheduler;
+    private String registeredNodeId;
 
     @Override
     public void init() throws Exception {
@@ -71,6 +80,7 @@ public class DesktopApp extends Application {
             // Shutdown hook
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 LOG.info("Shutting down desktop UI...");
+                stopHeartbeats();
                 if (connectionManager != null) {
                     connectionManager.shutdown();
                 }
@@ -192,7 +202,11 @@ public class DesktopApp extends Application {
                     String hostname = java.net.InetAddress.getLocalHost().getHostName();
                     String myIp = ServerIdCodec.detectLanIp();
                     var response = client.registerNode(hostname, myIp, 50051, hostname);
-                    LOG.info("Node registered: {}", response.getStatus());
+                    registeredNodeId = response.getAssignedId();
+                    LOG.info("Node registered: {} (id={})", response.getStatus(), registeredNodeId);
+
+                    // Start sending periodic heartbeats with real OS metrics
+                    startHeartbeats();
                 }
             } catch (Exception e) {
                 LOG.error("Failed to register node", e);
@@ -201,6 +215,72 @@ public class DesktopApp extends Application {
             Platform.runLater(this::showMainDashboard);
         }, "node-registration").start();
     }
+
+    // ─────────────────────────────────────────────
+    //  HEARTBEAT SENDER (Node mode only)
+    // ─────────────────────────────────────────────
+
+    /**
+     * Starts sending heartbeats every 2 seconds with real CPU and memory readings.
+     * Uses the same OperatingSystemMXBean approach as the NodeAgent.
+     */
+    private void startHeartbeats() {
+        if (heartbeatScheduler != null) return;
+
+        heartbeatScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "heartbeat-sender");
+            t.setDaemon(true);
+            return t;
+        });
+
+        heartbeatScheduler.scheduleAtFixedRate(() -> {
+            try {
+                var client = connectionManager.getControlPlaneClient();
+                if (client == null || registeredNodeId == null) return;
+
+                // Read real OS metrics
+                com.sun.management.OperatingSystemMXBean osBean =
+                        (com.sun.management.OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
+
+                double cpuLoad = osBean.getCpuLoad() * 100.0;
+                if (cpuLoad < 0) cpuLoad = 0; // getCpuLoad() returns -1 if unavailable
+
+                long totalMem = osBean.getTotalMemorySize();
+                long freeMem = osBean.getFreeMemorySize();
+                double memUsage = totalMem > 0 ? ((double)(totalMem - freeMem) / totalMem) * 100.0 : 0;
+
+                var response = client.sendHeartbeat(registeredNodeId, (float) cpuLoad, (float) memUsage);
+                LOG.debug("💓 Heartbeat sent: cpu={:.1f}%, mem={:.1f}% → {}",
+                        cpuLoad, memUsage, response.getStatus());
+            } catch (Exception e) {
+                LOG.warn("Heartbeat failed: {}", e.getMessage());
+            }
+        }, 1, 2, TimeUnit.SECONDS);
+
+        LOG.info("🫀 Heartbeat sender started (every 2s) for node '{}'", registeredNodeId);
+    }
+
+    /**
+     * Stops the heartbeat scheduler.
+     */
+    private void stopHeartbeats() {
+        if (heartbeatScheduler != null) {
+            heartbeatScheduler.shutdown();
+            try {
+                if (!heartbeatScheduler.awaitTermination(3, TimeUnit.SECONDS)) {
+                    heartbeatScheduler.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            heartbeatScheduler = null;
+            LOG.info("Heartbeat sender stopped");
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    //  DASHBOARD
+    // ─────────────────────────────────────────────
 
     private void showMainDashboard() {
         LOG.info("Showing Main Dashboard (role={}, serverId={})", chosenRole, serverId);
@@ -245,6 +325,7 @@ public class DesktopApp extends Application {
     @Override
     public void stop() throws Exception {
         super.stop();
+        stopHeartbeats();
         if (connectionManager != null) {
             connectionManager.shutdown();
         }
@@ -254,3 +335,4 @@ public class DesktopApp extends Application {
         launch(args);
     }
 }
+

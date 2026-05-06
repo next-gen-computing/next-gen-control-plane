@@ -21,14 +21,10 @@ jobs:
         cache: maven
     
     - name: Build with Maven
-      run: |
-        cd java-control-plane
-        mvn clean package -DskipTests
+      run: mvn clean package -DskipTests -pl java-control-plane -am
     
     - name: Run tests
-      run: |
-        cd java-control-plane
-        mvn test
+      run: mvn test -pl java-control-plane
     
     - name: Upload coverage report
       uses: actions/upload-artifact@v4

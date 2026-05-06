@@ -43,6 +43,8 @@ message NodeInfo {
   string ip       = 2;
   int32  port     = 3;
   string hostname = 4;
+  float  cpu      = 5;
+  float  memory   = 6;
 }
 
 message RegisterResponse {

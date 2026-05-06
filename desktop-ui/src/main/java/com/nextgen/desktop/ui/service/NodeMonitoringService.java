@@ -115,6 +115,8 @@ public class NodeMonitoringService {
             node.setIp(info.getIp());
             node.setPort(info.getPort());
             node.setStatus("HEALTHY");
+            node.setCpuUsage(info.getCpu());
+            node.setMemoryUsage(info.getMemory());
             node.setLastHeartbeat(LocalDateTime.now().format(TIME_FORMATTER));
 
             // Try to get prediction
