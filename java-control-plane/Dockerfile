@@ -9,6 +9,9 @@ WORKDIR /workspace
 # Copy proto definitions (context is project root)
 COPY proto/ /workspace/proto/
 
+# Copy parent POM
+COPY pom.xml /workspace/pom.xml
+
 # Copy Maven project
 COPY java-control-plane/pom.xml /workspace/java-control-plane/pom.xml
 COPY java-control-plane/src/    /workspace/java-control-plane/src/
