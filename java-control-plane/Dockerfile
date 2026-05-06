@@ -18,11 +18,12 @@ COPY java-control-plane/src/    /workspace/java-control-plane/src/
 
 WORKDIR /workspace
 
-# Install parent POM into local repo first (skip module validation)
+# Install parent POM into local repo (skip module validation)
 RUN mvn install -N -q
 
-# Build fat JAR for control-plane only (skip tests for faster builds)
-RUN mvn package -DskipTests -q -pl java-control-plane
+# Build fat JAR from inside the sub-module (parent resolves from local repo)
+WORKDIR /workspace/java-control-plane
+RUN mvn package -DskipTests -q
 
 # ── Stage 2: Runtime ───────────────────────────
 FROM eclipse-temurin:21-jre
