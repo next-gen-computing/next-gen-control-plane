@@ -9,7 +9,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.NetworkInterface;
+import java.util.Enumeration;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -63,6 +66,8 @@ public class ControlPlaneServer {
 
         LOG.info("══════════════════════════════════════════════════");
         LOG.info("  🚀 ControlPlane gRPC server RUNNING on port {}  ", GRPC_PORT);
+        LOG.info("  🌐 LAN IPs (use these from other laptops):");
+        printLanIps();
         LOG.info("══════════════════════════════════════════════════");
 
         // Graceful shutdown hook
@@ -76,5 +81,23 @@ public class ControlPlaneServer {
 
         // Block main thread until server terminates
         grpcServer.awaitTermination();
+    }
+
+    private static void printLanIps() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface ni = interfaces.nextElement();
+                if (ni.isLoopback() || !ni.isUp()) continue;
+                Enumeration<InetAddress> addresses = ni.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress addr = addresses.nextElement();
+                    if (addr.getHostAddress().contains(":")) continue; // skip IPv6 for clarity
+                    LOG.info("     → {} on {}", addr.getHostAddress(), ni.getDisplayName());
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("Could not enumerate network interfaces", e);
+        }
     }
 }

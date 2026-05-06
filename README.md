@@ -13,7 +13,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 <p align="center">
-  <b>V2 Complete</b> • Glassmorphism UI • SQLite Persistence • Registration Flow • Bidirectional Streaming
+  <b>Phase-2 Desktop UI Complete</b> • Modern JavaFX UI • Real gRPC Data • Dark/Light Themes • Multi-Module Maven
 </p>
 
 [Quick Start](#quick-start) • [Features](#features) • [Architecture](#architecture) • [Desktop App](#-desktop-application) • [Documentation](#documentation)
@@ -30,11 +30,11 @@
 - **⚡ Predictive Scheduling** — ML-ready architecture with predictor service
 - **🔒 Fault Tolerance** — Automatic node failure detection & recovery (6s timeout)
 - **📊 Live Monitoring** — Real-time web dashboard with 2-second refresh
-- **🖥️ V2 Desktop Application** — Glassmorphism UI with Server/Node registration flows
-- **💾 SQLite Persistence** — Embedded database for servers, nodes, memberships, join requests
-- **🔐 TLS Certificates** — Self-signed certificate generation for secure communication
-- **🎫 Connection Tokens** — Token-based node joining with approval workflow
-- **🔄 Bidirectional Streaming** — Real-time gRPC streaming for heartbeats and commands
+- **🖥️ Phase-2 Desktop Application** — Modern JavaFX UI with real-time gRPC data, dark/light themes
+- **� Live Dashboard** — Cluster summary cards, node metrics, and task tracking
+- **� Real gRPC Data** — All UI data fetched live from ControlPlane service; no mocks
+- **🎫 Connection Management** — Direct IP + token node joining to physical servers
+- **� Live Monitoring** — Real-time logs, performance metrics, and work distribution
 - **🔄 Round-Robin Load Balancing** — Fair task distribution across healthy nodes
 - **📈 Prometheus Metrics** — Full observability on all services
 - **🔧 gRPC Communication** — High-performance binary protocol (proto3)
@@ -112,78 +112,36 @@ This starts 5 services:
 | `node1`, `node2`, `node3` | Node agents with real OS metrics | Internal only |
 | `predictor` | Python prediction stub | 50052, 9091 |
 
-### 🖥️ V2 Desktop Application
+### 🖥️ Phase-2 Desktop Application
 
-The V2 desktop application features a modern glassmorphism UI with SQLite persistence and registration flows.
+The Phase-2 desktop application is a modern JavaFX UI in the `desktop-ui` Maven module. It connects to the ControlPlane and Predictor services via gRPC and displays real-time cluster data with a dark/light theme.
 
-#### Option 1: Maven JavaFX Plugin (Recommended for Development)
+#### Build & Launch
 
-**Windows Command Prompt (cmd):**
-```cmd
-cd java-control-plane
-mvn clean compile
-mvn javafx:run
-```
-
-**Windows PowerShell:**
-```powershell
-cd java-control-plane
-mvn clean compile
-mvn javafx:run
-```
-
-**Linux/macOS Bash:**
 ```bash
-cd java-control-plane
+cd desktop-ui
 mvn clean compile
 mvn javafx:run
 ```
 
-#### Option 2: Fat JAR (Recommended for Production)
+#### Fat JAR
 
-**Build the JAR:**
 ```bash
-cd java-control-plane
+cd desktop-ui
 mvn clean package -DskipTests
+java -jar target/desktop-ui-1.0-SNAPSHOT.jar
 ```
 
-**Run the JAR:**
+#### Phase-2 Desktop App Features
 
-**Windows Command Prompt (cmd):**
-```cmd
-cd java-control-plane
-java -jar target/control-plane-1.0-SNAPSHOT.jar
-```
-
-**Windows PowerShell:**
-```powershell
-cd java-control-plane
-java -jar target/control-plane-1.0-SNAPSHOT.jar
-```
-
-**Linux/macOS Bash:**
-```bash
-cd java-control-plane
-java -jar target/control-plane-1.0-SNAPSHOT.jar
-```
-
-#### Automatic File Cleanup
-
-The V2 desktop application automatically cleans up SQLite WAL (Write-Ahead Logging) files on shutdown to prevent locked file issues on subsequent launches. When the application closes, it deletes:
-- `~/.nextgen-cp-v2/cluster.db-wal` (WAL file)
-- `~/.nextgen-cp-v2/cluster.db-shm` (Shared memory file)
-
-This ensures that the database is in a clean state for the next launch, preventing "file is locked" errors.
-
-#### V2 Desktop App Features
-
-- **Glassmorphism UI** — Modern dark theme with neon accents
-- **Registration Flow** — Server/Node registration with auto-detected system specs
-- **TLS Certificate Generation** — Automatic self-signed certificate creation
-- **Connection Tokens** — Secure token-based node joining
-- **Server Dashboard** — Real-time node monitoring, join request approval
-- **Node Dashboard** — Server discovery, join flow, membership management
-- **SQLite Database** — Embedded persistence at `~/.nextgen-cp-v2/cluster.db`
+- **Modern Dark/Light Themes** — Toggle between themes at runtime
+- **Live Dashboard** — Cluster summary cards with real-time node metrics
+- **Node Management** — Connect to ControlPlane, view nodes in a sortable table
+- **Task Execution** — Submit tasks and track progress with live updates
+- **Live Monitoring** — Real-time logs and performance metrics
+- **Settings** — Connection config, refresh interval, theme toggle
+- **Real Data Only** — All metrics fetched live from gRPC; no mock data
+- **Predictor Placeholder** — Shows `N/A` until PredictorService is running
 
 ### Local CLI
 
@@ -244,48 +202,38 @@ The test verifies:
 
 ```
 next-gen-control-plane/
+├── pom.xml                          # Root parent POM (multi-module)
 ├── proto/
-│   └── control_plane.proto          # Shared gRPC contract (2 services, 9 messages)
-├── java-control-plane/
-│   ├── pom.xml                      # Maven (gRPC, JavaFX, Prometheus, JaCoCo, SQLite, Hibernate)
-│   ├── Dockerfile                   # Multi-stage build
+│   └── control_plane.proto          # Shared gRPC contract
+├── java-control-plane/              # Backend: gRPC services, DB, business logic
+│   ├── pom.xml                      # Child POM (inherits from root)
+│   ├── Dockerfile
 │   └── src/main/java/com/nextgen/
 │       ├── Main.java                # CLI entry point (ROLE-based)
-│       ├── controlplane/            # ControlPlane Server (6 classes)
-│       ├── agent/                   # NodeAgent (1 class)
-│       ├── desktop/                 # V1 JavaFX Desktop App (20+ classes)
-│       │   ├── DesktopLauncher.java  # GUI/CLI entry with headless detection
-│       │   ├── DesktopApp.java       # Main JavaFX Application
-│       │   ├── model/                # Data models
-│       │   ├── repository/           # Observable data store
-│       │   ├── service/              # Background services
-│       │   ├── viewmodel/            # MVVM ViewModels
-│       │   └── exception/            # Custom exception hierarchy
-│       └── desktop/v2/              # V2 Desktop App (Glassmorphism UI)
-│           ├── DesktopAppV2.java     # V2 main entry point
-│           ├── db/                   # Database layer
-│           │   ├── DatabaseManager.java
-│           │   ├── entities/         # JPA entities (Server, Node, Membership, JoinRequest)
-│           │   └── repositories/     # JPA repositories
-│           ├── grpc/                 # gRPC services
-│           │   └── ClusterManagerServiceImpl.java
-│           ├── service/              # Business logic
-│           │   └── RegistrationService.java
-│           ├── util/                 # Utilities
-│           │   ├── TlsCertificateGenerator.java
-│           │   └── SystemSpecDetector.java
-│           └── view/                 # UI components
-│               ├── registration/     # Registration dialogs
-│               └── dashboard/        # Server/Node dashboards
+│       ├── controlplane/            # ControlPlane Server
+│       ├── agent/                   # NodeAgent
+│       └── desktop/v2/              # Backend services & DB (UI removed)
+│           ├── db/                  # SQLite + Hibernate
+│           ├── grpc/                # gRPC service implementations
+│           ├── service/             # RegistrationService
+│           └── util/                # TlsCertificateGenerator, SystemSpecDetector
+├── desktop-ui/                      # Phase-2 Desktop UI (JavaFX)
+│   ├── pom.xml                      # Child POM (JavaFX, gRPC client)
+│   └── src/main/java/com/nextgen/desktop/ui/
+│       ├── DesktopApp.java          # JavaFX Application entry point
+│       ├── client/                  # gRPC clients (ControlPlane, Predictor)
+│       ├── model/                   # Observable data models
+│       ├── service/                 # NodeMonitoring, TaskExecution, Theme
+│       └── view/                    # Screens (Dashboard, Nodes, Tasks, Monitoring, Settings)
 ├── python-predictor/                # Python ML service
 ├── dashboard/                       # Web UI (HTML/CSS/JS)
 ├── scripts/                         # Utilities & testing
 ├── docs/                            # Architecture docs
 ├── docker-compose.yml
-├── DEVELOPMENT.md                   # Developer guide
-├── CHANGELOG.md                     # Version history
-├── CONTRIBUTING.md                  # Contribution guidelines
-└── README.md                        # This file
+├── DEVELOPMENT.md
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+└── README.md
 ```
 
 ## Technology Stack
@@ -293,8 +241,7 @@ next-gen-control-plane/
 | Component | Technology |
 |-----------|-----------|
 | Control Plane & Agents | Java 21, gRPC 1.68, Protobuf 3.25.5, Prometheus 0.16.0 |
-| V2 Desktop App | JavaFX 21.0.2, SQLite 3.46.0.0, Hibernate 6.4.4, JPA 3.1.0 |
-| Desktop Application (V1) | JavaFX 21.0.2, Jackson 2.17.0 |
+| Phase-2 Desktop UI | JavaFX 21.0.2, gRPC client, Jackson 2.17.0 |
 | Predictor | Python 3.11, grpcio, prometheus-client |
 | Communication | Protocol Buffers 3 (proto3) |
 | OS Metrics | `com.sun.management.OperatingSystemMXBean` (real readings) |
@@ -304,8 +251,8 @@ next-gen-control-plane/
 
 ## Phase Roadmap
 
-- **Phase-1** ✅: 3-node cluster, real heartbeats, round-robin, predictor stub, V1 desktop app
-- **V2** ✅ (Current): Glassmorphism UI, SQLite persistence, registration flow, bidirectional streaming, join request/approval
+- **Phase-1** ✅: 3-node cluster, real heartbeats, round-robin, predictor stub
+- **Phase-2** ✅ (Current): Modern desktop UI (JavaFX), real gRPC data, dark/light themes, task execution, live monitoring
 - **Phase-3**: mTLS authentication, real-time metrics charts, UI animations
 - **Phase-4**: Consensus protocols, leader election, fault tolerance
 - **Phase-5**: ML-based predictive scheduling, real-time anomaly detection
@@ -317,11 +264,16 @@ next-gen-control-plane/
 ### Running Tests
 
 ```bash
-cd java-control-plane
+# Build and test all modules from root
+cd next-gen-control-plane
+mvn clean install
+
+# Test only desktop-ui
+cd desktop-ui
 mvn clean test
 
 # View coverage report
-start target/site/jacoco/index.html  # Windows
+start desktop-ui/target/site/jacoco/index.html  # Windows
 ```
 
 ### Coverage Requirements
