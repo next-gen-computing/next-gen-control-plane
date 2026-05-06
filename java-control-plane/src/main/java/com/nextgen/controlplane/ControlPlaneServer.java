@@ -89,10 +89,21 @@ public class ControlPlaneServer {
             while (interfaces.hasMoreElements()) {
                 NetworkInterface ni = interfaces.nextElement();
                 if (ni.isLoopback() || !ni.isUp()) continue;
+
+                String displayName = ni.getDisplayName().toLowerCase();
+                // Skip virtual adapters (Docker, WSL, Hyper-V, VirtualBox, VMware)
+                if (displayName.contains("docker") || displayName.contains("wsl") ||
+                    displayName.contains("hyper-v") || displayName.contains("vethernet") ||
+                    displayName.contains("virtualbox") || displayName.contains("vmware") ||
+                    displayName.contains("vmnet") || displayName.contains("virbr") ||
+                    displayName.contains("vbox") || displayName.contains("virtual")) {
+                    continue;
+                }
+
                 Enumeration<InetAddress> addresses = ni.getInetAddresses();
                 while (addresses.hasMoreElements()) {
                     InetAddress addr = addresses.nextElement();
-                    if (addr.getHostAddress().contains(":")) continue; // skip IPv6 for clarity
+                    if (addr.getHostAddress().contains(":")) continue; // skip IPv6
                     LOG.info("     → {} on {}", addr.getHostAddress(), ni.getDisplayName());
                 }
             }

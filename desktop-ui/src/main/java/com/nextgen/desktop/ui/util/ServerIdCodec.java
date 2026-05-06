@@ -83,29 +83,67 @@ public class ServerIdCodec {
      */
     public static String detectLanIp() {
         try {
-            // First pass: look for site-local addresses on active interfaces
+            // Best method: use the OS routing table to find the interface that
+            // would reach the internet. This automatically skips virtual NICs.
+            try (java.net.DatagramSocket socket = new java.net.DatagramSocket()) {
+                socket.connect(InetAddress.getByName("8.8.8.8"), 80);
+                String ip = socket.getLocalAddress().getHostAddress();
+                if (ip != null && !ip.equals("0.0.0.0") && !ip.startsWith("127.")) {
+                    return ip;
+                }
+            }
+
+            // Fallback: scan interfaces, but skip virtual/Docker/WSL adapters
+            String bestIp = null;
+            int bestScore = -1;
+
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             while (interfaces.hasMoreElements()) {
                 NetworkInterface ni = interfaces.nextElement();
                 if (ni.isLoopback() || !ni.isUp() || ni.isVirtual()) continue;
 
+                String displayName = ni.getDisplayName().toLowerCase();
+                String name = ni.getName().toLowerCase();
+
+                // Skip known virtual adapters (Docker, WSL, Hyper-V, VirtualBox, VMware)
+                if (displayName.contains("docker") || displayName.contains("wsl") ||
+                    displayName.contains("hyper-v") || displayName.contains("vethernet") ||
+                    displayName.contains("virtualbox") || displayName.contains("vmware") ||
+                    displayName.contains("vmnet") || displayName.contains("virbr") ||
+                    displayName.contains("vbox") || displayName.contains("virtual")) {
+                    continue;
+                }
+
+                // Score interfaces: prefer real Wi-Fi and Ethernet
+                int score = 0;
+                if (name.contains("wlan") || name.contains("wifi") || displayName.contains("wi-fi") ||
+                    displayName.contains("wireless")) {
+                    score = 10; // Wi-Fi
+                } else if (name.contains("eth") || displayName.contains("ethernet") ||
+                           displayName.contains("realtek") || displayName.contains("intel")) {
+                    score = 9; // Ethernet
+                } else {
+                    score = 1; // Unknown but not virtual
+                }
+
                 Enumeration<InetAddress> addresses = ni.getInetAddresses();
                 while (addresses.hasMoreElements()) {
                     InetAddress addr = addresses.nextElement();
                     if (addr instanceof java.net.Inet4Address && addr.isSiteLocalAddress()) {
-                        return addr.getHostAddress();
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestIp = addr.getHostAddress();
+                        }
                     }
                 }
             }
 
-            // Fallback: use the default route
-            try (java.net.DatagramSocket socket = new java.net.DatagramSocket()) {
-                socket.connect(InetAddress.getByName("8.8.8.8"), 80);
-                return socket.getLocalAddress().getHostAddress();
-            }
+            if (bestIp != null) return bestIp;
+
         } catch (Exception e) {
-            return "127.0.0.1";
+            // Fall through
         }
+        return "127.0.0.1";
     }
 
     /**
