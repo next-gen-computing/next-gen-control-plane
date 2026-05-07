@@ -329,6 +329,8 @@ public class DesktopApp extends Application {
         if (connectionManager != null) {
             connectionManager.shutdown();
         }
+        // Force exit to kill embedded ControlPlaneServer and any other non-daemon threads
+        System.exit(0);
     }
 
     public static void main(String[] args) {
