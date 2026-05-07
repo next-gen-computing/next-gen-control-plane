@@ -50,6 +50,32 @@
 
 ---
 
+## 🧑‍💻 Primary Use Cases
+
+```mermaid
+graph LR
+    %% Actors
+    Admin([Administrator])
+    Op([System Operator])
+    Dev([Developer / Engineer])
+    
+    %% System Boundary
+    subgraph Next-Gen Control Plane
+        UC1(Monitor Cluster Health & Telemetry)
+        UC2(Submit Computational Tasks)
+        UC3(Manage Edge Node Connections)
+        UC4(Predict Node Failures)
+        UC5(View Real-Time Performance Logs)
+    end
+    
+    %% Relationships
+    Admin -->|Approves join requests| UC3
+    Op -->|Tracks OS metrics| UC1
+    Op -->|Monitors operations| UC5
+    Dev -->|Executes workloads| UC2
+    Dev -->|Leverages ML predictions| UC4
+```
+
 ## 🏗️ Architecture
 
 ```
