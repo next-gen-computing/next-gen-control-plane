@@ -45,7 +45,7 @@ build_log.txt
 
 # ── Build artifacts ───────────────────────────────
 java-control-plane/bin/
-java-control-plane/dependency-reduced-pom.xml
+dependency-reduced-pom.xml
 
 # -- Key material (NEVER commit) -------------------------------
 # The CA private key and every issued node key. A leaked ca.key lets
