@@ -1,0 +1,270 @@
+/* Component styles for the onboarding screens (role-selection, server-setup, node-join). Structural
+   values only come from tokens.css custom properties — see base.css's header comment. */
+
+.ng-screen {
+    position: relative;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: var(--ng-space-6);
+}
+
+.ng-screen-content {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 720px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--ng-space-5);
+}
+
+.ng-brand {
+    text-align: center;
+}
+
+.ng-brand-title {
+    font-size: var(--ng-font-size-3xl);
+    font-weight: 700;
+    margin: 0 0 var(--ng-space-1);
+    background: linear-gradient(90deg, var(--ng-accent), var(--ng-accent-strong));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.ng-brand-subtitle {
+    color: var(--ng-text-muted);
+    font-size: var(--ng-font-size-md);
+    margin: 0;
+}
+
+.ng-role-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--ng-space-4);
+    width: 100%;
+}
+
+.ng-role-card {
+    position: relative;
+    background: var(--ng-surface);
+    border: 1px solid var(--ng-border);
+    border-radius: var(--ng-radius-lg);
+    padding: var(--ng-space-5);
+    cursor: pointer;
+    text-align: left;
+    color: var(--ng-text);
+    display: flex;
+    flex-direction: column;
+    gap: var(--ng-space-2);
+}
+
+.ng-role-card:hover {
+    border-color: var(--ng-accent);
+}
+
+.ng-role-card-icon {
+    font-size: var(--ng-font-size-2xl);
+}
+
+.ng-role-card-title {
+    font-size: var(--ng-font-size-lg);
+    font-weight: 600;
+    margin: 0;
+}
+
+.ng-role-card-desc {
+    color: var(--ng-text-muted);
+    font-size: var(--ng-font-size-sm);
+    margin: 0;
+}
+
+.ng-card {
+    width: 100%;
+    background: var(--ng-surface);
+    border: 1px solid var(--ng-border);
+    border-radius: var(--ng-radius-lg);
+    padding: var(--ng-space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--ng-space-4);
+}
+
+.ng-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ng-space-1);
+}
+
+.ng-field label {
+    font-size: var(--ng-font-size-xs);
+    color: var(--ng-text-muted);
+}
+
+.ng-input {
+    background: var(--ng-input);
+    border: 1px solid var(--ng-border);
+    border-radius: var(--ng-radius-sm);
+    padding: var(--ng-space-3);
+    color: var(--ng-text);
+    font-size: var(--ng-font-size-sm);
+    font-family: var(--ng-font-body);
+}
+
+.ng-input:focus {
+    outline: none;
+    border-color: var(--ng-accent);
+}
+
+.ng-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ng-space-3);
+}
+
+.ng-meta-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--ng-font-size-xs);
+    color: var(--ng-text-muted);
+    padding: var(--ng-space-1) 0;
+    border-bottom: 1px solid var(--ng-border);
+}
+
+.ng-meta-row:last-child {
+    border-bottom: none;
+}
+
+.ng-meta-value {
+    color: var(--ng-text);
+    font-family: var(--ng-font-mono);
+}
+
+.ng-button {
+    appearance: none;
+    border: none;
+    border-radius: var(--ng-radius-sm);
+    padding: var(--ng-space-3) var(--ng-space-5);
+    font-size: var(--ng-font-size-sm);
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 120ms ease, box-shadow 200ms ease, opacity 150ms ease;
+}
+
+.ng-button:active {
+    transform: scale(0.98);
+}
+
+.ng-button:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.ng-button-primary {
+    background: linear-gradient(90deg, var(--ng-accent), var(--ng-accent-strong));
+    color: var(--ng-on-accent);
+    box-shadow: 0 8px 24px -8px var(--ng-accent-soft);
+}
+
+.ng-button-primary:hover:not(:disabled) {
+    box-shadow: 0 12px 32px -8px var(--ng-accent-soft);
+}
+
+.ng-button-secondary {
+    background: transparent;
+    color: var(--ng-text-muted);
+    border: 1px solid var(--ng-border);
+}
+
+.ng-button-secondary:hover {
+    color: var(--ng-text);
+    border-color: var(--ng-accent);
+}
+
+.ng-link-button {
+    background: none;
+    border: none;
+    color: var(--ng-accent);
+    font-size: var(--ng-font-size-xs);
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+}
+
+.ng-status-message {
+    font-size: var(--ng-font-size-xs);
+    padding: var(--ng-space-2) var(--ng-space-3);
+    border-radius: var(--ng-radius-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--ng-space-2);
+}
+
+.ng-status-message.error {
+    background: var(--ng-danger-surface);
+    color: var(--ng-text);
+}
+
+.ng-status-message.info {
+    background: var(--ng-accent-soft);
+    color: var(--ng-text);
+}
+
+.ng-collapsible-toggle {
+    background: none;
+    border: none;
+    color: var(--ng-text-subtle);
+    font-size: var(--ng-font-size-2xs);
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+}
+
+.ng-collapsible-body {
+    display: none;
+    flex-direction: column;
+    gap: var(--ng-space-3);
+    padding-top: var(--ng-space-3);
+    border-top: 1px solid var(--ng-border);
+}
+
+.ng-collapsible-body.is-open {
+    display: flex;
+}
+
+.ng-spinner {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--ng-border);
+    border-top-color: var(--ng-accent);
+    animation: ng-spin 700ms linear infinite;
+}
+
+@keyframes ng-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ── Connection banner (mounted once, present on every screen from Phase 3 onward) ── */
+
+.ng-connection-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--ng-space-2);
+    padding: var(--ng-space-2) var(--ng-space-4);
+    font-size: var(--ng-font-size-xs);
+    color: var(--ng-text-muted);
+    border-bottom: 1px solid var(--ng-border);
+}
+
+.ng-connection-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ng-status-unknown);
+}

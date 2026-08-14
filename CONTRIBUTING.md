@@ -199,7 +199,7 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 ```bash
 # Good commits
 feat: add health check endpoints
-fix: resolve dashboard CSS loading issue
+fix: resolve heartbeat timeout edge case
 docs: update API documentation with examples
 refactor: simplify heartbeat monitor logic
 test: add NodeRecord unit tests for thread safety
@@ -217,7 +217,6 @@ bugfix                       # Not conventional format
 Optional but helpful:
 - `controlplane` — Control Plane server
 - `agent` — Node Agent
-- `dashboard` — Web UI
 - `predictor` — Python predictor service
 - `docs` — Documentation
 - `tests` — Test suite

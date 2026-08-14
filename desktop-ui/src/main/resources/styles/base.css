@@ -1,0 +1,572 @@
+/* ═══════════════════════════════════════════════════════════════
+   BASE — structure, typography and spacing for every screen.
+
+   This file contains NO literal colours. It refers only to the
+   looked-up colour tokens that dark.css and light.css each define
+   (-ng-bg, -ng-surface, -ng-text, …). That is what keeps the two
+   themes at parity: a component styled here is styled in BOTH
+   themes, and ThemeTokenParityTest fails the build if the two token
+   sets ever diverge.
+
+   Typography scale:  11 / 12 / 13 / 15 / 18 / 22 / 30 / 34 px
+   Spacing scale:      4 /  8 / 12 / 16 / 24 / 32 px
+   Radius scale:       8 / 12 / 16 px
+
+   Chart series colours are NOT here — they are assigned per node in
+   Palette.java, because a series colour follows the entity and must
+   survive a theme switch and a change in the node list.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Global ── */
+.root {
+    -fx-background-color: -ng-bg;
+    -fx-font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    -fx-font-size: 13px;
+}
+
+/* ── Page shell ── */
+.page {
+    -fx-padding: 20 24 16 24;
+}
+.page-content {
+    -fx-padding: 0 4 16 0;
+}
+.page-scroll,
+.page-scroll .viewport {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+}
+.page-scroll {
+    -fx-padding: 0;
+}
+
+/* ── Typography ── */
+.page-title {
+    -fx-font-size: 30px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -ng-text;
+}
+.page-subtitle {
+    -fx-font-size: 13px;
+    -fx-text-fill: -ng-text-muted;
+    -fx-padding: 4 0 20 0;
+}
+.section-heading {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -ng-text;
+    -fx-padding: 8 0 0 0;
+}
+.card-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -ng-text;
+}
+.card-caption {
+    -fx-font-size: 11px;
+    -fx-text-fill: -ng-text-muted;
+    -fx-padding: 2 0 8 0;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+    -fx-background-color: -ng-surface;
+    -fx-border-color: -ng-border;
+    -fx-border-width: 0 1px 0 0;
+    -fx-pref-width: 210px;
+    -fx-min-width: 210px;
+    -fx-padding: 20 12 16 12;
+}
+.sidebar-brand-box {
+    -fx-padding: 0 8 24 8;
+}
+.sidebar-brand {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -ng-text;
+}
+.sidebar-brand-sub {
+    -fx-font-size: 11px;
+    -fx-text-fill: -ng-text-subtle;
+}
+.sidebar-nav {
+    -fx-padding: 0;
+}
+.nav-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: -ng-text-muted;
+    -fx-font-size: 13px;
+    -fx-padding: 9 12 9 12;
+    -fx-background-radius: 8px;
+    -fx-cursor: hand;
+}
+.nav-button:hover {
+    -fx-background-color: -ng-hover;
+    -fx-text-fill: -ng-text;
+}
+.nav-button-active {
+    -fx-background-color: -ng-accent-soft;
+    -fx-text-fill: -ng-accent;
+    -fx-font-weight: bold;
+}
+.sidebar-footer {
+    -fx-padding: 12 8 0 8;
+    -fx-border-color: -ng-border;
+    -fx-border-width: 1px 0 0 0;
+}
+.sidebar-role {
+    -fx-font-size: 11px;
+    -fx-text-fill: -ng-text-muted;
+}
+.sidebar-server-id {
+    -fx-font-family: 'JetBrains Mono', 'Consolas', monospace;
+    -fx-font-size: 11px;
+    -fx-text-fill: -ng-text-subtle;
+}
+
+/* ── Connection banner (present on every screen) ── */
+.connection-banner {
+    -fx-background-color: -ng-surface;
+    -fx-border-color: -ng-border;
+    -fx-border-width: 0 0 1px 0;
+}
+.connection-banner-state {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+.connection-banner-detail {
+    -fx-font-size: 12px;
+    -fx-text-fill: -ng-text-muted;
+}
+.connection-banner-freshness {
+    -fx-font-size: 11px;
+    -fx-text-fill: -ng-text-subtle;
+}
+/* A dropped link tints the whole strip, so a disconnected app is obvious at a
+   glance rather than only from a small coloured dot. */
+.connection-banner--disconnected {
+    -fx-background-color: -ng-danger-surface;
+}
+.connection-banner--reconnecting {
+    -fx-background-color: -ng-warn-surface;
+}
+
+/* ── Stat tiles ── */
+.stat-row {
+    -fx-padding: 0;
+}
+.stat-tile {
+    -fx-background-color: -ng-surface;
+    -fx-background-radius: 12px;
+    -fx-border-color: -ng-border;
+    -fx-border-radius: 12px;
+    -fx-border-width: 1px;
+    -fx-padding: 14 16 14 16;
+    -fx-spacing: 2;
+    -fx-min-width: 130px;
+}
+.stat-tile-caption {
+    -fx-font-size: 11px;
+    -fx-text-fill: -ng-text-muted;
+}
+/* Proportional figures for a standalone headline number; tabular figures are
+   reserved for columns that must align vertically. */
+.stat-tile-value {
+    -fx-font-size: 34px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -ng-text;
+}
+.stat-tile-value-unavailable {
+    -fx-font-size: 22px;
+    -fx-text-fill: -ng-text-subtle;
+}
+.stat-tile-status {
+    -fx-font-size: 11px;
+    -fx-text-fill: -ng-text-muted;
+}
+
+.dashboard-callout {
+    -fx-font-size: 13px;
+    -fx-text-fill: -ng-text-muted;
+    -fx-background-color: -ng-surface;
+    -fx-background-radius: 10px;
+    -fx-border-color: -ng-border;
+    -fx-border-radius: 10px;
+    -fx-border-width: 1px;
+    -fx-padding: 10 14 10 14;
+}
+
+/* ── Charts ── */
+.chart-row {
+    -fx-padding: 0;
+}
+.chart-card {
+    -fx-background-color: -ng-surface;
+    -fx-background-radius: 12px;
+    -fx-border-color: -ng-border;
+    -fx-border-radius: 12px;
+    -fx-border-width: 1px;
+    -fx-padding: 16;
+    -fx-spacing: 2;
+    -fx-min-width: 300px;
+}
+.metric-chart {
+    -fx-padding: 4 0 0 0;
+}
+.metric-chart .chart-plot-background {
+    -fx-background-color: transparent;
+}
+/* Recessive grid: the data is the ink. */
+.metric-chart .chart-horizontal-grid-lines {
+    -fx-stroke: -ng-gridline;
+    -fx-stroke-width: 1px;
+}
+.metric-chart .chart-vertical-grid-lines {
+    -fx-stroke: transparent;
+}
+.metric-chart .chart-alternative-row-fill,
+.metric-chart .chart-alternative-column-fill {
+    -fx-background-color: transparent;
+    -fx-stroke: transparent;
+}
+.metric-chart .axis {
+    -fx-tick-label-fill: -ng-text-subtle;
+    -fx-tick-label-font-size: 10px;
+    -fx-font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+}
+.metric-chart .axis-label {
+    -fx-text-fill: -ng-text-muted;
+}
+.metric-chart .axis .axis-tick-mark,
+.metric-chart .axis .axis-minor-tick-mark {
+    -fx-stroke: -ng-axis;
+}
+/* 2px lines, and no fill under them — an area fill would imply a cumulative
+   quantity, which a utilisation percentage is not. */
+.metric-chart .chart-series-line {
+    -fx-stroke-width: 2px;
+}
+
+.chart-legend {
+    -fx-padding: 10 0 0 0;
+}
+.chart-legend-item {
+    -fx-padding: 2 0 2 0;
+}
+.chart-legend-name {
+    -fx-font-size: 11px;
+    -fx-text-fill: -ng-text-muted;
+}
+/* The direct-labelled current value. This is the relief that keeps identity
+   readable when a palette slot is low-contrast against the surface. */
+.chart-legend-value {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -ng-text;
+}
+.chart-legend-value-stale {
+    -fx-font-size: 11px;
+    -fx-text-fill: -ng-text-subtle;
+}
+.chart-empty {
+    -fx-font-size: 12px;
+    -fx-text-fill: -ng-text-subtle;
+    -fx-padding: 40 0 40 0;
+    -fx-alignment: center;
+}
+
+/* ── Node cards ── */
+.node-grid {
+    -fx-padding: 4 0 0 0;
+}
+.node-card {
+    -fx-background-color: -ng-surface;
+    -fx-background-radius: 12px;
+    -fx-border-color: -ng-border;
+    -fx-border-radius: 12px;
+    -fx-border-width: 1px;
+    -fx-padding: 16;
+    -fx-spacing: 10;
+    -fx-min-width: 280px;
+    -fx-pref-width: 300px;
+}
+.node-card-name {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -ng-text;
+}
+.node-card-host {
+    -fx-font-family: 'JetBrains Mono', 'Consolas', monospace;
+    -fx-font-size: 11px;
+    -fx-text-fill: -ng-text-subtle;
+}
+.node-card-status {
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+.node-card-meta {
+    -fx-font-size: 11px;
+    -fx-text-fill: -ng-text-subtle;
+}
+.status-pill {
+    -fx-background-color: -ng-hover;
+    -fx-background-radius: 8px;
+    -fx-padding: 3 9 3 9;
+}
+
+.metric-row {
+    -fx-padding: 2 0 2 0;
+}
+.metric-caption {
+    -fx-font-size: 11px;
+    -fx-text-fill: -ng-text-muted;
+}
+.metric-value {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -ng-text;
+}
+.metric-value-unavailable {
+    -fx-font-weight: normal;
+    -fx-text-fill: -ng-text-subtle;
+}
+.metric-bar {
+    -fx-pref-height: 6px;
+    -fx-min-height: 6px;
+}
+.metric-bar > .track {
+    -fx-background-color: -ng-track;
+    -fx-background-radius: 3px;
+}
+.metric-bar > .bar {
+    -fx-background-radius: 3px;
+    -fx-padding: 0;
+}
+
+/* ── Empty states ── */
+.empty-state {
+    -fx-padding: 48 24 48 24;
+}
+.empty-state-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -ng-text-muted;
+}
+.empty-state-body {
+    -fx-font-size: 12px;
+    -fx-text-fill: -ng-text-subtle;
+    -fx-text-alignment: center;
+}
+
+/* ── Tables ── */
+.data-table {
+    -fx-background-color: -ng-surface;
+    -fx-background-radius: 12px;
+    -fx-border-color: -ng-border;
+    -fx-border-radius: 12px;
+    -fx-border-width: 1px;
+    -fx-padding: 0;
+}
+.data-table .column-header-background {
+    -fx-background-color: transparent;
+    -fx-background-radius: 12px 12px 0 0;
+}
+.data-table .column-header {
+    -fx-background-color: transparent;
+    -fx-border-color: -ng-border;
+    -fx-border-width: 0 0 1px 0;
+    -fx-padding: 10 0 10 0;
+}
+.data-table .column-header .label {
+    -fx-text-fill: -ng-text-muted;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-alignment: center-left;
+}
+.data-table .table-cell {
+    -fx-text-fill: -ng-text;
+    -fx-font-size: 12px;
+    -fx-padding: 11 14 11 14;
+    -fx-border-color: transparent;
+}
+/* Tabular figures so the numeric columns align down the page. */
+.data-table .table-numeric {
+    -fx-font-family: 'JetBrains Mono', 'Consolas', monospace;
+    -fx-font-size: 12px;
+}
+.data-table .table-row-cell {
+    -fx-background-color: transparent;
+    -fx-border-color: -ng-border;
+    -fx-border-width: 0 0 1px 0;
+}
+.data-table .table-row-cell:hover {
+    -fx-background-color: -ng-hover;
+}
+.data-table .table-row-cell:selected {
+    -fx-background-color: -ng-accent-soft;
+}
+.table-status {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+/* ── Tasks ── */
+.task-row {
+    -fx-background-color: -ng-surface;
+    -fx-background-radius: 10px;
+    -fx-border-color: -ng-border;
+    -fx-border-radius: 10px;
+    -fx-border-width: 1px;
+    -fx-padding: 10 14 10 14;
+}
+.task-id {
+    -fx-font-family: 'JetBrains Mono', 'Consolas', monospace;
+    -fx-font-size: 11px;
+    -fx-text-fill: -ng-text;
+}
+.task-type {
+    -fx-font-size: 12px;
+    -fx-text-fill: -ng-text;
+}
+.task-meta {
+    -fx-font-size: 11px;
+    -fx-text-fill: -ng-text-muted;
+}
+.task-result {
+    -fx-font-size: 11px;
+    -fx-text-fill: -ng-text-subtle;
+}
+
+/* ── Settings ── */
+.settings-view {
+    -fx-spacing: 0;
+    -fx-padding: 20 24 16 24;
+}
+.settings-content {
+    -fx-spacing: 16;
+    -fx-padding: 0 8 16 0;
+}
+.settings-scroll,
+.settings-scroll .viewport {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+}
+.settings-card {
+    -fx-background-color: -ng-surface;
+    -fx-background-radius: 12px;
+    -fx-border-color: -ng-border;
+    -fx-border-radius: 12px;
+    -fx-border-width: 1px;
+    -fx-padding: 20;
+    -fx-spacing: 12;
+}
+.setting-row {
+    -fx-padding: 4 0 4 0;
+}
+.setting-label {
+    -fx-font-size: 13px;
+    -fx-text-fill: -ng-text-muted;
+    -fx-padding: 6 0 0 0;
+}
+.setting-hint {
+    -fx-font-size: 11px;
+    -fx-text-fill: -ng-text-subtle;
+}
+.setting-value {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -ng-text;
+}
+.setting-status {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-padding: 6 0 0 0;
+}
+.setting-field {
+    -fx-background-color: -ng-input;
+    -fx-text-fill: -ng-text;
+    -fx-prompt-text-fill: -ng-text-subtle;
+    -fx-background-radius: 8px;
+    -fx-border-color: -ng-border;
+    -fx-border-radius: 8px;
+    -fx-border-width: 1px;
+    -fx-padding: 8 12 8 12;
+}
+.setting-field:focused {
+    -fx-border-color: -ng-accent;
+}
+.setting-field .list-cell {
+    -fx-text-fill: -ng-text;
+    -fx-background-color: transparent;
+}
+
+/* ── Buttons ── */
+.primary-button {
+    -fx-background-color: -ng-accent;
+    -fx-text-fill: -ng-on-accent;
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-background-radius: 8px;
+    -fx-padding: 9 20 9 20;
+    -fx-cursor: hand;
+}
+.primary-button:hover {
+    -fx-background-color: -ng-accent-strong;
+}
+.toggle-pill {
+    -fx-background-color: -ng-input;
+    -fx-text-fill: -ng-text;
+    -fx-background-radius: 8px;
+    -fx-padding: 8 20 8 20;
+    -fx-cursor: hand;
+}
+.toggle-pill:selected {
+    -fx-background-color: -ng-accent;
+    -fx-text-fill: -ng-on-accent;
+}
+
+/* ── Scrollbars ── */
+.scroll-bar:vertical, .scroll-bar:horizontal {
+    -fx-background-color: transparent;
+    -fx-pref-width: 8px;
+    -fx-pref-height: 8px;
+}
+.scroll-bar .thumb {
+    -fx-background-color: -ng-scrollbar;
+    -fx-background-radius: 4px;
+}
+.scroll-bar .thumb:hover {
+    -fx-background-color: -ng-scrollbar-hover;
+}
+.scroll-bar .track,
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button,
+.scroll-bar .increment-arrow,
+.scroll-bar .decrement-arrow {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+/* ── Tooltip & dialogs ── */
+.tooltip {
+    -fx-background-color: -ng-surface-raised;
+    -fx-text-fill: -ng-text;
+    -fx-font-size: 11px;
+    -fx-background-radius: 8px;
+}
+.dialog-pane {
+    -fx-background-color: -ng-bg;
+}
+.dialog-pane .header-panel {
+    -fx-background-color: -ng-surface;
+}
+.dialog-pane .label,
+.dialog-pane .content.label {
+    -fx-text-fill: -ng-text;
+}
+.dialog-pane .button {
+    -fx-background-color: -ng-accent;
+    -fx-text-fill: -ng-on-accent;
+    -fx-background-radius: 8px;
+    -fx-cursor: hand;
+}

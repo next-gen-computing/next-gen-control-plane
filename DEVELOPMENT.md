@@ -21,21 +21,39 @@ git clone https://github.com/YOUR_USERNAME/next-gen-control-plane.git
 cd next-gen-control-plane
 
 # Start everything (Docker mode on server laptop)
-docker compose up --build control-plane predictor dashboard
+docker compose up --build
 
 ```
 
 This will:
 1. Build Java fat JAR (ControlPlane + NodeAgent) via Maven
 2. Build Python predictor with gRPC stubs
-3. Start all 5 services on `nextgen-net` Docker network
-4. Dashboard available at http://localhost:8085
+3. Start the control plane, predictor, and Prometheus on `nextgen-net` Docker network
+4. Dashboard API (JSON) available at http://localhost:8085/api/nodes
 
 ## 🖥️ Desktop Application (Phase-2 UI)
 
 The Phase-2 desktop application is a modern JavaFX UI in a separate `desktop-ui` Maven module. It connects to the ControlPlane and Predictor services via gRPC and displays real-time data. The UI uses an MVVM architecture with dark/light theme support.
 
 ### Build & Launch
+
+> **One-time setup: a JDK 21 Maven Toolchain.** `javafx-web`'s module descriptor requires the
+> `jdk.jsobject` module (backs WebView's Java↔JavaScript bridge), which was removed from the
+> JDK in later feature releases (confirmed gone by JDK 26; present through at least JDK 21) —
+> so `desktop-ui` needs to actually *run* on JDK 21 regardless of whatever JDK you otherwise
+> use day to day (compiling is unaffected either way; only running needs the module). This is
+> handled for you automatically by Maven Toolchains — `desktop-ui/pom.xml` requires one, and
+> `javafx-maven-plugin` picks it up and launches the app with it — **without changing your
+> system's default `java`/`JAVA_HOME` at all.** You just need to tell Maven where a JDK 21
+> install lives, once, on each machine you build this on:
+>
+> 1. Install a JDK 21 if you don't already have one (e.g. [Eclipse Temurin 21](https://adoptium.net)).
+> 2. Copy `desktop-ui/toolchains.xml.sample` to `~/.m2/toolchains.xml` (merge it in if that
+>    file already exists) and edit `<jdkHome>` to point at your JDK 21 install.
+>
+> After that, plain `mvn javafx:run` (below) just works. Skipping this step fails with
+> `Cannot find matching toolchain` — a clear, actionable error pointing back here, not the
+> cryptic `FindException` you'd get without the toolchain requirement in place at all.
 
 #### Option 1: Maven JavaFX Plugin (Recommended for Development)
 
@@ -130,6 +148,26 @@ Hostname: your-host, IP: 192.168.x.x
 💓 Heartbeat #1: cpu=12.3%, mem=45.6% → OK
 ```
 
+### Step 3b: Submit a real distributed job with the `nx` CLI
+
+With the control plane and at least one node agent running (Steps 2-3), submit a real multi-service
+project and watch it run — live-verified end to end, including on nodes sharing one machine:
+
+```bash
+java -jar cli/target/nextgen-cli-1.0-SNAPSHOT.jar up my-compose.yml \
+  --project demo --control-plane localhost:50051
+```
+
+No `nx enrol` needed here — the CLI talks plaintext by default, matching `TLS_ENABLED=false` above; add
+`--tls` (after `nx enrol --token ... --control-plane ...`) only if the server was started with
+`TLS_ENABLED=true`. `nx ps`/`nx down`/`nx nodes`/`nx logs` all take the same `--control-plane` flag.
+
+Prototyping several node agents as separate processes on this ONE machine has one topology-specific
+gotcha: pass `RELAY_ADVERTISED_HOST=host.docker.internal` to the server in Step 2 (not the default
+`localhost`) so a container can reach the relay listener on its own host — see
+[docs/ARCHITECTURE.md's Distributed container execution section](docs/ARCHITECTURE.md#distributed-container-execution).
+Genuinely separate physical nodes need no such override.
+
 ### Step 4: Start Python Predictor
 
 ```bash
@@ -152,8 +190,7 @@ python predictor_service.py
 
 | Service | URL | Purpose |
 |---------|-----|---------|
-| Dashboard | http://localhost:8085 | Live monitoring UI |
-| Dashboard API | http://localhost:8085/api/nodes | JSON node data |
+| Dashboard API | http://localhost:8085/api/nodes | JSON node data (no bundled HTML frontend — the desktop app is the maintained UI) |
 | ControlPlane gRPC | localhost:50051 | Node registration & heartbeats |
 | ControlPlane Metrics | http://localhost:9090/metrics | Prometheus |
 | Predictor gRPC | localhost:50052 | ML predictions |
@@ -357,30 +394,8 @@ next-gen-control-plane/
 │       │   ├── HeartbeatMonitor.java
 │       │   ├── NodeRecord.java
 │       │   └── StaticFileHandler.java
-│       ├── agent/                          # Node Agent
-│       │   └── NodeAgent.java
-│       └── desktop/v2/                     # Backend services & DB (UI removed)
-│           ├── db/
-│           │   ├── DatabaseManager.java
-│           │   ├── entities/
-│           │   │   ├── ServerEntity.java
-│           │   │   ├── NodeEntity.java
-│           │   │   ├── ClusterMembershipEntity.java
-│           │   │   └── JoinRequestEntity.java
-│           │   └── repositories/
-│           │       ├── ServerRepository.java
-│           │       ├── NodeRepository.java
-│           │       ├── ClusterMembershipRepository.java
-│           │       └── JoinRequestRepository.java
-│           ├── grpc/
-│           │   ├── ClusterManagerServiceImpl.java
-│           │   ├── ControlPlaneServiceImpl.java
-│           │   └── PredictorServiceImpl.java
-│           ├── service/
-│           │   └── RegistrationService.java
-│           └── util/
-│               ├── TlsCertificateGenerator.java
-│               └── SystemSpecDetector.java
+│       └── agent/                          # Node Agent
+│           └── NodeAgent.java
 ├── desktop-ui/                             # Phase-2 Desktop UI (JavaFX)
 │   ├── pom.xml                             # Child POM (JavaFX, gRPC client)
 │   └── src/main/java/com/nextgen/desktop/ui/
@@ -411,11 +426,6 @@ next-gen-control-plane/
 │   ├── predictor_service.py
 │   ├── requirements.txt
 │   └── Dockerfile
-├── dashboard/                              # Web UI (served by ControlPlane)
-│   ├── html/
-│   ├── css/styles.css
-│   ├── js/app.js
-│   └── Dockerfile
 ├── scripts/                                # Utilities
 ├── docs/                                   # Documentation
 ├── docker-compose.yml
@@ -432,7 +442,7 @@ next-gen-control-plane/
 
 ```
 feature/add-health-checks
-bugfix/dashboard-loading
+bugfix/heartbeat-timeout
 refactor/predictor-service
 docs/api-examples
 ```
@@ -441,7 +451,7 @@ docs/api-examples
 
 ```bash
 feat: add health check endpoints
-fix: resolve dashboard CSS loading issue
+fix: resolve heartbeat timeout edge case
 docs: update API documentation
 refactor: simplify heartbeat monitor logic
 test: add NodeRecord unit tests

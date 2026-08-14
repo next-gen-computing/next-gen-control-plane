@@ -1,0 +1,176 @@
+.ng-help-fab {
+    position: fixed;
+    top: var(--ng-space-4);
+    right: var(--ng-space-4);
+    z-index: 100;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--ng-border);
+    background: var(--ng-surface);
+    color: var(--ng-text-muted);
+    font-size: var(--ng-font-size-md);
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.ng-help-fab:hover {
+    color: var(--ng-accent);
+    border-color: var(--ng-accent);
+    transform: scale(1.05);
+}
+
+.ng-help-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--ng-space-5);
+}
+
+.ng-help-overlay[hidden] {
+    display: none;
+}
+
+.ng-help-panel {
+    width: 100%;
+    max-width: 760px;
+    max-height: 85vh;
+    background: var(--ng-surface);
+    border: 1px solid var(--ng-border);
+    border-radius: var(--ng-radius-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.ng-help-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--ng-space-4) var(--ng-space-5);
+    border-bottom: 1px solid var(--ng-border);
+}
+
+.ng-help-header h2 {
+    margin: 0;
+    font-size: var(--ng-font-size-lg);
+}
+
+.ng-help-close {
+    background: none;
+    border: none;
+    color: var(--ng-text-muted);
+    font-size: var(--ng-font-size-lg);
+    cursor: pointer;
+    line-height: 1;
+}
+
+.ng-help-close:hover {
+    color: var(--ng-text);
+}
+
+.ng-help-tabs {
+    display: flex;
+    gap: var(--ng-space-1);
+    padding: 0 var(--ng-space-5);
+    border-bottom: 1px solid var(--ng-border);
+    flex-wrap: wrap;
+}
+
+.ng-help-tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--ng-text-muted);
+    padding: var(--ng-space-3) var(--ng-space-2);
+    font-size: var(--ng-font-size-xs);
+    cursor: pointer;
+}
+
+.ng-help-tab.is-active {
+    color: var(--ng-accent);
+    border-bottom-color: var(--ng-accent);
+}
+
+.ng-help-body {
+    padding: var(--ng-space-5);
+    overflow-y: auto;
+    color: var(--ng-text);
+    font-size: var(--ng-font-size-sm);
+    line-height: 1.6;
+}
+
+.ng-help-body h3 {
+    font-size: var(--ng-font-size-md);
+    margin: var(--ng-space-4) 0 var(--ng-space-2);
+}
+
+.ng-help-body h3:first-child {
+    margin-top: 0;
+}
+
+.ng-help-body p {
+    margin: 0 0 var(--ng-space-3);
+    color: var(--ng-text-muted);
+}
+
+.ng-help-body a {
+    color: var(--ng-accent);
+}
+
+.ng-faq-item {
+    margin-bottom: var(--ng-space-3);
+    padding-bottom: var(--ng-space-3);
+    border-bottom: 1px solid var(--ng-border);
+}
+
+.ng-faq-item:last-child {
+    border-bottom: none;
+}
+
+.ng-faq-q {
+    font-weight: 600;
+    margin-bottom: var(--ng-space-1);
+}
+
+.ng-faq-a {
+    color: var(--ng-text-muted);
+}
+
+.ng-note {
+    background: var(--ng-accent-soft);
+    border-radius: var(--ng-radius-sm);
+    padding: var(--ng-space-3);
+    font-size: var(--ng-font-size-xs);
+    color: var(--ng-text);
+}
+
+.ng-help-textarea {
+    background: var(--ng-input);
+    border: 1px solid var(--ng-border);
+    border-radius: var(--ng-radius-sm);
+    padding: var(--ng-space-3);
+    color: var(--ng-text);
+    font-size: var(--ng-font-size-sm);
+    font-family: var(--ng-font-body);
+    width: 100%;
+    min-height: 120px;
+    resize: vertical;
+}
+
+.ng-help-select {
+    background: var(--ng-input);
+    border: 1px solid var(--ng-border);
+    border-radius: var(--ng-radius-sm);
+    padding: var(--ng-space-2) var(--ng-space-3);
+    color: var(--ng-text);
+    font-size: var(--ng-font-size-sm);
+}

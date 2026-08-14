@@ -1,3 +1,18 @@
+# Deployment for the SERVER side only: the control plane, its predictor, and
+# Prometheus. This is one convenient way to self-host the coordinating server
+# (e.g. on a cloud VM) — it is deliberately not how nodes join the cluster.
+#
+# Real nodes are physical machines running the desktop app in "node" mode,
+# anywhere in the world, connecting to whatever address this control plane is
+# published at. They are not simulated containers, and this file does not
+# start any. See docs/ARCHITECTURE.md for the connectivity model and
+# README.md's "Running across the internet" section for how a node actually
+# joins.
+#
+# There is no bundled web dashboard anymore — the desktop app is the one maintained interface for
+# both roles. The control plane still serves a small /api/nodes JSON endpoint (see the
+# control-plane service's published ports below) for anyone who wants to build their own frontend.
+
 services:
   # ── Control Plane (Java gRPC server + API) ────────
   control-plane:
@@ -7,85 +22,90 @@ services:
     environment:
       - ROLE=server
       - PREDICTOR_HOST=predictor
+      # ── Exposing this control plane publicly ──
+      # Nodes always dial OUT to the control plane, so only this service needs a
+      # reachable address; nodes behind NAT need no inbound port at all. To run
+      # it on a public host, publish 50051 below and set:
+      #   TLS_ENABLED=true
+      #   TLS_SAN_HOSTS=control.example.com,<public-ip>
+      #   ENROLLMENT_TOKENS=node1,node2,node3
+      # then point each node at CONTROL_PLANE_HOST=control.example.com.
+      # See docs/ARCHITECTURE.md for the full connectivity and trust model.
+      - TLS_ENABLED=false
+      - TLS_SAN_HOSTS=localhost,127.0.0.1,control-plane
+      # Stage G: MLRiskScorer stays off (rule-based scoring only) until an operator turns this on —
+      # see MLRiskScorer's Javadoc. Real data needs to accumulate and train_risk_model.py needs to run
+      # at least once first.
+      - ML_RISK_SCORER_ENABLED=false
+      - NEXTGEN_DATA_DIR=/root/.nextgen/data
     ports:
-      - "50051:50051"   # gRPC
+      - "50051:50051"   # gRPC — the only port a real node needs to reach
       - "9090:9090"     # Prometheus metrics
+      - "8085:8085"     # Dashboard API (/api/nodes)
+    volumes:
+      # The CA and server key live here. Without a volume a restart mints a brand
+      # new CA and every previously-enrolled node is instantly untrusted.
+      - pki:/root/.nextgen/pki
+      # risk_outcomes.jsonl / job_outcomes.jsonl / (opt-in) risk_snapshots.jsonl — shared with the
+      # predictor container below so train_risk_model.py can read what this container writes.
+      - training-data:/root/.nextgen/data
     networks:
       - nextgen-net
     depends_on:
       - predictor
     healthcheck:
-      test: ["CMD", "sh", "-c", "echo | timeout 2 bash -c 'cat < /dev/null > /dev/tcp/localhost/50051'"]
+      # Uses the metrics endpoint rather than a bash /dev/tcp trick: the runtime
+      # image is JRE-based and has no bash, so the old check could never pass.
+      test: ["CMD", "sh", "-c", "wget -q -O /dev/null http://localhost:9090/metrics || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 10
 
-  # ── Node Agents (3 instances, real OS metrics) ────
-  node1:
-    build:
-      context: .
-      dockerfile: java-control-plane/Dockerfile
-    environment:
-      - ROLE=agent
-      - NODE_ID=node1
-      - CONTROL_PLANE_HOST=control-plane
-    networks:
-      - nextgen-net
-    depends_on:
-      control-plane:
-        condition: service_started
-
-  node2:
-    build:
-      context: .
-      dockerfile: java-control-plane/Dockerfile
-    environment:
-      - ROLE=agent
-      - NODE_ID=node2
-      - CONTROL_PLANE_HOST=control-plane
-    networks:
-      - nextgen-net
-    depends_on:
-      control-plane:
-        condition: service_started
-
-  node3:
-    build:
-      context: .
-      dockerfile: java-control-plane/Dockerfile
-    environment:
-      - ROLE=agent
-      - NODE_ID=node3
-      - CONTROL_PLANE_HOST=control-plane
-    networks:
-      - nextgen-net
-    depends_on:
-      control-plane:
-        condition: service_started
-
-  # ── Python Predictor (gRPC stub) ─────────────────
+  # ── Python Predictor (Stage G: real trained model, hot-reloaded from model/risk_model.json) ──
   predictor:
     build:
       context: .
       dockerfile: python-predictor/Dockerfile
+    environment:
+      # Read by train_risk_model.py's own default --outcomes/--snapshots when run via
+      # `docker compose exec predictor python train_risk_model.py` — training is always a manual,
+      # operator-run step (see that script's module docstring), never automatic.
+      - RISK_OUTCOMES_PATH=/root/.nextgen/data/risk_outcomes.jsonl
+      - RISK_SNAPSHOTS_PATH=/root/.nextgen/data/risk_snapshots.jsonl
     ports:
       - "50052:50052"   # gRPC
       - "9091:9091"     # Prometheus metrics
+    volumes:
+      # Read access to the same JSONL the control-plane container writes.
+      - training-data:/root/.nextgen/data
+      # The trained model itself — a named volume so `docker compose exec predictor python
+      # train_risk_model.py` persists what it writes across container recreates.
+      - predictor-model:/app/model
     networks:
       - nextgen-net
 
-  # ── Dashboard (nginx frontend) ───────────────────
-  dashboard:
-    build:
-      context: .
-      dockerfile: dashboard/Dockerfile
+  # ── Prometheus (scrapes the control plane + predictor) ────
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=6h
+      - --web.enable-lifecycle
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
-      - "8085:80"       # Dashboard UI
+      # Published on 9464 because 9090 on the host is already the control plane's
+      # own exporter.
+      - "9464:9090"
     networks:
       - nextgen-net
     depends_on:
-      control-plane:
-        condition: service_started
+      - control-plane
+
+volumes:
+  pki:
+  training-data:
+  predictor-model:
 
 networks:
   nextgen-net:

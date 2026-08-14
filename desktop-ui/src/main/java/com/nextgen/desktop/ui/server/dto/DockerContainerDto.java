@@ -1,0 +1,32 @@
+package com.nextgen.desktop.ui.server.dto;
+
+import com.nextgen.proto.ControlPlaneProto;
+
+/** One real container, as reported by the node that's actually running it — see
+ * {@code DockerStateCollector}'s own Javadoc for how {@code nodeId} is attached alongside the fields
+ * Docker itself reports (never synthesized here). */
+public record DockerContainerDto(
+        String nodeId,
+        String containerId,
+        String name,
+        String image,
+        String status,
+        String stateText,
+        java.util.List<String> ports,
+        long createdAtEpochMillis,
+        String command
+) {
+    public static DockerContainerDto from(String nodeId, ControlPlaneProto.DockerContainerInfo info) {
+        return new DockerContainerDto(
+                nodeId,
+                info.getContainerId(),
+                info.getName(),
+                info.getImage(),
+                info.getStatus(),
+                info.getStateText(),
+                info.getPortsList(),
+                info.getCreatedAtEpochMillis(),
+                info.getCommand()
+        );
+    }
+}

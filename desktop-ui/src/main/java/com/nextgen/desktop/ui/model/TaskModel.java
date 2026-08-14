@@ -6,10 +6,9 @@ import javafx.beans.property.*;
  * Model representing a submitted task and its execution progress.
  */
 public class TaskModel {
+    /** The only real, executable task kind the control plane knows how to run today (see TaskKind). */
     public enum TaskType {
-        MATRIX_MULTIPLICATION,
-        LARGE_ARRAY_SUM,
-        PRIME_COUNTER
+        PRIME_COUNT_RANGE
     }
 
     public enum TaskStatus {
@@ -69,10 +68,7 @@ public class TaskModel {
 
     public String getTypeDisplayName() {
         return switch (getType()) {
-            case MATRIX_MULTIPLICATION -> "Matrix Multiplication";
-            case LARGE_ARRAY_SUM -> "Large Array Sum";
-            case PRIME_COUNTER -> "Prime Counter";
-            default -> "Unknown";
+            case PRIME_COUNT_RANGE -> "Prime Count (Range)";
         };
     }
 

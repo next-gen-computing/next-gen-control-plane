@@ -5,6 +5,7 @@
 *.ear
 target/
 !.mvn/wrapper/maven-wrapper.jar
+javac.*.args
 
 # ── Python ────────────────────────────────────────
 __pycache__/
@@ -45,3 +46,22 @@ build_log.txt
 # ── Build artifacts ───────────────────────────────
 java-control-plane/bin/
 java-control-plane/dependency-reduced-pom.xml
+
+# -- Key material (NEVER commit) -------------------------------
+# The CA private key and every issued node key. A leaked ca.key lets
+# anyone mint a certificate the cluster will trust.
+*.key
+*.crt
+*.pem
+*.p12
+*.jks
+.nextgen/
+pki/
+
+# ── Stage G: trained models and training data ──────
+# Machine/data-derived artifacts, not source — regenerate locally via train_risk_model.py.
+python-predictor/model/
+.pytest_cache/
+# User-supplied local cluster-trace files for import_external_trace.py — never downloaded by this repo,
+# never committed (potentially large, and not this project's data to redistribute).
+data/external_traces/

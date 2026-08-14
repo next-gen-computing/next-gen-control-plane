@@ -10,7 +10,7 @@ import java.util.List;
 /**
  * Manages dark/light theme switching across the application.
  */
-public class ThemeService {
+public final class ThemeService {
     private final BooleanProperty darkMode = new SimpleBooleanProperty(true);
     private final List<Scene> registeredScenes = new ArrayList<>();
 
@@ -34,7 +34,20 @@ public class ThemeService {
         darkMode.set(!darkMode.get());
     }
 
+    /** Structural rules, shared by both themes and written entirely in terms of colour tokens. */
+    static final String BASE_STYLESHEET = "/styles/base.css";
+    static final String DARK_STYLESHEET = "/styles/dark.css";
+    static final String LIGHT_STYLESHEET = "/styles/light.css";
+
     public void registerScene(Scene scene) {
+        if (scene == null || registeredScenes.contains(scene)) {
+            // The same Scene used to be registered twice (once by DesktopApp, once by MainWindow),
+            // which applied the theme twice and leaked a duplicate entry on every switch.
+            if (scene != null) {
+                applyTheme(scene);
+            }
+            return;
+        }
         registeredScenes.add(scene);
         applyTheme(scene);
     }
@@ -47,11 +60,22 @@ public class ThemeService {
 
     private void applyTheme(Scene scene) {
         scene.getStylesheets().clear();
-        if (darkMode.get()) {
-            scene.getStylesheets().add(getClass().getResource("/styles/dark.css").toExternalForm());
-        } else {
-            scene.getStylesheets().add(getClass().getResource("/styles/light.css").toExternalForm());
+        // Order matters only for readability — JavaFX resolves looked-up colours at apply time — but
+        // the theme file must always accompany base.css, which defines no colours of its own.
+        scene.getStylesheets().add(resolve(themeStylesheet()));
+        scene.getStylesheets().add(resolve(BASE_STYLESHEET));
+    }
+
+    String themeStylesheet() {
+        return darkMode.get() ? DARK_STYLESHEET : LIGHT_STYLESHEET;
+    }
+
+    private String resolve(String path) {
+        var url = getClass().getResource(path);
+        if (url == null) {
+            throw new IllegalStateException("Stylesheet missing from the classpath: " + path);
         }
+        return url.toExternalForm();
     }
 
     public String getBackgroundColor() {

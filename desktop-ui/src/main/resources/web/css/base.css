@@ -1,0 +1,23 @@
+/* Structural styles only — no literal colours. Every colour comes from a
+   --ng-* custom property defined in tokens.css, so both themes style every
+   component identically by construction (mirrors the Java base.css/dark.css/
+   light.css split). */
+
+* { box-sizing: border-box; }
+
+html, body {
+    height: 100%;
+    margin: 0;
+}
+
+body {
+    background: var(--ng-bg);
+    color: var(--ng-text);
+    font-family: var(--ng-font-body);
+    font-size: var(--ng-font-size-sm);
+}
+
+#content {
+    min-height: 100%;
+    position: relative;
+}

@@ -16,6 +16,7 @@
     <modules>
         <module>java-control-plane</module>
         <module>desktop-ui</module>
+        <module>cli</module>
     </modules>
 
     <properties>
@@ -32,12 +33,11 @@
         <!-- Jackson -->
         <jackson.version>2.17.0</jackson.version>
 
-        <!-- Hibernate / SQLite -->
-        <hibernate.version>6.4.4.Final</hibernate.version>
-        <sqlite-jdbc.version>3.46.0.0</sqlite-jdbc.version>
-
         <!-- Prometheus -->
         <prometheus.version>0.16.0</prometheus.version>
+
+        <!-- OSHI: cross-platform battery/charging/AC-power signals (no such library existed before) -->
+        <oshi.version>6.6.5</oshi.version>
 
         <!-- Logging -->
         <slf4j.version>2.0.16</slf4j.version>
@@ -46,7 +46,13 @@
         <junit.version>5.10.2</junit.version>
         <mockito.version>5.11.0</mockito.version>
         <awaitility.version>4.2.2</awaitility.version>
-        <jacoco.version>0.8.12</jacoco.version>
+        <!--
+          0.8.12 predates JDK 26 and cannot read class file major version 70. Its agent throws
+          while instrumenting JDK and third-party classes, which intermittently kills test-class
+          loading outright ("Unable to create test class ..."). 0.8.15 understands the newer format.
+        -->
+        <jacoco.version>0.8.15</jacoco.version>
+        <bouncycastle.version>1.78.1</bouncycastle.version>
 
         <!-- Maven Plugins -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -59,9 +65,6 @@
         <protobuf.plugin.version>0.6.1</protobuf.plugin.version>
         <javafx.plugin.version>0.0.8</javafx.plugin.version>
         <os.plugin.version>1.7.1</os.plugin.version>
-
-        <!-- Set Java temp directory to user temp to avoid Windows file locking issues -->
-        <java.io.tmpdir>${user.home}/AppData/Local/Temp</java.io.tmpdir>
     </properties>
 
     <dependencyManagement>
@@ -119,32 +122,6 @@
                 <version>${jackson.version}</version>
             </dependency>
 
-            <!-- Hibernate -->
-            <dependency>
-                <groupId>org.hibernate.orm</groupId>
-                <artifactId>hibernate-core</artifactId>
-                <version>${hibernate.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.hibernate</groupId>
-                <artifactId>hibernate-community-dialects</artifactId>
-                <version>${hibernate.version}</version>
-            </dependency>
-
-            <!-- SQLite -->
-            <dependency>
-                <groupId>org.xerial</groupId>
-                <artifactId>sqlite-jdbc</artifactId>
-                <version>${sqlite-jdbc.version}</version>
-            </dependency>
-
-            <!-- Jakarta Persistence -->
-            <dependency>
-                <groupId>jakarta.persistence</groupId>
-                <artifactId>jakarta.persistence-api</artifactId>
-                <version>3.1.0</version>
-            </dependency>
-
             <!-- Prometheus -->
             <dependency>
                 <groupId>io.prometheus</groupId>
@@ -167,6 +144,13 @@
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-simple</artifactId>
                 <version>${slf4j.version}</version>
+            </dependency>
+
+            <!-- OSHI -->
+            <dependency>
+                <groupId>com.github.oshi</groupId>
+                <artifactId>oshi-core</artifactId>
+                <version>${oshi.version}</version>
             </dependency>
 
             <!-- Testing -->
@@ -193,6 +177,34 @@
                 <artifactId>awaitility</artifactId>
                 <version>${awaitility.version}</version>
                 <scope>test</scope>
+            </dependency>
+
+            <!--
+              BouncyCastle — used purely as an ASN.1/PEM/X.509 library, NEVER registered as a JCE
+              provider via Security.addProvider(). The shade plugin strips META-INF/*.SF|DSA|RSA,
+              which destroys BouncyCastle's jar-signature self-integrity check; registering it as a
+              provider would therefore pass `mvn test` and fail only inside the shaded jar.
+
+              Creating real signed X.509 certificates without it is not practical here: the
+              sun.security.x509 route needs an add-exports flag in the surefire argLine, the shaded
+              jar manifest AND the Docker entrypoint, and its API changed between JDK 17 and 21
+              while we build on JDK 26. Shelling out to keytool needs a full JDK at runtime; the
+              images are JRE-based.
+            -->
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcpkix-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcprov-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcutil-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
             </dependency>
 
             <!-- Annotations -->

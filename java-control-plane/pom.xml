@@ -17,10 +17,18 @@
     <name>Control Plane Core</name>
     <description>gRPC services, database layer, and core business logic for Next-Gen Control Plane</description>
 
-    <properties>
-        <!-- Set Java temp directory to user temp to avoid Windows file locking issues -->
-        <java.io.tmpdir>${user.home}/AppData/Local/Temp</java.io.tmpdir>
-    </properties>
+    <!--
+      NOTE: a java.io.tmpdir property pointing at a Windows-only AppData path used to live
+      here as a claimed file-locking workaround. It was removed: Maven project properties
+      are not pushed into System.getProperty() for plugins running in the build JVM, so it
+      never actually redirected anything. This repo hit the exact temp-directory cleanup
+      failure it was supposed to prevent with it still in place.
+      It also hard-codes a Windows-only path, which would be actively wrong on macOS/Linux
+      once anything DID consume it. If the protobuf-maven-plugin cleanup issue needs a real
+      fix, do it with -Djava.io.tmpdir on the actual forked JVM (surefire argLine or a
+      launcher script), scoped to a Windows-only Maven profile, not a project property.
+    -->
+
 
     <dependencies>
         <!-- gRPC -->
@@ -43,10 +51,30 @@
             <artifactId>javax.annotation-api</artifactId>
         </dependency>
 
+        <!-- PKI: CSR parsing and X.509 certificate issuance (library use only, not a JCE provider) -->
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcpkix-jdk18on</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk18on</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcutil-jdk18on</artifactId>
+        </dependency>
+
         <!-- Logging -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
+        </dependency>
+
+        <!-- OSHI: cross-platform battery/charging/AC-power signals, used by PowerMetricsReader -->
+        <dependency>
+            <groupId>com.github.oshi</groupId>
+            <artifactId>oshi-core</artifactId>
         </dependency>
 
         <!-- Prometheus metrics -->
@@ -67,24 +95,6 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-        </dependency>
-
-        <!-- SQLite + Hibernate -->
-        <dependency>
-            <groupId>org.xerial</groupId>
-            <artifactId>sqlite-jdbc</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.hibernate.orm</groupId>
-            <artifactId>hibernate-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.hibernate</groupId>
-            <artifactId>hibernate-community-dialects</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>jakarta.persistence</groupId>
-            <artifactId>jakarta.persistence-api</artifactId>
         </dependency>
 
         <!-- Testing -->
@@ -131,7 +141,9 @@
         </extensions>
 
         <plugins>
-            <!-- Maven Clean: Force delete on Windows -->
+            <!-- Maven Clean: retry-on-error survives a transient file lock (any OS, not just
+                 Windows) when protoc's extracted binary is still held by an antivirus scan or a
+                 lingering process. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-clean-plugin</artifactId>
@@ -223,6 +235,17 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
+                <configuration>
+                    <!--
+                      Generated protobuf classes are excluded from BOTH the report and the gate.
+                      They are machine-written, are not ours to test, and vastly outnumber the
+                      hand-written code — including them made the denominator meaningless, which is
+                      why the previous gate had to sit at 10% to pass at all.
+                    -->
+                    <excludes>
+                        <exclude>com/nextgen/proto/**</exclude>
+                    </excludes>
+                </configuration>
                 <executions>
                     <execution>
                         <id>prepare-agent</id>
@@ -248,10 +271,17 @@
                                 <rule>
                                     <element>BUNDLE</element>
                                     <limits>
+                                        <!-- Measured on hand-written code: 63.9% instruction /
+                                             52.5% branch at the time this gate was set. -->
                                         <limit>
                                             <counter>INSTRUCTION</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.10</minimum>
+                                            <minimum>0.60</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.45</minimum>
                                         </limit>
                                     </limits>
                                 </rule>
@@ -279,6 +309,16 @@
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                             </transformers>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <!--
+                              Attach the fat jar under a classifier instead of replacing the main
+                              artifact. desktop-ui depends on this module, and consuming a fat jar as
+                              a library would put a second copy of gRPC, protobuf and the generated
+                              proto classes on its classpath alongside the same artifacts resolved
+                              transitively. The runnable jar is now control-plane-<version>-all.jar;
+                              the main jar stays thin.
+                            -->
+                            <shadedArtifactAttached>true</shadedArtifactAttached>
+                            <shadedClassifierName>all</shadedClassifierName>
                             <filters>
                                 <filter>
                                     <artifact>*:*</artifact>
@@ -295,4 +335,73 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+          Eclipse-family IDE tooling only (VS Code's Java extension is m2e-based underneath) —
+          activates solely when m2e is present and has zero effect on a command-line `mvn` build.
+          Without this, m2e reports "Plugin execution not covered by lifecycle configuration" for
+          protobuf-maven-plugin's compile/compile-custom and build-helper-maven-plugin's add-source,
+          both bound to generate-sources: m2e maintains its own list of goals it knows how to run
+          incrementally inside the IDE, and neither plugin is on that default list. The build itself
+          is unaffected either way; this only tells the IDE it's fine to actually run them (rather
+          than silently skip them) so its own incremental compiler sees the generated gRPC sources.
+        -->
+        <profile>
+            <id>m2e-lifecycle-mapping</id>
+            <activation>
+                <property>
+                    <name>m2e.version</name>
+                </property>
+            </activation>
+            <build>
+                <pluginManagement>
+                    <plugins>
+                        <plugin>
+                            <groupId>org.eclipse.m2e</groupId>
+                            <artifactId>lifecycle-mapping</artifactId>
+                            <version>1.0.0</version>
+                            <configuration>
+                                <lifecycleMappingMetadata>
+                                    <pluginExecutions>
+                                        <pluginExecution>
+                                            <pluginExecutionFilter>
+                                                <groupId>org.xolstice.maven.plugins</groupId>
+                                                <artifactId>protobuf-maven-plugin</artifactId>
+                                                <versionRange>[0.6.1,)</versionRange>
+                                                <goals>
+                                                    <goal>compile</goal>
+                                                    <goal>compile-custom</goal>
+                                                </goals>
+                                            </pluginExecutionFilter>
+                                            <action>
+                                                <execute>
+                                                    <runOnIncremental>true</runOnIncremental>
+                                                </execute>
+                                            </action>
+                                        </pluginExecution>
+                                        <pluginExecution>
+                                            <pluginExecutionFilter>
+                                                <groupId>org.codehaus.mojo</groupId>
+                                                <artifactId>build-helper-maven-plugin</artifactId>
+                                                <versionRange>[3.5.0,)</versionRange>
+                                                <goals>
+                                                    <goal>add-source</goal>
+                                                </goals>
+                                            </pluginExecutionFilter>
+                                            <action>
+                                                <execute>
+                                                    <runOnIncremental>true</runOnIncremental>
+                                                </execute>
+                                            </action>
+                                        </pluginExecution>
+                                    </pluginExecutions>
+                                </lifecycleMappingMetadata>
+                            </configuration>
+                        </plugin>
+                    </plugins>
+                </pluginManagement>
+            </build>
+        </profile>
+    </profiles>
 </project>

@@ -1,0 +1,56 @@
+# Prometheus scrape configuration for the Next-Gen Control Plane.
+#
+# Every target here is a service already exporting real metrics; nothing is
+# synthesised.
+#
+# WHY THERE IS NO PER-NODE SCRAPE TARGET
+#
+# Prometheus scraping is pull-based: it needs a route TO the target. Nodes in
+# this system are real physical machines anywhere in the world, deliberately
+# designed to need no inbound port open at all (they always dial OUT to the
+# control plane — see docs/ARCHITECTURE.md). A node behind home or office NAT
+# is therefore fundamentally unreachable for a Prometheus scrape targeting it
+# directly, no matter what address is configured here. An earlier version of
+# this file listed static targets like "node1:9090" that only worked because
+# those were Docker containers on the same compose network — that stopped
+# being true (and honest) the moment nodes stopped being simulated containers.
+#
+# Per-node CPU/memory history in the desktop UI does NOT depend on this file.
+# It flows over the existing gRPC path instead: each node pushes real readings
+# to the control plane on every heartbeat, the control plane holds the latest
+# value per node in NodeRegistry, and the desktop app's own poll of GetNodes()
+# is what feeds MetricsHistory / the Monitoring charts. That path works
+# identically whether the node is on the same LAN or on another continent,
+# because it rides the same outbound connection the node already opened.
+#
+# If cluster-wide node metrics need to live in Prometheus specifically (e.g.
+# for alerting rules), the correct mechanism is a Pushgateway: nodes push their
+# own metrics to a central, publicly-reachable gateway instead of exposing a
+# scrape endpoint. That is intentionally not wired up here — it's a real
+# feature to add if/when Prometheus-side node alerting is needed, not
+# something to fake with unreachable static targets in the meantime.
+
+global:
+  scrape_interval: 5s
+  scrape_timeout: 4s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # The control plane is the one service in this architecture that MUST be
+  # publicly reachable, so it's the one service Prometheus can always scrape
+  # directly regardless of where it's deployed.
+  - job_name: control-plane
+    static_configs:
+      - targets: ["control-plane:9090"]
+        labels:
+          component: control-plane
+
+  - job_name: predictor
+    static_configs:
+      - targets: ["predictor:9091"]
+        labels:
+          component: predictor
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

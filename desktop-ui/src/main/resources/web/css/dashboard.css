@@ -1,0 +1,430 @@
+/* Dashboard shell + screens (Overview, Monitoring, Nodes, Tasks, Settings). Structural only — see
+   base.css's header comment on the token convention. Class names deliberately mirror the Java
+   base.css inventory (stat-tile, node-card, chart-card, ...) rather than inventing parallel ones. */
+
+.ng-shell {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.ng-sidebar {
+    width: 220px;
+    flex: none;
+    background: var(--ng-surface);
+    border-right: 1px solid var(--ng-border);
+    display: flex;
+    flex-direction: column;
+    padding: var(--ng-space-4) 0;
+}
+
+.ng-sidebar-brand {
+    padding: 0 var(--ng-space-4) var(--ng-space-4);
+}
+
+.ng-sidebar-brand-title {
+    font-weight: 700;
+    font-size: var(--ng-font-size-md);
+}
+
+.ng-sidebar-brand-sub {
+    color: var(--ng-text-muted);
+    font-size: var(--ng-font-size-2xs);
+}
+
+.ng-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 var(--ng-space-2);
+}
+
+.ng-nav-button {
+    text-align: left;
+    background: none;
+    border: none;
+    border-radius: var(--ng-radius-sm);
+    padding: var(--ng-space-2) var(--ng-space-3);
+    color: var(--ng-text-muted);
+    font-size: var(--ng-font-size-sm);
+    cursor: pointer;
+}
+
+.ng-nav-button:hover {
+    background: var(--ng-hover);
+    color: var(--ng-text);
+}
+
+.ng-nav-button.is-active {
+    background: var(--ng-accent-soft);
+    color: var(--ng-accent);
+    font-weight: 600;
+}
+
+.ng-sidebar-footer {
+    margin-top: auto;
+    padding: var(--ng-space-3) var(--ng-space-4) 0;
+    font-size: var(--ng-font-size-2xs);
+    color: var(--ng-text-subtle);
+}
+
+.ng-shell-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.ng-page {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: var(--ng-space-5);
+    gap: var(--ng-space-1);
+}
+
+.ng-page-title {
+    font-size: var(--ng-font-size-xl);
+    font-weight: 700;
+    margin: 0;
+}
+
+.ng-page-subtitle {
+    color: var(--ng-text-muted);
+    font-size: var(--ng-font-size-xs);
+    margin: 0 0 var(--ng-space-3);
+}
+
+.ng-page-scroll {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.ng-page-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ng-space-4);
+}
+
+.ng-stat-row {
+    display: flex;
+    gap: var(--ng-space-3);
+    flex-wrap: wrap;
+}
+
+.ng-stat-tile {
+    flex: 1;
+    min-width: 140px;
+    background: var(--ng-surface);
+    border: 1px solid var(--ng-border);
+    border-radius: var(--ng-radius-md);
+    padding: var(--ng-space-3) var(--ng-space-4);
+}
+
+.ng-stat-tile-caption {
+    color: var(--ng-text-muted);
+    font-size: var(--ng-font-size-2xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.ng-stat-tile-value {
+    font-size: var(--ng-font-size-2xl);
+    font-weight: 700;
+    font-family: var(--ng-font-mono);
+    transition: opacity var(--ng-motion-fast) ease;
+}
+
+.ng-stat-tile-value.is-unavailable {
+    color: var(--ng-text-subtle);
+    font-size: var(--ng-font-size-lg);
+}
+
+.ng-stat-tile-status {
+    display: flex;
+    align-items: center;
+    gap: var(--ng-space-1);
+    margin-top: var(--ng-space-1);
+    font-size: var(--ng-font-size-2xs);
+    color: var(--ng-text-muted);
+}
+
+.ng-stat-tile-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+
+.ng-section-heading {
+    font-size: var(--ng-font-size-md);
+    font-weight: 600;
+    margin: var(--ng-space-2) 0 0;
+}
+
+.ng-dashboard-callout {
+    background: var(--ng-surface);
+    border: 1px solid var(--ng-border);
+    border-radius: var(--ng-radius-sm);
+    padding: var(--ng-space-3);
+    font-size: var(--ng-font-size-xs);
+    color: var(--ng-text-muted);
+}
+
+/* ── Node cards ── */
+
+.ng-node-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: var(--ng-space-3);
+}
+
+.ng-node-card {
+    background: var(--ng-surface);
+    border: 1px solid var(--ng-border);
+    border-radius: var(--ng-radius-md);
+    padding: var(--ng-space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--ng-space-2);
+    animation: ng-fade-in var(--ng-motion-card) ease both;
+}
+
+.ng-node-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ng-space-2);
+}
+
+.ng-node-card-name {
+    font-weight: 600;
+    font-size: var(--ng-font-size-sm);
+}
+
+.ng-node-card-host {
+    color: var(--ng-text-subtle);
+    font-size: var(--ng-font-size-2xs);
+    font-family: var(--ng-font-mono);
+}
+
+.ng-status-pill {
+    display: flex;
+    align-items: center;
+    gap: var(--ng-space-1);
+    padding: 2px var(--ng-space-2);
+    border-radius: 999px;
+    background: var(--ng-hover);
+    font-size: var(--ng-font-size-2xs);
+}
+
+.ng-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+
+.ng-metric-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ng-metric-top {
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--ng-font-size-2xs);
+    color: var(--ng-text-muted);
+}
+
+.ng-metric-bar-track {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--ng-track);
+    overflow: hidden;
+}
+
+.ng-metric-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width var(--ng-motion-card) ease, background var(--ng-motion-base) ease;
+}
+
+.ng-node-card-meta {
+    font-size: var(--ng-font-size-2xs);
+    color: var(--ng-text-subtle);
+}
+
+.ng-empty-state {
+    text-align: center;
+    padding: var(--ng-space-6);
+    color: var(--ng-text-muted);
+}
+
+.ng-empty-state-title {
+    font-weight: 600;
+    color: var(--ng-text);
+    margin-bottom: var(--ng-space-1);
+}
+
+.ng-empty-state-body {
+    font-size: var(--ng-font-size-xs);
+    max-width: 420px;
+    margin: 0 auto;
+}
+
+/* ── Charts ── */
+
+.ng-chart-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--ng-space-4);
+}
+
+@media (max-width: 820px) {
+    .ng-chart-row { grid-template-columns: 1fr; }
+}
+
+.ng-chart-card {
+    background: var(--ng-surface);
+    border: 1px solid var(--ng-border);
+    border-radius: var(--ng-radius-md);
+    padding: var(--ng-space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--ng-space-2);
+    min-width: 0;
+}
+
+.ng-chart-card-title {
+    font-weight: 600;
+    font-size: var(--ng-font-size-sm);
+}
+
+.ng-chart-card-caption {
+    font-size: var(--ng-font-size-2xs);
+    color: var(--ng-text-muted);
+}
+
+.ng-chart-plot {
+    min-height: 220px;
+}
+
+.ng-chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ng-space-3);
+}
+
+.ng-chart-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--ng-font-size-2xs);
+}
+
+.ng-chart-legend-swatch {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.ng-chart-legend-value-stale {
+    color: var(--ng-text-subtle);
+}
+
+.ng-chart-empty {
+    text-align: center;
+    color: var(--ng-text-subtle);
+    font-size: var(--ng-font-size-xs);
+    padding: var(--ng-space-5);
+}
+
+/* ── Data table (Nodes screen) ── */
+
+.ng-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--ng-font-size-xs);
+}
+
+.ng-data-table th {
+    text-align: left;
+    color: var(--ng-text-muted);
+    font-weight: 600;
+    padding: var(--ng-space-2) var(--ng-space-3);
+    border-bottom: 1px solid var(--ng-border);
+}
+
+.ng-data-table td {
+    padding: var(--ng-space-2) var(--ng-space-3);
+    border-bottom: 1px solid var(--ng-border);
+}
+
+.ng-data-table tbody tr:hover {
+    background: var(--ng-hover);
+}
+
+.ng-numeric {
+    font-family: var(--ng-font-mono);
+}
+
+/* ── Tasks ── */
+
+.ng-task-row {
+    display: flex;
+    align-items: center;
+    gap: var(--ng-space-3);
+    padding: var(--ng-space-2) var(--ng-space-3);
+    border-bottom: 1px solid var(--ng-border);
+    font-size: var(--ng-font-size-xs);
+    animation: ng-fade-in var(--ng-motion-card) ease both;
+}
+
+.ng-task-id {
+    font-family: var(--ng-font-mono);
+    color: var(--ng-text-subtle);
+}
+
+.ng-task-type {
+    flex: 1;
+}
+
+.ng-task-result {
+    color: var(--ng-text-muted);
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ── Settings ── */
+
+.ng-settings-grid {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ng-space-4);
+    max-width: 640px;
+}
+
+.ng-setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ng-space-3);
+    padding: var(--ng-space-2) 0;
+    border-bottom: 1px solid var(--ng-border);
+}
+
+.ng-setting-row:last-child {
+    border-bottom: none;
+}
+
+.ng-setting-label {
+    font-size: var(--ng-font-size-sm);
+}
+
+.ng-setting-hint {
+    font-size: var(--ng-font-size-2xs);
+    color: var(--ng-text-subtle);
+}

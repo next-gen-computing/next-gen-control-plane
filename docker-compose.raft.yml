@@ -1,0 +1,176 @@
+# Opt-in 3-replica Raft topology for the control plane — NOT started by `docker compose up` using
+# only the default docker-compose.yml. Run explicitly:
+#
+#   docker compose -f docker-compose.raft.yml up
+#
+# This is a deliberately SEPARATE file rather than a change to docker-compose.yml's existing
+# `control-plane` service, matching the "opt-in, zero default behavior change" discipline used
+# everywhere else in this project (ML_RISK_SCORER_ENABLED, RISK_SNAPSHOT_LOGGING_ENABLED, etc.):
+# `docker compose up` on the plain docker-compose.yml still starts exactly one control plane, exactly
+# as it always has. This file is the alternative topology for someone who wants real leader-election
+# fault tolerance instead, and it's a complete, standalone stack (predictor + prometheus included) —
+# it does not need docker-compose.yml at all.
+#
+# See docs/ARCHITECTURE.md's "Consensus & replication" section for what's replicated vs. leader-local,
+# and the README's Raft subsection for the algorithm itself.
+
+services:
+  # ── PKI bootstrap (one-shot) ──────────────────────────────────────────────
+  # Eliminates the alternative: three replica JVMs starting simultaneously and independently racing
+  # CertificateAuthority's own check-then-create bootstrap logic against the SAME shared pki volume.
+  # Each replica below depends_on this with condition: service_completed_successfully, so by the time
+  # any of them constructs its own CertificateAuthority, the CA (and, if TLS_ENABLED=true, the shared
+  # server certificate) is already on disk — the ordinary single-node startup path, unchanged.
+  pki-init:
+    build:
+      context: .
+      dockerfile: java-control-plane/Dockerfile
+    environment:
+      - ROLE=pki-init
+      - TLS_ENABLED=false
+      # Every replica's own hostname must be listed here so the ONE shared server certificate this
+      # issues verifies correctly no matter which replica a client happens to dial. Flip TLS_ENABLED
+      # to true on every service in this file together — mixing is not a supported configuration.
+      - TLS_SAN_HOSTS=localhost,127.0.0.1,control-plane-1,control-plane-2,control-plane-3
+    volumes:
+      - raft-pki:/root/.nextgen/pki
+    networks:
+      - nextgen-raft-net
+
+  # ── Control Plane replicas ──────────────────────────────────────────────
+  # All three share RAFT_PEERS (the fixed, statically-configured membership — see the plan's Stage J
+  # scope cuts on dynamic membership) and the same raft-pki volume; each is distinguished only by its
+  # own RAFT_NODE_ID / RAFT_ADVERTISED_ADDRESS and its published host ports (client-facing ports
+  # can't all bind the same host port at once the way they can inside the isolated container network).
+  # RAFT_PORT (Raft peer traffic) is deliberately NOT published to the host at all — replicas only ever
+  # need to reach each other over the internal compose network, never from outside it.
+  control-plane-1: &control-plane-replica
+    build:
+      context: .
+      dockerfile: java-control-plane/Dockerfile
+    environment: &control-plane-replica-env
+      - ROLE=server
+      - PREDICTOR_HOST=predictor
+      - TLS_ENABLED=false
+      - TLS_SAN_HOSTS=localhost,127.0.0.1,control-plane-1,control-plane-2,control-plane-3
+      - ML_RISK_SCORER_ENABLED=false
+      - NEXTGEN_DATA_DIR=/root/.nextgen/data
+      - RAFT_ENABLED=true
+      - RAFT_PEERS=control-plane-1=control-plane-1:50052,control-plane-2=control-plane-2:50052,control-plane-3=control-plane-3:50052
+      - RAFT_NODE_ID=control-plane-1
+      - RAFT_ADVERTISED_ADDRESS=control-plane-1:50051
+    ports:
+      - "50051:50051"   # gRPC
+      - "9090:9090"     # Prometheus metrics
+      - "8085:8085"     # Dashboard API (/api/nodes)
+    volumes:
+      - raft-pki:/root/.nextgen/pki
+      - raft-training-data:/root/.nextgen/data
+      - raft-data-1:/root/.nextgen/raft
+    networks:
+      - nextgen-raft-net
+    depends_on:
+      pki-init:
+        condition: service_completed_successfully
+      predictor:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -q -O /dev/null http://localhost:9090/metrics || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  control-plane-2:
+    <<: *control-plane-replica
+    environment:
+      - ROLE=server
+      - PREDICTOR_HOST=predictor
+      - TLS_ENABLED=false
+      - TLS_SAN_HOSTS=localhost,127.0.0.1,control-plane-1,control-plane-2,control-plane-3
+      - ML_RISK_SCORER_ENABLED=false
+      - NEXTGEN_DATA_DIR=/root/.nextgen/data
+      - RAFT_ENABLED=true
+      - RAFT_PEERS=control-plane-1=control-plane-1:50052,control-plane-2=control-plane-2:50052,control-plane-3=control-plane-3:50052
+      - RAFT_NODE_ID=control-plane-2
+      - RAFT_ADVERTISED_ADDRESS=control-plane-2:50051
+    ports:
+      - "50061:50051"
+      - "9095:9090"
+      - "8086:8085"
+    volumes:
+      - raft-pki:/root/.nextgen/pki
+      - raft-training-data:/root/.nextgen/data
+      - raft-data-2:/root/.nextgen/raft
+
+  control-plane-3:
+    <<: *control-plane-replica
+    environment:
+      - ROLE=server
+      - PREDICTOR_HOST=predictor
+      - TLS_ENABLED=false
+      - TLS_SAN_HOSTS=localhost,127.0.0.1,control-plane-1,control-plane-2,control-plane-3
+      - ML_RISK_SCORER_ENABLED=false
+      - NEXTGEN_DATA_DIR=/root/.nextgen/data
+      - RAFT_ENABLED=true
+      - RAFT_PEERS=control-plane-1=control-plane-1:50052,control-plane-2=control-plane-2:50052,control-plane-3=control-plane-3:50052
+      - RAFT_NODE_ID=control-plane-3
+      - RAFT_ADVERTISED_ADDRESS=control-plane-3:50051
+    ports:
+      - "50071:50051"
+      - "9096:9090"
+      - "8087:8085"
+    volumes:
+      - raft-pki:/root/.nextgen/pki
+      - raft-training-data:/root/.nextgen/data
+      - raft-data-3:/root/.nextgen/raft
+
+  # ── Python Predictor (shared by all three replicas, same as the single-node deployment) ──
+  predictor:
+    build:
+      context: .
+      dockerfile: python-predictor/Dockerfile
+    environment:
+      - RISK_OUTCOMES_PATH=/root/.nextgen/data/risk_outcomes.jsonl
+      - RISK_SNAPSHOTS_PATH=/root/.nextgen/data/risk_snapshots.jsonl
+    ports:
+      - "50052:50052"
+      - "9091:9091"
+    volumes:
+      - raft-training-data:/root/.nextgen/data
+      - raft-predictor-model:/app/model
+    networks:
+      - nextgen-raft-net
+
+  # ── Prometheus (scrapes all three replicas + the predictor) ────
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=6h
+      - --web.enable-lifecycle
+    volumes:
+      - ./deploy/prometheus.raft.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9464:9090"
+    networks:
+      - nextgen-raft-net
+    depends_on:
+      - control-plane-1
+      - control-plane-2
+      - control-plane-3
+
+volumes:
+  raft-pki:
+  raft-training-data:
+  raft-predictor-model:
+  # Each replica's own durable Raft WAL/term/vote state (RaftLog) — deliberately NOT shared between
+  # replicas, unlike raft-pki/raft-training-data above. Replication happens over the RaftConsensus
+  # protocol itself, not the filesystem; sharing this volume would be a correctness bug, not an
+  # optimization (three replicas writing the same log.wal would corrupt it).
+  raft-data-1:
+  raft-data-2:
+  raft-data-3:
+
+networks:
+  nextgen-raft-net:
+    driver: bridge
