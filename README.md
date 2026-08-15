@@ -145,6 +145,19 @@ client that **always falls back to `RuleBasedRiskScorer` whenever the model isn'
 never fabricating a score. Opt-in: set `ML_RISK_SCORER_ENABLED=true` **and** actually run training at
 least once — every response honestly reports `model_trained=false` until then.
 
+**Auto-retrain (`python-predictor/auto_retrain.py`) — opt-in, off by default.** Training is normally an
+operator-run step (`train_risk_model.py`) precisely because an unattended retrain on live data could
+silently change what the risk model believes, with nobody reviewing it. Setting
+`AUTO_RETRAIN_ENABLED=true` starts a background thread inside `predictor_service.py` that periodically
+(`AUTO_RETRAIN_CHECK_INTERVAL_SECONDS`, default hourly) checks whether enough new real examples have
+accumulated (`AUTO_RETRAIN_MIN_NEW_EXAMPLES`, default 20) in `risk_outcomes.jsonl`/`risk_snapshots.jsonl`,
+trains a **candidate** model, and only replaces the live one if the candidate's validation accuracy
+doesn't regress beyond `AUTO_RETRAIN_MAX_REGRESSION` (default 2 points) below the current live model's —
+otherwise the candidate is saved to `model/risk_model_candidate_rejected.json` for review and the live
+model is left untouched. The live model can get better as real data accumulates; it cannot silently get
+worse. See `python-predictor/tests/test_auto_retrain.py` for the promotion/rejection guarantees this is
+actually tested against.
+
 ### LSTM load forecasting — opt-in
 `torch.nn.LSTM` (`python-predictor/load_forecast_model.py`), forecasting CPU/memory 5 minutes ahead
 from the raw per-timestep telemetry sequence — a genuinely different input from the XGBoost classifier

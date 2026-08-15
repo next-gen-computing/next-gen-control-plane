@@ -17,12 +17,14 @@ Prometheus metrics on port 9091.
 """
 
 import logging
+import os
 import time
 from concurrent import futures
 
 import grpc
 from prometheus_client import Counter, Gauge, Histogram, start_http_server
 
+from auto_retrain import AutoRetrainer
 from load_forecast_store import LoadForecastStore
 from model_store import ModelStore
 
@@ -62,6 +64,22 @@ LOAD_MODEL_TRAINED = Gauge(
 LOAD_MODEL_TRAINING_EXAMPLES = Gauge(
     "predictor_load_model_training_examples",
     "Number of (sequence -> future reading) pairs the currently-loaded load-forecast model was trained on",
+)
+AUTO_RETRAIN_PROMOTIONS = Gauge(
+    "predictor_auto_retrain_promotions_total",
+    "Candidate models that passed the regression check and replaced the live model",
+)
+AUTO_RETRAIN_REJECTIONS = Gauge(
+    "predictor_auto_retrain_rejections_total",
+    "Candidate models that regressed beyond tolerance and were saved for review instead of promoted",
+)
+AUTO_RETRAIN_LAST_RUN = Gauge(
+    "predictor_auto_retrain_last_run_epoch_millis",
+    "When the auto-retrain background thread last completed a check-and-maybe-retrain cycle",
+)
+AUTO_RETRAIN_LAST_CANDIDATE_VAL_ACCURACY = Gauge(
+    "predictor_auto_retrain_last_candidate_val_accuracy",
+    "Validation accuracy of the most recent auto-retrain candidate, promoted or not",
 )
 
 
@@ -149,6 +167,19 @@ class PredictorServiceServicer(pb2_grpc.PredictorServiceServicer):
         return response
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    return default if value is None else value.strip().lower() in ("1", "true", "yes")
+
+
+def _sync_auto_retrain_metrics(retrainer: AutoRetrainer) -> None:
+    AUTO_RETRAIN_PROMOTIONS.set(retrainer.promotions_total)
+    AUTO_RETRAIN_REJECTIONS.set(retrainer.rejections_total)
+    if retrainer.last_outcome is not None and retrainer.last_outcome.candidate_val_accuracy is not None:
+        AUTO_RETRAIN_LAST_CANDIDATE_VAL_ACCURACY.set(retrainer.last_outcome.candidate_val_accuracy)
+    AUTO_RETRAIN_LAST_RUN.set(int(time.time() * 1000))
+
+
 def serve():
     # Start Prometheus metrics endpoint on port 9091
     start_http_server(9091)
@@ -156,6 +187,24 @@ def serve():
 
     model_store = ModelStore()
     load_forecast_store = LoadForecastStore()
+
+    # Off by default — every existing deployment is unaffected until an operator opts in, same
+    # precedent RISK_SNAPSHOT_LOGGING_ENABLED and ML_RISK_SCORER_ENABLED already set. See
+    # auto_retrain.py's module docstring for why promotion is gated on not regressing, not automatic.
+    auto_retrainer = None
+    if _env_bool("AUTO_RETRAIN_ENABLED", False):
+        auto_retrainer = AutoRetrainer(
+            outcomes_path=os.environ.get("RISK_OUTCOMES_PATH", ""),
+            snapshots_path=os.environ.get("RISK_SNAPSHOTS_PATH", ""),
+            check_interval_seconds=float(os.environ.get("AUTO_RETRAIN_CHECK_INTERVAL_SECONDS", "3600")),
+            min_new_examples=int(os.environ.get("AUTO_RETRAIN_MIN_NEW_EXAMPLES", "20")),
+            max_regression=float(os.environ.get("AUTO_RETRAIN_MAX_REGRESSION", "0.02")),
+            model_type=os.environ.get("AUTO_RETRAIN_MODEL_TYPE", "xgboost"),
+            on_cycle_complete=_sync_auto_retrain_metrics,
+        )
+        auto_retrainer.start()
+    else:
+        LOG.info("Auto-retrain disabled (set AUTO_RETRAIN_ENABLED=true to turn it on)")
 
     # Start gRPC server on port 50052
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
@@ -173,6 +222,8 @@ def serve():
         server.wait_for_termination()
     except KeyboardInterrupt:
         LOG.info("Predictor server shutting down...")
+        if auto_retrainer is not None:
+            auto_retrainer.stop()
         server.stop(grace=5)
 
 
