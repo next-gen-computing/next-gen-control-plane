@@ -105,13 +105,13 @@ mvn clean package -DskipTests
 ```powershell
 cd java-control-plane
 $env:ROLE="server"; $env:PREDICTOR_HOST="localhost"; 
-java -cp target/control-plane-1.0-SNAPSHOT.jar com.nextgen.Main
+java -jar target/control-plane-1.0-SNAPSHOT-all.jar
 ```
 
 **Bash (Linux/Mac):**
 ```bash
 cd java-control-plane
-ROLE=server PREDICTOR_HOST=localhost java -cp target/control-plane-1.0-SNAPSHOT.jar com.nextgen.Main
+ROLE=server PREDICTOR_HOST=localhost java -jar target/control-plane-1.0-SNAPSHOT-all.jar
 ```
 
 **Expected output:**
@@ -130,13 +130,13 @@ Terminal 1 (Node 1):
 **PowerShell:**
 ```powershell
 $env:ROLE="agent"; $env:NODE_ID="node1"; $env:CONTROL_PLANE_HOST="localhost"
-java -cp java-control-plane/target/control-plane-1.0-SNAPSHOT.jar com.nextgen.Main
+java -jar java-control-plane/target/control-plane-1.0-SNAPSHOT-all.jar
 ```
 
 **Bash:**
 ```bash
 ROLE=agent NODE_ID=node1 CONTROL_PLANE_HOST=localhost \
-  java -cp java-control-plane/target/control-plane-1.0-SNAPSHOT.jar com.nextgen.Main
+  java -jar java-control-plane/target/control-plane-1.0-SNAPSHOT-all.jar
 ```
 
 **Expected output:**
@@ -204,7 +204,7 @@ python predictor_service.py
 ```powershell
 cd java-control-plane
 $env:ROLE="server"; $env:PREDICTOR_HOST="localhost"
-java -cp target/control-plane-1.0-SNAPSHOT.jar com.nextgen.Main
+java -jar target/control-plane-1.0-SNAPSHOT-all.jar
 ```
 
 **Check the server logs for LAN IPs:**

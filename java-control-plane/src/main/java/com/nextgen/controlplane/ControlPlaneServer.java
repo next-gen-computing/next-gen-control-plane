@@ -240,13 +240,12 @@ public class ControlPlaneServer {
         HTTPServer metricsServer = new HTTPServer.Builder().withPort(metricsPort).build();
         LOG.info("📊 Prometheus metrics server started on port {}", metricsPort);
 
-        // ── Dashboard HTTP server (static files + API) ─────
+        // ── Dashboard HTTP server (JSON API only — no bundled frontend) ─────
+        // The old web dashboard this used to also serve static files for is gone entirely (see
+        // README.md's "no bundled static frontend ships anymore" note); the real UI today is the
+        // desktop app's own embedded WebView, reached over gRPC, not this HTTP server. This endpoint
+        // stays for anyone scripting against real node data or wiring up their own frontend.
         HttpServer dashboardServer = HttpServer.create(new InetSocketAddress(dashboardPort), 0);
-
-        // Static files (HTML, CSS, JS) - production-grade for physical nodes
-        String dashboardBase = EnvConfig.stringValue("DASHBOARD_ROOT",
-                System.getProperty("user.dir") + "/../dashboard/html");
-        dashboardServer.createContext("/", new StaticFileHandler(dashboardBase));
 
         // API endpoint for live node data — 503s with a leader hint on a follower, see
         // DashboardApiHandler's Javadoc.
@@ -255,8 +254,7 @@ public class ControlPlaneServer {
         dashboardServer.setExecutor(null); // default executor
         dashboardServer.start();
         LOG.info("══════════════════════════════════════════════════");
-        LOG.info("  📡 Dashboard on http://localhost:{}             ", dashboardPort);
-        LOG.info("  📊 API endpoint: http://localhost:{}/api/nodes   ", dashboardPort);
+        LOG.info("  📊 Node data API: http://localhost:{}/api/nodes  ", dashboardPort);
         LOG.info("══════════════════════════════════════════════════");
 
         // ── Security: PKI, enrolment, certificate policy ───

@@ -382,19 +382,34 @@ java -jar target/desktop-ui-1.0-SNAPSHOT.jar
 
 ### Local CLI
 
+> **Most people want the [Desktop Application](#-desktop-application) instead.** This section starts
+> the control plane and a node as bare headless Java processes, with no GUI at all — useful for
+> servers, containers, or scripting, but it's a second, separate way to run this project, not a step
+> you need on top of the desktop app. If you just want everything in one window with nothing to
+> configure, skip straight to `cd desktop-ui && mvn clean compile && mvn javafx:run` above and ignore
+> this section entirely.
+
 ```powershell
 # Build
 cd java-control-plane
 mvn clean package -DskipTests
 
-# Start server
+# Start server — note the -all jar: that's the shaded jar with dependencies bundled in.
+# The plain control-plane-1.0-SNAPSHOT.jar has no Main-Class and no bundled dependencies, so running
+# it (with -cp or otherwise) fails with NoClassDefFoundError on the first class it needs, e.g. slf4j.
 $env:ROLE="server"; $env:PREDICTOR_HOST="localhost"
-java -cp target/control-plane-1.0-SNAPSHOT.jar com.nextgen.Main
+java -jar target/control-plane-1.0-SNAPSHOT-all.jar
 
 # Start node (separate terminal)
 $env:ROLE="agent"; $env:NODE_ID="node1"; $env:CONTROL_PLANE_HOST="localhost"
-java -cp target/control-plane-1.0-SNAPSHOT.jar com.nextgen.Main
+java -jar target/control-plane-1.0-SNAPSHOT-all.jar
 ```
+
+This path has no bundled dashboard UI — the old static HTML/CSS/JS dashboard is gone for good (see the
+note near the top of this README), superseded entirely by the desktop app's embedded WebView. What's
+left on `DASHBOARD_PORT` (default `8085`) is only the real `/api/nodes` JSON endpoint, for anyone
+scripting against live node data or building their own frontend — there is nothing to open in a
+browser at `http://localhost:8085/` itself, and hitting it will 404 by design, not by mistake.
 
 ## Monitoring
 
@@ -577,8 +592,7 @@ than failing startup.
 |---|---|---|
 | `GRPC_PORT` | `50051` | gRPC listen port |
 | `METRICS_PORT` | `9090` | Prometheus exporter port |
-| `DASHBOARD_PORT` | `8085` | Dashboard HTTP + `/api/nodes` |
-| `DASHBOARD_ROOT` | `<cwd>/../dashboard/html` | Static files served at `/`, if you point this at your own frontend — no static frontend ships in this repo by default anymore |
+| `DASHBOARD_PORT` | `8085` | `/api/nodes` JSON endpoint only — no static frontend is served here; see the [Local CLI](#local-cli) note |
 | `HEARTBEAT_TIMEOUT_MS` | `6000` | No heartbeat within this window → `SUSPECTED_DEAD` |
 | `HEARTBEAT_CHECK_INTERVAL_MS` | `3000` | How often the liveness sweep runs |
 | `PREDICTOR_HOST` / `PREDICTOR_PORT` | `predictor` / `50052` | Predictor service address |
