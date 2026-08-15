@@ -29,6 +29,30 @@ than the certificate lifetime would silently lose connectivity mid-run with noth
 - A failed renewal attempt reloads credentials from disk, restoring the last-known-good key/certificate
   pair rather than leaving the in-memory state mismatched, and retries with backoff.
 
+### Added - Local account system and Docker-Desktop-style UI redesign
+
+- Local, on-device account system: email/password signup and login (PBKDF2WithHmacSHA256), GitHub OAuth
+  via the device flow, password reset via a one-time recovery code (no email-sending capability exists
+  in this project), and an honest terms-and-conditions disclosure of exactly what telemetry is
+  collected and where it goes.
+- Full visual redesign of the desktop app's embedded web UI: grouped collapsible sidebar, top bar with
+  theme toggle and account avatar, bottom status bar, new icon set, blue accent palette across both
+  themes — scoped to real, already-backed features only.
+
+### Added - Opt-in auto-retrain for the XGBoost risk model
+
+`AUTO_RETRAIN_ENABLED=true` starts a background thread that periodically checks for enough new real
+examples, trains a candidate model, and only promotes it if validation accuracy doesn't regress beyond
+a configurable tolerance below the live model's — otherwise the candidate is saved separately for
+review. Off by default. See `python-predictor/auto_retrain.py`.
+
+### Added - Real Alibaba PAI GPU cluster trace used for risk-model training
+
+`import_alibaba_pai_trace.py`/`enrich_alibaba_memory.py` convert the real Alibaba
+`cluster-trace-gpu-v2020` dataset (not synthetic data) into this project's training schema, including a
+genuine machine-level memory-pressure feature. Training on the real trace improved XGBoost validation
+accuracy from 0.734 (CPU-only) to 0.7407.
+
 ### Security - Real CVEs fixed in pinned dependencies
 
 Prompted by GitHub's Dependabot alerts on this repo. Every version below was checked against actual

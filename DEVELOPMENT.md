@@ -1,6 +1,9 @@
 # Development Setup — Next-Gen Control Plane
 
-**Version:** v1.0.0 | **Status:** Phase-2 Desktop UI Complete
+**Version:** v3.0.0 | **Status:** Raft consensus, distributed Docker-Compose execution, the `nx` CLI,
+real ML risk/load models, and a local account system are all live — see CHANGELOG.md for the full list.
+This file covers day-to-day build/run/test commands; README.md is the up-to-date source of truth for
+what the project actually does and how each piece works.
 
 ## 📋 Prerequisites
 
@@ -31,9 +34,15 @@ This will:
 3. Start the control plane, predictor, and Prometheus on `nextgen-net` Docker network
 4. Dashboard API (JSON) available at http://localhost:8085/api/nodes
 
-## 🖥️ Desktop Application (Phase-2 UI)
+## 🖥️ Desktop Application
 
-The Phase-2 desktop application is a modern JavaFX UI in a separate `desktop-ui` Maven module. It connects to the ControlPlane and Predictor services via gRPC and displays real-time data. The UI uses an MVVM architecture with dark/light theme support.
+The desktop app is a single JavaFX `WebView` (`DesktopApp.java`, `desktop-ui` module) loading a local
+HTTP server (`LocalUiServer`) that serves a real HTML/CSS/JS frontend from
+`desktop-ui/src/main/resources/web/` — not a JavaFX view-class UI. `LocalUiServer` talks to the
+ControlPlane and Predictor services over gRPC on the JVM side and exposes that data to the frontend via
+a local REST + Server-Sent-Events API; nothing in the browser layer talks gRPC directly. Includes a
+local, on-device account system (email/password and GitHub OAuth device-flow login, password reset via
+one-time recovery codes) and a Docker-Desktop-style sidebar/topbar layout with dark/light theming.
 
 ### Build & Launch
 
@@ -72,23 +81,23 @@ mvn clean package -DskipTests
 java -jar target/desktop-ui-1.0-SNAPSHOT.jar
 ```
 
-### Phase-2 Desktop App Features
+### Desktop App Features
 
-- **Modern Dark/Light Themes** — Toggle between dark and light modes
-- **Dashboard** — Cluster summary cards and live node metrics with real-time updates
-- **Node Management** — Connect to ControlPlane, view connected nodes in a table
-- **Task Execution** — Submit tasks (Matrix Multiplication, Array Sum, Prime Counter) and track progress
-- **Live Monitoring** — Real-time logs and performance metrics
-- **Settings** — Connection configuration, refresh interval, theme toggle
-- **Real Data Only** — All metrics fetched live from ControlPlane gRPC; no mock data
-- **Predictor Placeholder** — PredictorService shows `N/A` until the service is running
+See [README.md's Algorithms & Predictive Intelligence section](README.md#-algorithms--predictive-intelligence)
+and its Desktop Application walkthrough for the full, current feature list and screenshots-in-words —
+that's the maintained description. In short: account/login, a Docker-Desktop-style dashboard, node and
+task/job management (including submitting real distributed Docker-Compose jobs via the same code path
+the `nx` CLI uses), live monitoring via SSE, a Containers/Images/Volumes/Networks view backed by real
+per-node Docker inventory, and settings. Predictor responses honestly report `model_trained=false`
+until an operator has actually run training at least once — never a fabricated prediction.
 
 ### Entry Points
 
 | Entry Point | Class | Module | Purpose |
 |-------------|-------|--------|---------|
-| Phase-2 Desktop GUI | `com.nextgen.desktop.ui.DesktopApp` | `desktop-ui` | Modern JavaFX UI with gRPC client |
-| CLI / Docker | `com.nextgen.Main` | `java-control-plane` | ROLE-based CLI entry (server/agent) |
+| Desktop GUI | `com.nextgen.desktop.ui.DesktopApp` | `desktop-ui` | JavaFX WebView hosting the HTML/JS UI |
+| CLI / Docker | `com.nextgen.Main` | `java-control-plane` | ROLE-based CLI entry (server/agent/pki-init) |
+| `nx` CLI | `com.nextgen.cli.Cli` | `cli` | Submit/inspect distributed jobs and Docker resources from a terminal |
 
 ## 🔧 Local Development (Without Docker)
 
@@ -225,26 +234,18 @@ New-NetFirewallRule -DisplayName "ControlPlane gRPC" -Direction Inbound -Protoco
 
 ### Step 3: Connect Node Laptops via Desktop UI
 
-On each **node laptop**:
-
-1. Launch the Desktop UI:
-```bash
-cd desktop-ui
-mvn javafx:run
-```
-
-2. Go to **Node Management** screen
-3. In the **"Join Server as Node"** panel, enter:
-   - **Node Name**: e.g., `laptop-kitchen`
-   - **Server IP**: The LAN IP from server logs (e.g., `192.168.1.100`)
-   - **Token**: Connection token (if required by your server config)
-4. Click **Join Server**
+Launch the Desktop UI on each node laptop (`cd desktop-ui && mvn javafx:run`) and join it to the
+server. The exact join flow (enrolment token handling, mTLS vs. plaintext, the current screen names) is
+maintained in one place — see
+[README's Physical Cluster on a Shared Wi-Fi / Mobile Hotspot section](README.md#-physical-cluster-on-a-shared-wi-fi--mobile-hotspot)
+rather than duplicating it here, since a second copy is exactly what went stale last time.
 
 The node will:
-- Connect to the server via gRPC on port 50051
+- Connect to the server via gRPC on port 50051 (or via `CONTROL_PLANE_ENDPOINTS` for a Raft-aware,
+  multi-replica cluster)
 - Register itself with the ControlPlane
-- Start sending heartbeats with CPU/memory metrics
-- Appear in the Dashboard and Node Management table
+- Start sending heartbeats with real CPU/memory/battery metrics
+- Appear in the Desktop UI's Nodes view
 
 ### Step 4: Verify Connection
 
@@ -294,14 +295,11 @@ docker compose down
 ### Manual Testing Checklist
 
 - [ ] `mvn clean compile` produces BUILD SUCCESS with no errors
-- [ ] Dashboard loads at http://localhost:8085
-- [ ] Overview page shows real-time charts
-- [ ] Performance page shows per-node metrics
-- [ ] Nodes page shows individual node details
-- [ ] All 3 nodes registered (check logs)
+- [ ] Desktop GUI launches with `mvn javafx:run` and its Nodes view shows individual node details
+- [ ] `http://localhost:8085/api/nodes` returns real JSON (no bundled HTML frontend lives here anymore)
+- [ ] All expected nodes registered (check logs)
 - [ ] Heartbeats flowing every 2 seconds
-- [ ] Prometheus metrics accessible
-- [ ] Desktop GUI launches with `mvn javafx:run`
+- [ ] Prometheus metrics accessible on both the control plane's and each node's metrics port
 
 ## 🏗️ Proto Code Generation
 
@@ -359,13 +357,12 @@ docker compose logs -f predictor
 **Fix:** Check browser console (F12), verify API call to `http://localhost:8085/api/nodes`
 
 **Issue:** JavaFX not found or GUI fails to start
-**Fix:** Ensure JDK 21 is installed. On headless Linux, use `--cli` flag or set `ROLE` env var.
+**Fix:** Ensure the JDK 21 Maven Toolchain is set up (see the callout above) and, on headless Linux, run
+a node/server process directly via `ROLE=agent`/`ROLE=server` instead of the desktop app.
 
-**Issue:** V2 database not found at `~/.nextgen-cp-v2/cluster.db`
-**Fix:** Database is auto-created on first launch. Check file permissions.
-
-**Issue:** Lombok compilation errors
-**Fix:** V2 does not use Lombok. Ensure no Lombok annotations remain in V2 code.
+**Issue:** `Cannot find matching toolchain`
+**Fix:** The one-time JDK 21 Maven Toolchain setup above wasn't done — `desktop-ui` needs it to *run*
+(compiling is unaffected).
 
 ### Enable Debug Logging
 
@@ -379,61 +376,48 @@ _JAVA_OPTIONS="-Dorg.slf4j.simpleLogger.defaultLogLevel=debug"
 
 ```
 next-gen-control-plane/
-├── pom.xml                                 # Root parent POM (multi-module)
+├── pom.xml                                 # Root parent POM (multi-module: java-control-plane, desktop-ui, cli)
 ├── proto/                                  # Shared gRPC contract
 │   └── control_plane.proto
-├── java-control-plane/                     # Backend: gRPC services, DB, business logic
-│   ├── pom.xml                             # Child POM (inherits from root)
+├── java-control-plane/                     # Backend: control plane server + node agent
+│   ├── pom.xml
 │   ├── Dockerfile
 │   └── src/main/java/com/nextgen/
-│       ├── Main.java                       # CLI entry point (ROLE-based)
-│       ├── controlplane/                   # ControlPlane Server
-│       │   ├── ControlPlaneServer.java
-│       │   ├── ControlPlaneServiceImpl.java
-│       │   ├── DashboardApiHandler.java
-│       │   ├── HeartbeatMonitor.java
-│       │   ├── NodeRecord.java
-│       │   └── StaticFileHandler.java
-│       └── agent/                          # Node Agent
-│           └── NodeAgent.java
-├── desktop-ui/                             # Phase-2 Desktop UI (JavaFX)
-│   ├── pom.xml                             # Child POM (JavaFX, gRPC client)
+│       ├── Main.java                       # ROLE-based CLI entry (server/agent/pki-init)
+│       ├── controlplane/                   # Control plane server
+│       │   ├── ControlPlaneServer.java, ControlPlaneServiceImpl.java, NodeRegistry.java, ...
+│       │   ├── raft/                       # Raft consensus (leader election, log replication, WAL)
+│       │   ├── risk/                       # Rule-based + ML (XGBoost) failure-risk scoring
+│       │   ├── capacity/                   # Capability-aware job splitting
+│       │   ├── task/, job/                 # Task/job dispatch, Docker-Compose execution scheduling
+│       │   ├── docker/                     # Real per-node Docker inventory + container control
+│       │   └── training/                   # Real outcome/snapshot logging for model training
+│       ├── agent/                          # NodeAgent — registration, heartbeats, task execution
+│       │   ├── task/                       # Task execution (prime counting, Docker Compose services)
+│       │   └── docker/                     # Docker inventory collection/reporting
+│       └── security/                       # mTLS, CertificateAuthority, enrolment, policy
+├── desktop-ui/                             # Desktop app: JavaFX WebView hosting a real HTML/JS UI
+│   ├── pom.xml
 │   └── src/main/java/com/nextgen/desktop/ui/
 │       ├── DesktopApp.java                 # JavaFX Application entry point
-│       ├── client/                         # gRPC clients
-│       │   ├── GrpcConnectionManager.java
-│       │   ├── ControlPlaneClient.java
-│       │   └── PredictorClient.java
-│       ├── model/                          # Observable data models
-│       │   ├── NodeModel.java
-│       │   ├── TaskModel.java
-│       │   └── ClusterSummary.java
-│       ├── service/                        # UI services
-│       │   ├── NodeMonitoringService.java
-│       │   ├── TaskExecutionService.java
-│       │   └── ThemeService.java
-│       ├── view/                           # Screens
-│       │   ├── MainWindow.java
-│       │   ├── Sidebar.java
-│       │   ├── DashboardView.java
-│       │   ├── NodeManagementView.java
-│       │   ├── TaskSubmissionView.java
-│       │   ├── MonitoringView.java
-│       │   ├── SettingsView.java
-│       │   └── NodeCard.java
-│       └── viewmodel/                      # (reserved for future ViewModels)
-├── python-predictor/                       # Python ML service
-│   ├── predictor_service.py
-│   ├── requirements.txt
-│   └── Dockerfile
-├── scripts/                                # Utilities
-├── docs/                                   # Documentation
-├── docker-compose.yml
-├── README.md
-├── DEVELOPMENT.md                          # This file
-├── CHANGELOG.md
-├── CONTRIBUTING.md
-└── LICENSE
+│       ├── account/                        # Local account system (login, GitHub OAuth, recovery codes)
+│       ├── client/                         # gRPC clients to the control plane/predictor
+│       ├── server/                         # LocalUiServer + route/stream handlers the WebView calls
+│       ├── service/, model/, profile/      # Polling services, observable models, local JSON stores
+│   └── src/main/resources/web/             # The actual UI: HTML/CSS/JS served to the WebView
+│       ├── index.html, css/, js/views/, js/components/
+├── cli/                                    # The `nx` CLI (nextgen-cli) — docker-compose-style commands
+│   └── src/main/java/com/nextgen/cli/Cli.java, ComposeFileParser.java
+├── python-predictor/                       # Real ML: XGBoost risk classifier + LSTM load forecaster
+│   ├── predictor_service.py, train_risk_model.py, auto_retrain.py, features.py, ...
+│   └── requirements.txt, Dockerfile
+├── examples/                               # Runnable example projects (e.g. hello-cluster compose)
+├── datasets/                                # Local-only training data (gitignored, not distributed)
+├── scripts/                                 # Utilities (integration/e2e test scripts)
+├── docs/                                    # ARCHITECTURE.md and the IEEE paper source
+├── deploy/                                  # Prometheus config for the Raft-aware compose topology
+├── docker-compose.yml, docker-compose.raft.yml
+├── README.md, DEVELOPMENT.md, CHANGELOG.md, CONTRIBUTING.md, LICENSE
 ```
 
 ## 🔄 Git Workflow
@@ -492,12 +476,19 @@ test: add NodeRecord unit tests
 
 ## 🌐 Environment Variables
 
+The four most basic ones, to get a plain single-node deployment running:
+
 | Variable | Default | Used By | Description |
 |----------|---------|---------|-------------|
-| `ROLE` | `server` | Main.java | `server` = ControlPlane, `agent` = NodeAgent |
+| `ROLE` | `server` | Main.java | `server` / `agent` / `pki-init` |
 | `NODE_ID` | `unknown` | NodeAgent | Unique identifier for this node |
 | `CONTROL_PLANE_HOST` | `control-plane` | NodeAgent | Hostname of ControlPlane |
 | `PREDICTOR_HOST` | `predictor` | ControlPlane | Hostname of Predictor service |
+
+There are several dozen more — TLS/mTLS, Raft, ML risk scoring, auto-retrain, capacity scoring, Docker
+relay ports, and more, most opt-in and off by default. **README.md's own environment variable
+reference tables are the maintained, complete list** — kept here would just go stale again, exactly
+like this section did before.
 
 ## 🚀 Releasing
 
@@ -512,15 +503,15 @@ test: add NodeRecord unit tests
 
 ### Current Version
 
-**v1.0.0** — V2 Complete (Glassmorphism UI, SQLite Persistence, Registration Flow, Bidirectional Streaming)
+See CHANGELOG.md's `[Unreleased]` and `[3.0.0]` entries for the current, accurate feature list —
+duplicating a version summary here is exactly the kind of second copy that goes stale.
 
 ## 📚 Additional Resources
 
 - [README.md](README.md) — Project overview and quick start
 - [CHANGELOG.md](CHANGELOG.md) — Version history
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Contribution guidelines
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Architecture decisions
-- [docs/CODE_SNIPPETS.md](docs/CODE_SNIPPETS.md) — Chapter 6.2: Annotated code snippets & technology reference
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Architecture decisions, including the full trust model and Raft's consensus/replication design
 
 ## ❓ Getting Help
 
@@ -531,4 +522,4 @@ test: add NodeRecord unit tests
 
 ---
 
-**Last Updated:** April 2026 | **Maintainers:** Team Next-Gen
+**Last Updated:** August 2026 | **Maintainers:** Team Next-Gen
