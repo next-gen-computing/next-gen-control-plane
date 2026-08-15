@@ -1,6 +1,12 @@
 grpcio==1.68.0
 grpcio-tools==1.68.0
-protobuf==5.28.3
+# protobuf bumped from 5.28.3 (2026-08): affected by two real DoS CVEs confirmed via api.osv.dev —
+# CVE-2025-4565 (pure-Python backend recursion DoS, needs >= 5.29.5; low real risk here since PyPI
+# wheels default to the C++/upb backend, not pure-Python, but bumping anyway) and CVE-2026-0994
+# (json_format.ParseDict() recursion-depth bypass via nested Any messages, needs >= 5.29.6). Bumped
+# to 5.29.6, the latest 5.x release and confirmed compatible with the pinned grpcio-tools==1.68.0's
+# own requirement of protobuf<6.0dev,>=5.26.1 (checked via pypi.org's package metadata).
+protobuf==5.29.6
 prometheus-client==0.21.0
 # Stage G: real model training/inference (logistic regression via gradient descent — no scikit-learn
 # is pinned here or available in the environment this was developed in). Verified locally against

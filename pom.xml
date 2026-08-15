@@ -23,15 +23,29 @@
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <!-- gRPC & Protobuf -->
-        <grpc.version>1.68.0</grpc.version>
-        <protobuf.version>3.25.5</protobuf.version>
+        <!-- gRPC & Protobuf — bumped from 1.68.0/3.25.5 (2026-08): 1.68.0's grpc-netty-shaded is
+             vulnerable to CVE-2025-55163 (MadeYouReset HTTP/2 DoS), fixed in 1.75.0+; upgraded to the
+             latest stable (1.83.1, confirmed via repo1.maven.org/.../grpc-core/maven-metadata.xml) to
+             pick up every subsequent fix, not just this one. protobuf.version bumped to the matching
+             3.25.8 patch (same 3.25.x line grpc-java 1.83.1 itself builds against per its own
+             protoc-gen-grpc-java pairing), not a major-version jump. Verified against this project's
+             full real test suite (Raft/task-channel/docker-channel gRPC surface included) before
+             landing, not assumed compatible from release notes alone. -->
+        <grpc.version>1.83.1</grpc.version>
+        <protobuf.version>3.25.8</protobuf.version>
 
         <!-- JavaFX -->
         <javafx.version>21.0.2</javafx.version>
 
-        <!-- Jackson -->
-        <jackson.version>2.17.0</jackson.version>
+        <!-- Jackson — bumped from 2.17.0 (2026-08): that version is affected by five real
+             jackson-databind CVEs (CVE-2026-59888 @JsonIgnore/Record bypass, CVE-2026-54515
+             case-insensitive @JsonIgnoreProperties bypass, CVE-2026-54514 InetSocketAddress
+             deserialization SSRF, CVE-2026-54512/54513 PolymorphicTypeValidator bypasses —
+             confirmed via api.osv.dev, not assumed), the highest of which needs >= 2.18.9 in the
+             2.x line. Bumped to the latest stable (2.22.1, confirmed via
+             repo1.maven.org/.../jackson-databind/maven-metadata.xml) to pick up every subsequent
+             fix, matching the grpc.version bump's own verify-via-authoritative-source discipline. -->
+        <jackson.version>2.22.1</jackson.version>
 
         <!-- Prometheus -->
         <prometheus.version>0.16.0</prometheus.version>
@@ -52,7 +66,16 @@
           loading outright ("Unable to create test class ..."). 0.8.15 understands the newer format.
         -->
         <jacoco.version>0.8.15</jacoco.version>
-        <bouncycastle.version>1.78.1</bouncycastle.version>
+
+        <!-- BouncyCastle — bumped from 1.78.1 (2026-08): affected by CVE-2025-8916 (bcpkix/bcprov
+             PKIXCertPathReviewer excessive-allocation DoS — directly relevant, this project's
+             CertificateAuthority does real X.509 cert-path handling; needs >= 1.79) and
+             CVE-2026-5588 (bcpkix CompositeVerifier accepts an empty signature sequence as valid;
+             needs >= 1.84), both confirmed via api.osv.dev. Bumped to 1.85 — the latest version
+             published for all three artifacts this project depends on (bcpkix-jdk18on,
+             bcprov-jdk18on, bcutil-jdk18on all confirmed on repo1.maven.org; bcprov-jdk18on alone
+             has a newer 1.85.2 but the other two do not, so 1.85 is the highest common version). -->
+        <bouncycastle.version>1.85</bouncycastle.version>
 
         <!-- Maven Plugins -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>

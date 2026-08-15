@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security - Real CVEs fixed in pinned dependencies
+
+Prompted by GitHub's Dependabot alerts on this repo. Every version below was checked against actual
+current pinned versions and verified via authoritative sources — `api.osv.dev` for affected-version
+ranges, `repo1.maven.org`/`pypi.org`'s own package metadata for true-latest (not `search.maven.org`,
+whose index proved stale, topping out ~15 months behind). Each bump was then verified against this
+project's real test suite, not assumed compatible from release notes alone.
+
+- **`grpc.version` 1.68.0 → 1.83.1, `protobuf.version` 3.25.5 → 3.25.8** — fixes CVE-2025-55163
+  ("MadeYouReset" HTTP/2 DoS) in `grpc-netty-shaded`, present in every version before 1.75.0. Bumped to
+  latest stable, not just the minimum fix, to pick up every subsequent patch too.
+- **`jackson.version` 2.17.0 → 2.22.1** — fixes five real `jackson-databind` CVEs: CVE-2026-59888
+  (`@JsonIgnore` on a Record property bypassed via `PropertyNamingStrategy`), CVE-2026-54515
+  (case-insensitive deserialization bypasses `@JsonIgnoreProperties`), CVE-2026-54514
+  (`InetSocketAddress` deserialization triggers eager DNS resolution — SSRF), and CVE-2026-54512 /
+  CVE-2026-54513 (`PolymorphicTypeValidator` bypasses allowing arbitrary class instantiation).
+- **`bouncycastle.version` 1.78.1 → 1.85** — fixes CVE-2025-8916 (`PKIXCertPathReviewer` excessive
+  allocation DoS — directly relevant, since `CertificateAuthority` does real X.509 cert-path handling
+  for node enrolment) and CVE-2026-5588 (`CompositeVerifier` accepts an empty signature sequence as
+  valid). 1.85 is the highest version published for all three artifacts this project actually uses
+  (`bcpkix-jdk18on`, `bcprov-jdk18on`, `bcutil-jdk18on`).
+- **Python `protobuf` 5.28.3 → 5.29.6** (`python-predictor/requirements.txt`) — fixes CVE-2025-4565
+  and CVE-2026-0994 (both recursion-depth DoS bugs in the protobuf Python bindings). Verified compatible
+  with the pinned `grpcio-tools==1.68.0`'s own `protobuf<6.0dev,>=5.26.1` requirement.
+- Checked and confirmed clean (no known CVEs against the pinned version): SnakeYAML 2.2, OSHI 6.6.5,
+  both Prometheus clients (Java `simpleclient` 0.16.0, Python `prometheus-client` 0.21.0), SLF4J 2.0.16,
+  and the Python `grpcio`/`grpcio-tools` 1.68.0, `numpy` 2.1.3, `xgboost` 3.4.0, `torch` 2.13.0 pins.
+
 ### Added - Distributed Docker-Compose execution and the `nx` CLI (Stages L-R)
 
 Turns the cluster into a real distributed `docker compose`-style execution engine — a whole
