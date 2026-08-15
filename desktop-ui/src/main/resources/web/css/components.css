@@ -268,3 +268,158 @@
     border-radius: 50%;
     background: var(--ng-status-unknown);
 }
+
+/* ── Account: login / signup / switcher ── */
+
+.ng-auth-tabs {
+    display: flex;
+    gap: var(--ng-space-1);
+    background: var(--ng-input);
+    border-radius: var(--ng-radius-sm);
+    padding: 4px;
+}
+
+.ng-auth-tab {
+    flex: 1;
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--ng-text-muted);
+    font-size: var(--ng-font-size-sm);
+    font-weight: 600;
+    padding: var(--ng-space-2) var(--ng-space-3);
+    border-radius: calc(var(--ng-radius-sm) - 2px);
+    cursor: pointer;
+    transition: background 150ms ease, color 150ms ease;
+}
+
+.ng-auth-tab.is-active {
+    background: var(--ng-surface);
+    color: var(--ng-text);
+    box-shadow: 0 1px 4px -1px rgba(0, 0, 0, 0.3);
+}
+
+.ng-button-github {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ng-space-2);
+    width: 100%;
+    background: #24292f;
+    color: #fff;
+}
+
+.ng-button-github:hover:not(:disabled) {
+    background: #32383f;
+}
+
+.ng-button-github svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+    flex-shrink: 0;
+}
+
+.ng-auth-divider {
+    display: flex;
+    align-items: center;
+    gap: var(--ng-space-3);
+    color: var(--ng-text-subtle);
+    font-size: var(--ng-font-size-2xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.ng-auth-divider::before,
+.ng-auth-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--ng-border);
+}
+
+.ng-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--ng-accent-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: var(--ng-accent-strong);
+    font-size: var(--ng-font-size-md);
+    flex-shrink: 0;
+}
+
+.ng-avatar-lg {
+    width: 64px;
+    height: 64px;
+    font-size: var(--ng-font-size-xl);
+}
+
+.ng-account-row {
+    display: flex;
+    align-items: center;
+    gap: var(--ng-space-3);
+}
+
+.ng-account-identity {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.ng-account-name {
+    font-weight: 600;
+    color: var(--ng-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ng-account-detail {
+    font-size: var(--ng-font-size-xs);
+    color: var(--ng-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ng-github-code {
+    text-align: center;
+    font-family: var(--ng-font-mono);
+    font-size: var(--ng-font-size-2xl);
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    background: var(--ng-input);
+    border: 1px dashed var(--ng-border);
+    border-radius: var(--ng-radius-sm);
+    padding: var(--ng-space-4);
+    color: var(--ng-accent-strong);
+    user-select: all;
+}
+
+.ng-account-switch-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ng-space-2);
+}
+
+.ng-account-switch-item {
+    display: flex;
+    align-items: center;
+    gap: var(--ng-space-3);
+    padding: var(--ng-space-3);
+    border: 1px solid var(--ng-border);
+    border-radius: var(--ng-radius-sm);
+    cursor: pointer;
+    background: var(--ng-surface);
+    text-align: left;
+}
+
+.ng-account-switch-item:hover {
+    border-color: var(--ng-accent);
+}

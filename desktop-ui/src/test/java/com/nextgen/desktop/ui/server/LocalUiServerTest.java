@@ -1,5 +1,7 @@
 package com.nextgen.desktop.ui.server;
 
+import com.nextgen.desktop.ui.account.AccountService;
+import com.nextgen.desktop.ui.account.AccountStore;
 import com.nextgen.desktop.ui.client.GrpcConnectionManager;
 import com.nextgen.desktop.ui.profile.DesktopHistoryStore;
 import com.nextgen.desktop.ui.profile.DesktopProfileStore;
@@ -78,6 +80,7 @@ class LocalUiServerTest {
                 connectionManager,
                 new DesktopProfileStore(),
                 historyStore,
+                new AccountService(new AccountStore()),
                 (role, serverId) -> { });
         server.start();
         return server;
@@ -167,6 +170,7 @@ class LocalUiServerTest {
                 connectionManager,
                 new DesktopProfileStore(),
                 historyStore,
+                new AccountService(new AccountStore()),
                 (role, serverId) -> { });
 
         assertDoesNotThrow(s::stop);
@@ -444,6 +448,190 @@ class LocalUiServerTest {
         HttpResponse<String> response = http.send(post, HttpResponse.BodyHandlers.ofString());
 
         assertEquals(400, response.statusCode());
+    }
+
+    // ── /api/account/* ──────────────────────────────────────────────────────
+    // NEXTGEN_DESKTOP_DATA_DIR (set once in initToolkit for the whole class) means every test here
+    // shares the same accounts.json on disk — each test below uses its own unique email specifically
+    // so assertions check *that test's own* effect rather than an absolute "nothing signed in yet"
+    // that a different test's leftover state could break, regardless of execution order.
+
+    private HttpResponse<String> postJson(LocalUiServer s, String path, String json) throws Exception {
+        HttpRequest post = HttpRequest.newBuilder(URI.create(s.getBaseUrl() + path.replaceFirst("^/", "")))
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .header("Content-Type", "application/json")
+                .build();
+        return http.send(post, HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
+    void signupCreatesARealAccountAndSignsInImmediately() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> response = postJson(s, "/api/account/signup",
+                "{\"email\":\"signup-ok@example.com\",\"password\":\"longenough1\","
+                        + "\"confirmPassword\":\"longenough1\",\"displayName\":\"Ada\"}");
+
+        assertEquals(200, response.statusCode(), response.body());
+        assertTrue(response.body().contains("\"ok\":true"), response.body());
+        assertTrue(response.body().contains("\"email\":\"signup-ok@example.com\""), response.body());
+        assertTrue(response.body().contains("\"recoveryCode\""), response.body());
+
+        HttpResponse<String> current = get(s, "/api/account/current");
+        assertTrue(current.body().contains("\"email\":\"signup-ok@example.com\""), current.body());
+    }
+
+    @Test
+    void signupWithMismatchedConfirmPasswordIsRejected() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> response = postJson(s, "/api/account/signup",
+                "{\"email\":\"mismatch@example.com\",\"password\":\"longenough1\","
+                        + "\"confirmPassword\":\"somethingdifferent1\",\"displayName\":\"Ada\"}");
+
+        assertEquals(400, response.statusCode());
+        assertTrue(response.body().contains("\"ok\":false"), response.body());
+    }
+
+    @Test
+    void loginWithTheCorrectPasswordSucceedsAndWrongPasswordDoesNot() throws Exception {
+        LocalUiServer s = startedServer();
+        postJson(s, "/api/account/signup",
+                "{\"email\":\"login-flow@example.com\",\"password\":\"realpassword1\","
+                        + "\"confirmPassword\":\"realpassword1\",\"displayName\":\"Grace\"}");
+        postJson(s, "/api/account/logout", "");
+
+        HttpResponse<String> wrong = postJson(s, "/api/account/login",
+                "{\"email\":\"login-flow@example.com\",\"password\":\"wrongpassword1\"}");
+        assertEquals(400, wrong.statusCode());
+
+        HttpResponse<String> right = postJson(s, "/api/account/login",
+                "{\"email\":\"login-flow@example.com\",\"password\":\"realpassword1\"}");
+        assertEquals(200, right.statusCode(), right.body());
+
+        HttpResponse<String> current = get(s, "/api/account/current");
+        assertTrue(current.body().contains("\"email\":\"login-flow@example.com\""), current.body());
+    }
+
+    @Test
+    void logoutClearsTheCurrentAccount() throws Exception {
+        LocalUiServer s = startedServer();
+        postJson(s, "/api/account/signup",
+                "{\"email\":\"logout-flow@example.com\",\"password\":\"longenough1\","
+                        + "\"confirmPassword\":\"longenough1\",\"displayName\":\"Ada\"}");
+
+        HttpResponse<String> logout = postJson(s, "/api/account/logout", "");
+        assertEquals(200, logout.statusCode());
+
+        HttpResponse<String> current = get(s, "/api/account/current");
+        assertFalse(current.body().contains("logout-flow@example.com"), current.body());
+        assertTrue(current.body().contains("\"present\":false"), current.body());
+    }
+
+    @Test
+    void switchAccountRequiresTheCorrectPasswordAndUpdatesCurrent() throws Exception {
+        LocalUiServer s = startedServer();
+        postJson(s, "/api/account/signup",
+                "{\"email\":\"switch-a@example.com\",\"password\":\"passwordone1\","
+                        + "\"confirmPassword\":\"passwordone1\",\"displayName\":\"A\"}");
+        HttpResponse<String> signupB = postJson(s, "/api/account/signup",
+                "{\"email\":\"switch-b@example.com\",\"password\":\"passwordtwo2\","
+                        + "\"confirmPassword\":\"passwordtwo2\",\"displayName\":\"B\"}");
+        String accountBId = signupB.body().replaceAll(".*\"id\":\"([^\"]+)\".*", "$1");
+
+        HttpResponse<String> wrong = postJson(s, "/api/account/switch",
+                "{\"accountId\":\"" + accountBId + "\",\"password\":\"wrongpassword\"}");
+        assertEquals(400, wrong.statusCode());
+
+        HttpResponse<String> right = postJson(s, "/api/account/switch",
+                "{\"accountId\":\"" + accountBId + "\",\"password\":\"passwordtwo2\"}");
+        assertEquals(200, right.statusCode(), right.body());
+
+        HttpResponse<String> current = get(s, "/api/account/current");
+        assertTrue(current.body().contains("switch-b@example.com"), current.body());
+    }
+
+    @Test
+    void accountListIncludesEverySignedUpAccountOnThisDevice() throws Exception {
+        LocalUiServer s = startedServer();
+        postJson(s, "/api/account/signup",
+                "{\"email\":\"list-me@example.com\",\"password\":\"longenough1\","
+                        + "\"confirmPassword\":\"longenough1\",\"displayName\":\"Listed\"}");
+
+        HttpResponse<String> response = get(s, "/api/account/list");
+
+        assertEquals(200, response.statusCode());
+        assertTrue(response.body().contains("list-me@example.com"), response.body());
+    }
+
+    @Test
+    void resetPasswordWithTheWrongRecoveryCodeIsRejected() throws Exception {
+        LocalUiServer s = startedServer();
+        postJson(s, "/api/account/signup",
+                "{\"email\":\"reset-wrong@example.com\",\"password\":\"originalpw1\","
+                        + "\"confirmPassword\":\"originalpw1\",\"displayName\":\"R\"}");
+
+        HttpResponse<String> response = postJson(s, "/api/account/reset-password",
+                "{\"email\":\"reset-wrong@example.com\",\"recoveryCode\":\"WRONG-0000-0000\","
+                        + "\"newPassword\":\"brandnewpw1\",\"confirmPassword\":\"brandnewpw1\"}");
+
+        assertEquals(400, response.statusCode());
+    }
+
+    @Test
+    void resetPasswordWithTheRealRecoveryCodeIssuesANewPasswordAndANewCode() throws Exception {
+        LocalUiServer s = startedServer();
+        HttpResponse<String> signup = postJson(s, "/api/account/signup",
+                "{\"email\":\"reset-right@example.com\",\"password\":\"originalpw1\","
+                        + "\"confirmPassword\":\"originalpw1\",\"displayName\":\"R\"}");
+        String recoveryCode = signup.body().replaceAll(".*\"recoveryCode\":\"([^\"]+)\".*", "$1");
+        postJson(s, "/api/account/logout", "");
+
+        HttpResponse<String> reset = postJson(s, "/api/account/reset-password",
+                "{\"email\":\"reset-right@example.com\",\"recoveryCode\":\"" + recoveryCode + "\","
+                        + "\"newPassword\":\"brandnewpw1\",\"confirmPassword\":\"brandnewpw1\"}");
+        assertEquals(200, reset.statusCode(), reset.body());
+        assertTrue(reset.body().contains("\"recoveryCode\""), reset.body());
+        postJson(s, "/api/account/logout", "");
+
+        HttpResponse<String> loginOld = postJson(s, "/api/account/login",
+                "{\"email\":\"reset-right@example.com\",\"password\":\"originalpw1\"}");
+        assertEquals(400, loginOld.statusCode());
+
+        HttpResponse<String> loginNew = postJson(s, "/api/account/login",
+                "{\"email\":\"reset-right@example.com\",\"password\":\"brandnewpw1\"}");
+        assertEquals(200, loginNew.statusCode(), loginNew.body());
+    }
+
+    @Test
+    void githubStartFailsCleanlyWithoutAConfiguredClientId() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> available = get(s, "/api/account/github/available");
+        assertTrue(available.body().contains("\"available\":false"), available.body());
+
+        HttpResponse<String> start = postJson(s, "/api/account/github/start", "");
+        assertEquals(400, start.statusCode());
+        assertFalse(start.body().contains("<html"), "must be a JSON error, never an unhandled-exception page");
+    }
+
+    @Test
+    void githubPollOfAnUnknownHandleFailsCleanly() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> response = get(s, "/api/account/github/poll?handle=never-started");
+
+        assertEquals(200, response.statusCode());
+        assertTrue(response.body().contains("\"status\":\"failed\""), response.body());
+    }
+
+    @Test
+    void unknownAccountSubRouteIs404() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> response = get(s, "/api/account/does-not-exist");
+
+        assertEquals(404, response.statusCode());
     }
 
     private void waitUntil(ThrowingBooleanSupplier condition) throws Exception {

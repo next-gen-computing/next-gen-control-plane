@@ -1,5 +1,6 @@
 package com.nextgen.desktop.ui.server;
 
+import com.nextgen.desktop.ui.account.AccountService;
 import com.nextgen.desktop.ui.client.GrpcConnectionManager;
 import com.nextgen.desktop.ui.profile.DesktopHistoryStore;
 import com.nextgen.desktop.ui.profile.DesktopProfileStore;
@@ -54,6 +55,7 @@ public class LocalUiServer {
     private final GrpcConnectionManager connectionManager;
     private final DesktopProfileStore profileStore;
     private final DesktopHistoryStore historyStore;
+    private final AccountService accountService;
     private final BiConsumer<String, String> onConnected;
 
     private volatile String role;
@@ -79,7 +81,8 @@ public class LocalUiServer {
                          TaskExecutionService taskExecutionService, JobExecutionService jobExecutionService,
                          DockerResourcesMonitoringService dockerResourcesMonitoringService,
                          GrpcConnectionManager connectionManager, DesktopProfileStore profileStore,
-                         DesktopHistoryStore historyStore, BiConsumer<String, String> onConnected) {
+                         DesktopHistoryStore historyStore, AccountService accountService,
+                         BiConsumer<String, String> onConnected) {
         this.themeService = themeService;
         this.monitoringService = monitoringService;
         this.taskExecutionService = taskExecutionService;
@@ -88,6 +91,7 @@ public class LocalUiServer {
         this.connectionManager = connectionManager;
         this.profileStore = profileStore;
         this.historyStore = historyStore;
+        this.accountService = accountService;
         this.onConnected = onConnected;
     }
 
@@ -146,6 +150,8 @@ public class LocalUiServer {
         server.createContext("/api/role/", roleRoute);
 
         server.createContext("/api/history", new HistoryRouteHandler(historyStore));
+
+        server.createContext("/api/account/", new AccountRouteHandler(accountService));
 
         server.createContext("/api/tasks", new TasksRouteHandler(taskExecutionService, monitoringService));
         tasksStream = new TasksStreamHandler(taskExecutionService, POLL_INTERVAL_MS);

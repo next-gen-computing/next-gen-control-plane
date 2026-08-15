@@ -27,10 +27,18 @@
     --ng-text-muted:     #94A3B8;
     --ng-text-subtle:    #64748B;
 
-    --ng-accent:         #3B82F6;
-    --ng-accent-strong:  #2563EB;
-    --ng-accent-soft:    rgba(59, 130, 246, 0.16);
+    /* A punchier, more "brand" blue than the previous default — deliberately not Docker's own exact
+       hex, just the same family, per this project's own "similar in feel, not copied" rule. */
+    --ng-accent:         #2F7FFF;
+    --ng-accent-strong:  #1C63E8;
+    --ng-accent-soft:    rgba(47, 127, 255, 0.16);
     --ng-on-accent:      #FFFFFF;
+
+    /* Sidebar/topbar/statusbar are a shade darker than --ng-surface — Docker Desktop's own layout
+       cue for "structural chrome" vs. "content surface," so a card never gets confused with the
+       shell around it even before reading anything. */
+    --ng-chrome-bg:      #0E1424;
+    --ng-chrome-border:  rgba(255, 255, 255, 0.07);
 
     --ng-gridline:       rgba(255, 255, 255, 0.06);
     --ng-axis:           rgba(255, 255, 255, 0.14);
@@ -55,10 +63,13 @@
     --ng-text-muted:     #475569;
     --ng-text-subtle:    #64748B;
 
-    --ng-accent:         #2563EB;
-    --ng-accent-strong:  #1D4ED8;
-    --ng-accent-soft:    rgba(37, 99, 235, 0.12);
+    --ng-accent:         #2264EB;
+    --ng-accent-strong:  #174CC2;
+    --ng-accent-soft:    rgba(34, 100, 235, 0.12);
     --ng-on-accent:      #FFFFFF;
+
+    --ng-chrome-bg:      #E8EEF7;
+    --ng-chrome-border:  rgba(15, 23, 42, 0.08);
 
     --ng-gridline:       rgba(15, 23, 42, 0.07);
     --ng-axis:           rgba(15, 23, 42, 0.18);

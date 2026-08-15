@@ -1,5 +1,7 @@
 package com.nextgen.desktop.ui;
 
+import com.nextgen.desktop.ui.account.AccountService;
+import com.nextgen.desktop.ui.account.AccountStore;
 import com.nextgen.desktop.ui.client.GrpcConnectionManager;
 import com.nextgen.desktop.ui.profile.DesktopHistoryStore;
 import com.nextgen.desktop.ui.profile.DesktopProfileStore;
@@ -56,6 +58,7 @@ public class DesktopApp extends Application {
         // task/job submissions with which cluster each ran against.
         DesktopProfileStore profileStore = new DesktopProfileStore();
         DesktopHistoryStore historyStore = new DesktopHistoryStore();
+        AccountService accountService = new AccountService(new AccountStore());
 
         // Constructed here so LocalUiServer's HTTP routes poll the same live instances the dashboard
         // displays, not a second, independently-polling copy. Construction is harmless before any
@@ -67,7 +70,7 @@ public class DesktopApp extends Application {
 
         localUiServer = new LocalUiServer(themeService, monitoringService, taskExecutionService,
                 jobExecutionService, dockerResourcesMonitoringService, connectionManager, profileStore,
-                historyStore, this::onOnboardingComplete);
+                historyStore, accountService, this::onOnboardingComplete);
         localUiServer.start();
 
         LOG.info("Desktop UI initialized");
@@ -143,8 +146,9 @@ public class DesktopApp extends Application {
                 Object result = webView.getEngine().executeScript(
                         "(function() {"
                                 + "  var required = ['NG.router','NG.sse','NG.palette','NG.format','NG.cursorFx',"
-                                + "    'NG.helpCenter','NG.connectionBanner','NG.components.statTile',"
-                                + "    'NG.components.nodeCard','NG.charts.timeSeries','NG.views.roleSelection',"
+                                + "    'NG.icons','NG.helpCenter','NG.connectionBanner','NG.components.statTile',"
+                                + "    'NG.components.nodeCard','NG.charts.timeSeries','NG.views.login',"
+                                + "    'NG.views.roleSelection',"
                                 + "    'NG.views.serverSetup','NG.views.nodeJoin','NG.views.reconnecting',"
                                 + "    'NG.views.dashboard','NG.views.monitoring','NG.views.nodes','NG.views.tasks',"
                                 + "    'NG.views.containers','NG.views.images','NG.views.volumes','NG.views.networks',"
@@ -159,6 +163,7 @@ public class DesktopApp extends Application {
 
                 JSObject window = (JSObject) webView.getEngine().executeScript("window");
                 window.setMember("javaLog", new ConsoleBridge());
+                window.setMember("javaOpenExternal", new ExternalLinkBridge(getHostServices()));
                 webView.getEngine().executeScript(
                         "['log','warn','error'].forEach(function(level) {"
                                 + "  var original = console[level];"
@@ -185,6 +190,26 @@ public class DesktopApp extends Application {
                 case "warn" -> LOG.warn("[webview] {}", message);
                 default -> LOG.info("[webview] {}", message);
             }
+        }
+    }
+
+    /**
+     * Opens a URL in the OS's real default browser, not the embedded {@code WebView} — required for
+     * the GitHub device-flow login link specifically: the user needs their own already-logged-in
+     * browser session (cookies, saved passwords, 2FA prompts they recognize), none of which the
+     * WebView's separate, unauthenticated browsing context has. Public for the same JS-interop
+     * reflection reason as {@link ConsoleBridge}.
+     */
+    public static final class ExternalLinkBridge {
+        private final javafx.application.HostServices hostServices;
+
+        ExternalLinkBridge(javafx.application.HostServices hostServices) {
+            this.hostServices = hostServices;
+        }
+
+        public void open(String url) {
+            LOG.info("Opening external URL in system browser: {}", url);
+            hostServices.showDocument(url);
         }
     }
 

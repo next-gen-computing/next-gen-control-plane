@@ -28,20 +28,39 @@ window.NG = window.NG || {};
         enterDashboard(role, serverId) {
             connectionBanner.show();
             NG.router.show(NG.shell, { role, serverId });
+        },
+
+        // Called once an account is confirmed signed in — both at initial boot (already logged in
+        // from a previous launch) and right after login.js's signup/login/GitHub flow succeeds. A
+        // *previous* launch's onboarding choice may also be remembered (see DesktopProfileStore), in
+        // which case this reconnects silently instead of asking "Server or Node?" all over again —
+        // account identity and cluster role/profile are deliberately separate systems (see
+        // Account.java's Javadoc), checked one after the other, not conflated into one.
+        afterLogin() {
+            fetch('/api/role/profile')
+                .then((r) => r.json())
+                .then((profile) => {
+                    if (profile.present) {
+                        NG.router.show(NG.views.reconnecting, { profile });
+                    } else {
+                        NG.router.show(NG.views.roleSelection);
+                    }
+                })
+                .catch(() => NG.router.show(NG.views.roleSelection));
         }
     };
 
-    // The WebView loads once, at process start, before any connection exists — but a *previous*
-    // launch's onboarding choice may have been remembered (see DesktopProfileStore), in which case
-    // this launch should reconnect silently instead of asking "Server or Node?" all over again.
-    fetch('/api/role/profile')
+    // The WebView loads once, at process start. Before anything cluster-related is even considered,
+    // this device needs a signed-in account (see login.js) — device-local, not a cloud account, but
+    // still the gate every launch passes through first.
+    fetch('/api/account/current')
         .then((r) => r.json())
-        .then((profile) => {
-            if (profile.present) {
-                NG.router.show(NG.views.reconnecting, { profile });
+        .then((account) => {
+            if (account.present) {
+                NG.app.afterLogin();
             } else {
-                NG.router.show(NG.views.roleSelection);
+                NG.router.show(NG.views.login);
             }
         })
-        .catch(() => NG.router.show(NG.views.roleSelection));
+        .catch(() => NG.router.show(NG.views.login));
 })();
