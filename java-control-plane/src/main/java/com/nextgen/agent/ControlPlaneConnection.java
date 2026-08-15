@@ -3,6 +3,7 @@ package com.nextgen.agent;
 import com.nextgen.controlplane.ControlPlaneEndpoints;
 import com.nextgen.controlplane.raft.RaftLeaderRedirectInterceptor;
 import com.nextgen.proto.ControlPlaneServiceGrpc;
+import com.nextgen.proto.NodeEnrollmentGrpc;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.StatusRuntimeException;
@@ -60,6 +61,35 @@ public final class ControlPlaneConnection {
     /** As {@link #blockingStub()}, for the async stub the long-lived task channel stream is opened on. */
     public ControlPlaneServiceGrpc.ControlPlaneServiceStub asyncStub() {
         return ControlPlaneServiceGrpc.newStub(currentChannel());
+    }
+
+    /**
+     * As {@link #blockingStub()}, for {@code NodeEnrollment} — specifically {@code RenewCertificate},
+     * which (unlike initial {@code Enroll}) is authenticated by the node's CURRENT client certificate
+     * over mTLS, so it belongs on this same operational channel rather than a fresh enrolment-only one
+     * built with the server-auth-only context {@link NodeAgent#ensureEnrolled} uses before any
+     * certificate exists.
+     */
+    public NodeEnrollmentGrpc.NodeEnrollmentBlockingStub enrollmentBlockingStub() {
+        return NodeEnrollmentGrpc.newBlockingStub(currentChannel());
+    }
+
+    /**
+     * Discards the cached channel for whichever candidate {@link ControlPlaneEndpoints#current()}
+     * currently resolves to, so the next {@link #blockingStub()}/{@link #asyncStub()}/
+     * {@link #enrollmentBlockingStub()} call rebuilds one from scratch.
+     *
+     * <p>Required after a successful certificate renewal: TLS client auth happens once per connection,
+     * at the handshake (see {@code MutualTlsEndToEndTest}'s own comment on this), so an already-open
+     * channel keeps presenting the OLD certificate — which renewal just caused the server to revoke —
+     * until it is torn down and rebuilt. Without this, every RPC after a renewal on this connection
+     * (heartbeats included) would start failing as {@code certificate_revoked}.
+     */
+    public void invalidateCurrentChannel() {
+        ManagedChannel stale = channels.remove(endpoints.current());
+        if (stale != null) {
+            stale.shutdown();
+        }
     }
 
     /** A redirect hint arrived — see {@link ControlPlaneEndpoints#onLeaderHint}. */

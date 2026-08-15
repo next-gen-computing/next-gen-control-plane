@@ -222,23 +222,43 @@ before turning it on.
 > the JDK provider, which has had ALPN — the only thing gRPC needs — since Java 9. Set
 > `TLS_SSL_PROVIDER=OPENSSL` to opt in if you have verified it on your platform.
 
-### Renewal — what's real and what isn't yet
+### Renewal
+
+Two mechanisms cover renewal, at two different points in a node's life:
 
 `NodeAgent.ensureEnrolled` runs once, at process startup: it loads any stored certificate, and if it's
 within `CERT_RENEW_WINDOW_MINUTES` of expiry (default 7 days), re-enrols before the heartbeat loop
-starts. **This check does not run again while the process keeps running.** A node left up
-continuously for longer than the 30-day certificate lifetime will hit expiry mid-run, get
-`certificate_expired` from `MtlsPolicyInterceptor` on its next heartbeat, and stay disconnected until
-someone restarts it — at which point `ensureEnrolled` runs again and it recovers on its own. A
-timer-driven renewal that doesn't require a restart is not implemented yet.
+starts. This path re-enrols through the same token-based `Enroll` RPC as first-time enrolment — an
+operator restarting an agent whose certificate has already lapsed needs a fresh token available at
+restart time, same as first enrolment.
 
-Re-enrolling is done through the same token-based `Enroll` RPC as first-time enrolment, not through
-`NodeEnrollment.RenewCertificate` — the mTLS-authenticated, no-token-needed renewal path the proto
-also defines. That RPC is implemented and covered server-side, but no client code calls it; using the
-token path for renewal too was a deliberate simplification to ship one working path rather than two,
-and it means an operator doing renewal-by-restart needs a fresh token available at restart time, same
-as first enrolment. Wiring `RenewCertificate` in is the natural next step once timer-driven renewal
-is built, since renewal is exactly the case it exists for.
+`NodeAgent.CertificateRenewalLoop` runs continuously alongside the heartbeat loop (same
+self-rescheduling shape, see `HeartbeatLoop`'s own Javadoc for why `schedule()` rather than
+`scheduleAtFixedRate()`), checking every `CERT_RENEWAL_CHECK_INTERVAL_MS` (default hourly) whether the
+certificate is now within the renewal window — catching the case `ensureEnrolled` structurally cannot:
+a node that was fine at startup but has since been running long enough for its certificate to approach
+expiry. This path uses `NodeEnrollment.RenewCertificate` — the mTLS-authenticated, no-token-needed
+renewal RPC the proto defines — over the same operational `ControlPlaneConnection` the heartbeat loop
+and task channel already share, since renewal is authenticated by the certificate being replaced, not
+by a token.
+
+Two correctness details worth naming explicitly, since both were real bugs caught by
+`CertificateRenewalLoopTest` before shipping, not designed in from the start:
+- **Statement order inside `renewOnce()` matters.** The stub is obtained from `ControlPlaneConnection`
+  *before* `AgentCredentials.createCsr()` is called, not after. `createCsr()` immediately overwrites
+  the in-memory key pair; if the channel were built (or reused, if not already warm) *after* that call,
+  its TLS identity would pair the OLD certificate with the NEW key — a mismatch that fails the
+  handshake outright, not a subtle bug. In real `NodeAgent.start()` usage this was structurally masked
+  (`registerWithBackoff` always warms the connection's channel first, with a still-consistent pair)
+  right up until the loop's *first* tick on a cold connection, which is exactly the scenario the test
+  exercises directly.
+- **The connection's cached channel must be invalidated after a successful renewal**
+  (`ControlPlaneConnection.invalidateCurrentChannel()`). Issuing a new certificate revokes the old one
+  server-side (`CertificateAuthority.issueClientCertificate`'s existing behavior — see "Revocation"
+  below), but TLS client auth happens once per connection at the handshake; an already-open channel
+  keeps presenting the now-revoked certificate until it's torn down and rebuilt. Without discarding it,
+  every RPC after a renewal on that connection — heartbeats included — would start failing as
+  `certificate_revoked`.
 
 ---
 

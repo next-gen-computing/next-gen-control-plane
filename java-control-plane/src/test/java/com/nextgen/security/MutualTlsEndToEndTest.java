@@ -43,6 +43,7 @@ class MutualTlsEndToEndTest {
     private final List<ManagedChannel> channels = new ArrayList<>();
     private CertificateAuthority ca;
     private EnrollmentTokenStore tokens;
+    private NodeRegistry registry;
 
     @AfterEach
     void tearDown() throws Exception {
@@ -62,7 +63,7 @@ class MutualTlsEndToEndTest {
                 List.of("localhost", "127.0.0.1"), Duration.ofMinutes(60), RateLimitPolicy.defaults());
         ca = new CertificateAuthority(new PkiPaths(pkiDir), Clock.systemUTC());
         tokens = new EnrollmentTokenStore(Clock.systemUTC(), Duration.ofMinutes(60));
-        NodeRegistry registry = new NodeRegistry(new ConcurrentHashMap<>(), System::currentTimeMillis);
+        registry = new NodeRegistry(new ConcurrentHashMap<>(), System::currentTimeMillis);
 
         server = ControlPlaneServer.buildGrpcServer(0, registry, policy, ca, tokens).start();
         return server.getPort();
@@ -202,6 +203,87 @@ class MutualTlsEndToEndTest {
         assertEquals(ControlPlaneProto.EnrollmentResult.ENROLLMENT_RESULT_CSR_INVALID,
                 response.getResult());
         assertTrue(response.getClientCertificatePem().isEmpty());
+    }
+
+    // ── Renewal ──────────────────────────────────────────────────────────────
+    // No test previously exercised NodeEnrollmentServiceImpl.renewCertificate() itself — only that an
+    // ANONYMOUS caller is rejected (MtlsPolicyInterceptorTest, a policy-gate test). These prove the
+    // handler's real behavior: an already-enrolled node presenting its own client certificate over mTLS
+    // (no token) gets a genuinely new certificate back, usable immediately on a fresh channel.
+
+    @Test
+    @DisplayName("An enrolled node can renew using its own client certificate, no token needed")
+    void enrolledNodeCanRenewWithoutAToken(@TempDir Path pkiDir) throws Exception {
+        int port = startServer(pkiDir);
+        String token = tokens.mint("node1");
+        Enrolled enrolled = enroll(port, "node1", token);
+        enrolled.channel().shutdownNow();
+
+        X509Certificate originalCert = CertificateAuthority.readCertificate(
+                enrolled.response().getClientCertificatePem().toStringUtf8());
+        ManagedChannel mtls = channel(port, TlsConfig.mutualClientContext(
+                ca.caCertificatePem(), originalCert, lastCredentials.privateKey()));
+
+        String renewalCsr = lastCredentials.createCsr("node1");
+        ControlPlaneProto.EnrollResponse renewed = NodeEnrollmentGrpc.newBlockingStub(mtls)
+                .renewCertificate(ControlPlaneProto.RenewRequest.newBuilder()
+                        .setNodeId("node1")
+                        .setCsrPem(ByteString.copyFromUtf8(renewalCsr))
+                        .build());
+
+        assertEquals(ControlPlaneProto.EnrollmentResult.ENROLLMENT_RESULT_ISSUED, renewed.getResult());
+        assertFalse(renewed.getClientCertificatePem().isEmpty());
+        X509Certificate renewedCert = CertificateAuthority.readCertificate(
+                renewed.getClientCertificatePem().toStringUtf8());
+        assertNotEquals(originalCert.getSerialNumber(), renewedCert.getSerialNumber(),
+                "renewal must issue a genuinely new certificate, not hand back the same one");
+
+        // The new certificate must actually work — on a fresh channel, since TLS client auth is
+        // per-handshake (see enrolledAgentCanHeartbeatAfterChannelRebuild's own comment on this).
+        mtls.shutdownNow();
+        ManagedChannel renewedMtls = channel(port, TlsConfig.mutualClientContext(
+                ca.caCertificatePem(), renewedCert, lastCredentials.privateKey()));
+        ControlPlaneServiceGrpc.ControlPlaneServiceBlockingStub stub =
+                ControlPlaneServiceGrpc.newBlockingStub(renewedMtls);
+        stub.registerNode(ControlPlaneProto.NodeInfo.newBuilder()
+                .setNodeId("node1").setIp("127.0.0.1").setPort(port).setHostname("node1").build());
+        ControlPlaneProto.HeartbeatResponse heartbeat = stub.sendHeartbeat(
+                ControlPlaneProto.HeartbeatRequest.newBuilder()
+                        .setNodeId("node1").setCpu(5f).setCpuAvailable(true)
+                        .setMemory(5f).setMemoryAvailable(true).build());
+        assertEquals("OK", heartbeat.getStatus());
+    }
+
+    @Test
+    @DisplayName("Renewing a certificate refreshes the registry's cached certificate metadata")
+    void renewalUpdatesTheRegistryRecord(@TempDir Path pkiDir) throws Exception {
+        int port = startServer(pkiDir);
+        String token = tokens.mint("node1");
+        Enrolled enrolled = enroll(port, "node1", token);
+        enrolled.channel().shutdownNow();
+
+        X509Certificate originalCert = CertificateAuthority.readCertificate(
+                enrolled.response().getClientCertificatePem().toStringUtf8());
+        ManagedChannel mtls = channel(port, TlsConfig.mutualClientContext(
+                ca.caCertificatePem(), originalCert, lastCredentials.privateKey()));
+        ControlPlaneServiceGrpc.ControlPlaneServiceBlockingStub stub =
+                ControlPlaneServiceGrpc.newBlockingStub(mtls);
+        stub.registerNode(ControlPlaneProto.NodeInfo.newBuilder()
+                .setNodeId("node1").setIp("127.0.0.1").setPort(port).setHostname("node1").build());
+
+        String renewalCsr = lastCredentials.createCsr("node1");
+        ControlPlaneProto.EnrollResponse renewed = NodeEnrollmentGrpc.newBlockingStub(mtls)
+                .renewCertificate(ControlPlaneProto.RenewRequest.newBuilder()
+                        .setNodeId("node1")
+                        .setCsrPem(ByteString.copyFromUtf8(renewalCsr))
+                        .build());
+        assertEquals(ControlPlaneProto.EnrollmentResult.ENROLLMENT_RESULT_ISSUED, renewed.getResult());
+
+        ControlPlaneProto.CertificateInfo cached =
+                registry.get("node1").orElseThrow().getCertificate();
+        assertEquals(renewed.getCertificateSerial(), cached.getSerial(),
+                "the registry's cached certificate metadata must reflect the RENEWED serial, not the "
+                        + "original one issued at enrolment");
     }
 
     // ── The acceptance criterion ─────────────────────────────────────────────

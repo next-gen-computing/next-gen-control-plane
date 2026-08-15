@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed - Certificate renewal now runs on a timer, not just at startup
+
+Closes the "named limitation" both README.md and docs/ARCHITECTURE.md previously called out: a node's
+certificate was only ever checked for renewal once, at process startup — a node left running longer
+than the certificate lifetime would silently lose connectivity mid-run with nothing re-checking.
+
+- New `NodeAgent.CertificateRenewalLoop`, running continuously alongside the heartbeat loop
+  (`CERT_RENEWAL_CHECK_INTERVAL_MS`, hourly by default), using the previously-unwired
+  `NodeEnrollment.RenewCertificate` RPC — mTLS-authenticated by the node's own current certificate, no
+  token needed.
+- `NodeEnrollmentServiceImpl.renewCertificate` now also updates the registry's cached certificate
+  metadata (`registry.attachCertificate`), matching `enroll()`'s own behavior — previously a renewed
+  node's dashboard-visible serial/expiry silently went stale.
+- Two real bugs caught by `CertificateRenewalLoopTest` before shipping: (1) `renewOnce()` built its
+  gRPC stub *after* generating a new CSR, which overwrites the in-memory key pair immediately — pairing
+  the OLD certificate with the NEW key and guaranteeing a broken TLS handshake on a cold connection;
+  fixed by capturing the stub first. (2) `ControlPlaneConnection` never invalidated its cached channel
+  after a successful renewal, so every RPC afterward (heartbeats included) kept presenting the
+  now-server-revoked old certificate; fixed via a new `invalidateCurrentChannel()`.
+- A failed renewal attempt reloads credentials from disk, restoring the last-known-good key/certificate
+  pair rather than leaving the in-memory state mismatched, and retries with backoff.
+
 ### Security - Real CVEs fixed in pinned dependencies
 
 Prompted by GitHub's Dependabot alerts on this repo. Every version below was checked against actual

@@ -154,6 +154,19 @@ public class NodeEnrollmentServiceImpl extends NodeEnrollmentGrpc.NodeEnrollment
         try {
             PKCS10CertificationRequest csr = parseCsr(request.getCsrPem().toStringUtf8());
             CertificateAuthority.IssuedCertificate issued = ca.issueClientCertificate(nodeId, csr);
+
+            // Mirrors enroll()'s own registry update (line ~107 above) — without this, the dashboard
+            // would keep showing the OLD serial/expiry for a node that has already rotated onto a new
+            // certificate, since attachCertificate is the only thing that refreshes that cached metadata.
+            if (registry != null) {
+                registry.get(nodeId).ifPresent(record ->
+                        registry.attachCertificate(nodeId, CertificateInfo.newBuilder()
+                                .setSerial(issued.serial().toString(16))
+                                .setSubjectCn(nodeId)
+                                .setNotAfterEpochMillis(issued.notAfter().toEpochMilli())
+                                .build()));
+            }
+
             ENROLLMENTS.labels("renewed").inc();
             LOG.info("Renewed certificate for node '{}' (serial {})", nodeId, issued.serial().toString(16));
 

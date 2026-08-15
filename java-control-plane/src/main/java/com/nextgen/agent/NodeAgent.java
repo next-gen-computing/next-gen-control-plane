@@ -136,6 +136,12 @@ public class NodeAgent {
             .help("Estimated clock offset between this node and the control plane")
             .register();
 
+    private static final Counter CERT_RENEWALS = Counter.build()
+            .name("node_certificate_renewals_total")
+            .help("Certificate renewal attempts by outcome")
+            .labelNames("result")
+            .register();
+
     public static void start() throws IOException, InterruptedException {
         String nodeId = EnvConfig.stringValue("NODE_ID", "unknown");
         String controlPlaneHost = EnvConfig.stringValue("CONTROL_PLANE_HOST", "control-plane");
@@ -218,6 +224,26 @@ public class NodeAgent {
                 scheduler, connection, registration, metrics, powerMetrics, backoff, heartbeatIntervalMs);
         loop.start();
 
+        // ── Certificate renewal — periodic, not just at startup ─────────────
+        // Named limitation until now (see README.md/docs/ARCHITECTURE.md): ensureEnrolled() above only
+        // checks CERT_RENEW_WINDOW_MINUTES once, at process start. A node that stays up longer than its
+        // certificate's remaining lifetime at boot would silently lose connectivity when it expired,
+        // with no code path ever re-checking. This loop is what actually keeps a long-lived node's
+        // certificate current. Only meaningful under TLS — there is no certificate to renew otherwise.
+        CertificateRenewalLoop renewalLoop = null;
+        if (tlsEnabled) {
+            ScheduledExecutorService renewalScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "cert-renewal");
+                t.setDaemon(true);
+                return t;
+            });
+            renewalLoop = new CertificateRenewalLoop(renewalScheduler, connection, credentials, nodeId,
+                    Duration.ofMinutes(EnvConfig.longValue("CERT_RENEW_WINDOW_MINUTES", 60L * 24 * 7)),
+                    EnvConfig.longValue("CERT_RENEWAL_CHECK_INTERVAL_MS", 60L * 60 * 1000), backoff);
+            renewalLoop.start();
+        }
+        CertificateRenewalLoop finalRenewalLoop = renewalLoop;
+
         // ── Task channel — real dispatch/execution, on the SAME ControlPlaneConnection above ────
         // DockerComposeServiceExecutor is registered unconditionally, even when docker.available() is
         // false: the scheduler (not executor registration) is what's responsible for never assigning
@@ -250,6 +276,9 @@ public class NodeAgent {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             LOG.info("Shutting down NodeAgent '{}'...", nodeId);
             scheduler.shutdownNow();
+            if (finalRenewalLoop != null) {
+                finalRenewalLoop.shutdown();
+            }
             taskChannelClient.shutdown();
             if (dockerStateChannelClient != null) {
                 dockerStateChannelClient.shutdown();
@@ -630,6 +659,115 @@ public class NodeAgent {
                     throw e;
                 }
             }
+        }
+    }
+
+    /**
+     * Self-rescheduling certificate renewal check.
+     *
+     * <p>Mirrors {@link HeartbeatLoop}'s own self-rescheduling shape (see its Javadoc for why {@code
+     * schedule()} rather than {@code scheduleAtFixedRate()}), on a much coarser cadence: checking
+     * hourly by default is cheap and gives many chances to catch {@code CERT_RENEW_WINDOW_MINUTES}'s
+     * (default 7-day) window before the certificate actually expires, even if several checks in a row
+     * fail.
+     *
+     * <p>Does not implement its own leader-redirect-following the way {@link #sendWithRedirects} does
+     * for heartbeats. It doesn't need to: {@link ControlPlaneConnection} is shared with the heartbeat
+     * loop (see that class's own Javadoc — "leader knowledge propagates ... for free"), which redirects
+     * on a two-second cadence, so by the time this loop's own backoff-driven retry fires, the shared
+     * connection has almost always already been corrected. A renewal attempt that fails because it hit
+     * a stale replica simply retries shortly after, same as any other failure here.
+     */
+    static final class CertificateRenewalLoop {
+        private final ScheduledExecutorService scheduler;
+        private final ControlPlaneConnection connection;
+        private final AgentCredentials credentials;
+        private final String nodeId;
+        private final Duration renewWindow;
+        private final long checkIntervalMs;
+        private final BackoffPolicy backoff;
+
+        private final AtomicInteger consecutiveFailures = new AtomicInteger(0);
+
+        CertificateRenewalLoop(ScheduledExecutorService scheduler, ControlPlaneConnection connection,
+                               AgentCredentials credentials, String nodeId, Duration renewWindow,
+                               long checkIntervalMs, BackoffPolicy backoff) {
+            this.scheduler = scheduler;
+            this.connection = connection;
+            this.credentials = credentials;
+            this.nodeId = nodeId;
+            this.renewWindow = renewWindow;
+            this.checkIntervalMs = checkIntervalMs;
+            this.backoff = backoff;
+        }
+
+        void start() {
+            scheduler.schedule(this::tick, 0, TimeUnit.MILLISECONDS);
+        }
+
+        void shutdown() {
+            scheduler.shutdownNow();
+        }
+
+        /** One renewal check, which always reschedules itself. Package-private for tests. */
+        void tick() {
+            long nextDelayMs = checkIntervalMs;
+            try {
+                if (credentials.hasCertificate() && credentials.needsRenewal(Instant.now(), renewWindow)) {
+                    renewOnce();
+                }
+                consecutiveFailures.set(0);
+            } catch (Exception e) {
+                int failures = consecutiveFailures.incrementAndGet();
+                CERT_RENEWALS.labels("failed").inc();
+                nextDelayMs = backoff.delayForAttempt(failures);
+                LOG.warn("⚠ Certificate renewal failed ({}); retrying in {}ms", e.getMessage(), nextDelayMs);
+                // createCsr() (inside renewOnce, below) generates a fresh key pair and overwrites the
+                // in-memory one immediately — if the RPC then fails, that new key no longer matches the
+                // still-valid certificate on disk. Reloading restores the last-known-good pair from
+                // disk; nothing on disk was touched (store() never ran), and the existing certificate
+                // remains valid until its actual expiry, which the renewal window exists to leave time
+                // for.
+                credentials.load();
+            } finally {
+                if (!scheduler.isShutdown()) {
+                    scheduler.schedule(this::tick, nextDelayMs, TimeUnit.MILLISECONDS);
+                }
+            }
+        }
+
+        private void renewOnce() {
+            // The stub is obtained BEFORE createCsr() below, not after — deliberately. A channel is
+            // built (or reused) using whatever credentials.certificate()/privateKey() return AT THAT
+            // MOMENT; createCsr() immediately overwrites the in-memory key pair, so building the
+            // channel afterward would bake in the OLD certificate paired with the NEW key — a mismatch
+            // that fails the TLS handshake outright. Capturing the stub first means the channel (if not
+            // already warm from an earlier heartbeat, as is normally the case) is built from the
+            // still-consistent, still-valid pair the renewal request is authenticated by anyway, per
+            // RenewRequest's own contract ("authenticated by the CURRENT client certificate").
+            var stub = connection.enrollmentBlockingStub();
+            String csrPem = credentials.createCsr(nodeId);
+            EnrollResponse response = stub.renewCertificate(RenewRequest.newBuilder()
+                    .setNodeId(nodeId)
+                    .setCsrPem(ByteString.copyFromUtf8(csrPem))
+                    .build());
+
+            if (response.getResult() != EnrollmentResult.ENROLLMENT_RESULT_ISSUED) {
+                throw new IllegalStateException("Renewal was rejected: " + response.getResult()
+                        + (response.getMessage().isEmpty() ? "" : " — " + response.getMessage()));
+            }
+
+            credentials.store(response.getClientCertificatePem().toStringUtf8(),
+                    response.getCaCertificatePem().toStringUtf8());
+            // The channel just used above (and any other already-open one to this same endpoint, e.g.
+            // the heartbeat loop's) still presents the OLD certificate the server just revoked as part
+            // of issuing this new one — TLS client auth is per-handshake, not re-checked per-RPC.
+            // Discarding it here is what makes the NEXT RPC on this connection (a heartbeat, the next
+            // renewal check) rebuild fresh and actually present the certificate just stored above.
+            connection.invalidateCurrentChannel();
+            CERT_RENEWALS.labels("renewed").inc();
+            LOG.info("🔐 Renewed node certificate (serial {}, valid until {})",
+                    response.getCertificateSerial(), Instant.ofEpochMilli(response.getNotAfterEpochMillis()));
         }
     }
 

@@ -641,7 +641,8 @@ than failing startup.
 | `NEXTGEN_PKI_DIR` | `~/.nextgen/pki` | CA and server key material. **Put this on a volume** — a new CA invalidates every enrolled node. |
 | `ENROLL_RATE_PER_IP_BURST` | `5` | Enrolment attempts allowed per source in a burst |
 | `ENROLL_RATE_GLOBAL_BURST` | `50` | Cluster-wide enrolment burst |
-| `CERT_RENEW_WINDOW_MINUTES` | `10080` (7 days) | Agent-side: if the stored certificate is within this window of expiry **at process startup**, the node re-enrols before connecting. This is checked once at startup, not on a timer — see the limitation below. |
+| `CERT_RENEW_WINDOW_MINUTES` | `10080` (7 days) | Agent-side: if the stored certificate is within this window of expiry, the node renews it — checked once at process startup (before connecting) **and** periodically thereafter by a background loop, so a long-lived node renews on its own without a restart. |
+| `CERT_RENEWAL_CHECK_INTERVAL_MS` | `3600000` (1 hour) | How often the background renewal check runs after startup. |
 
 ### Connectivity (both roles)
 
@@ -842,13 +843,15 @@ java -jar control-plane-1.0-SNAPSHOT-all.jar
 Once every node has enrolled, set `ENROLLMENT_ENABLED=false` and restart the control plane to close
 the only anonymous endpoint. See `docs/ARCHITECTURE.md` for the full connectivity and trust model.
 
-> **Named limitation: certificate renewal is checked at startup, not on a timer.** A node checks
-> whether its certificate needs renewing once, when the process starts. A node left running
-> continuously for longer than the certificate lifetime (30 days by default) will have its
-> certificate expire mid-run and lose connectivity, since nothing re-checks or re-enrols while the
-> heartbeat loop is already going. Restarting the agent triggers the check again and it will renew
-> automatically at that point. Renewing on a running timer, without a restart, is not yet
-> implemented.
+> **Certificate renewal runs on a timer, not just at startup.** A node checks whether its certificate
+> needs renewing once at process start, and then periodically thereafter (`CERT_RENEWAL_CHECK_INTERVAL_MS`,
+> hourly by default) via a background loop — `NodeAgent.CertificateRenewalLoop` — so a node left running
+> continuously for longer than the certificate lifetime (30 days by default) renews itself without a
+> restart. The renewal RPC is authenticated by the node's own current certificate over mTLS, no token
+> involved; on success the old certificate is revoked server-side and the connection's cached channel is
+> discarded so the next RPC picks up the new one. A failed renewal attempt (e.g. the control plane is
+> briefly unreachable) leaves the still-valid existing certificate untouched and retries with backoff —
+> see `CertificateRenewalLoopTest` for the exact guarantees.
 
 ---
 
