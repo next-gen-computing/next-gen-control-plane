@@ -62,6 +62,9 @@ pki/
 # Machine/data-derived artifacts, not source — regenerate locally via train_risk_model.py.
 python-predictor/model/
 .pytest_cache/
+# Generated --external JSONL training examples produced by the import_*.py scripts — real but
+# regenerable from the (also-gitignored) datasets/ sources; not this project's data to redistribute.
+python-predictor/*_risk_examples*.jsonl
 # User-supplied local cluster-trace files for import_external_trace.py — never downloaded by this repo,
 # never committed (potentially large, and not this project's data to redistribute).
 data/external_traces/
