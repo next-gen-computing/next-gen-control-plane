@@ -1,5 +1,6 @@
 package com.nextgen.desktop.ui.profile;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nextgen.controlplane.EnvConfig;
 import org.slf4j.Logger;
@@ -17,10 +18,15 @@ import java.util.Optional;
  * "one plain file under {@code ~/.nextgen}" idiom {@code AgentCredentials} already uses for node
  * certificates, just for onboarding state instead of PKI material. Never throws: a missing or
  * corrupt file just means "no remembered setup," the same as a first-ever launch.
+ *
+ * <p>Unknown fields are ignored rather than rejected — a profile written by an older build of this
+ * class (e.g. a since-renamed or since-removed field) must still load using whatever fields the
+ * current schema does recognize, not be discarded wholesale as if the file were corrupt.
  */
 public class DesktopProfileStore {
     private static final Logger LOG = LoggerFactory.getLogger(DesktopProfileStore.class);
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     private final Path file;
 

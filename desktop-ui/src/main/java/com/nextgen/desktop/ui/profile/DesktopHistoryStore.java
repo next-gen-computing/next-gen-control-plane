@@ -1,6 +1,7 @@
 package com.nextgen.desktop.ui.profile;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nextgen.controlplane.EnvConfig;
 import org.slf4j.Logger;
@@ -26,7 +27,8 @@ import java.util.Map;
  */
 public class DesktopHistoryStore {
     private static final Logger LOG = LoggerFactory.getLogger(DesktopHistoryStore.class);
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     private static final int MAX_ENTRIES = 300;
 
     private final Path file;
