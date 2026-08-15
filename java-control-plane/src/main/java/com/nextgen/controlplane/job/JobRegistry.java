@@ -36,6 +36,15 @@ public final class JobRegistry {
         return record;
     }
 
+    /** Stage PP: same as {@link #createJob} but records which job this one's rolling update replaced —
+     * see {@link JobRecord#getSupersedesJobId()}. */
+    public JobRecord createUpdateJob(String jobId, TaskKindDomain kind, List<String> taskIds,
+                                     String supersedesJobId) {
+        JobRecord record = JobRecord.runningUpdate(jobId, kind, taskIds, supersedesJobId, clock.getAsLong());
+        jobs.put(jobId, record);
+        return record;
+    }
+
     /** Records that {@code taskId}'s one reactive retry has now been used. */
     public Optional<JobRecord> markTaskRetried(String jobId, String taskId) {
         JobRecord[] updated = new JobRecord[1];

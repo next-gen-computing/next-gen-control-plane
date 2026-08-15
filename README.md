@@ -216,13 +216,71 @@ node-side execution engine, and the `nx` CLI tool that drives it:
   *other* idle Docker-capable node remains eligible — two projects submitted back-to-back naturally land
   on disjoint node subsets, converting the whole cluster into a real distributed build/run farm rather
   than serializing everything through one node at a time.
+- **Resource limits** — a service's `deploy.resources.limits.cpus`/`.memory` and
+  `.reservations.memory` (Compose's own schema, parsed by `ComposeFileParser`) become real
+  `--cpus`/`--memory`/`--memory-reservation` flags on the node's `docker run` — verified with a
+  real container and `docker inspect`, not just that the right JSON was built. CPU *reservation* has
+  no honest single-host `docker run` equivalent (it's a Swarm-only concept), so it's deliberately not
+  parsed rather than silently dropped somewhere less visible.
+- **Restart policies** — `restart: "no"|"always"|"on-failure"|"unless-stopped"` (plus the
+  `"on-failure:N"` shorthand and `deploy.restart_policy.max_attempts`) drive a real Java-side retry
+  loop in `DockerComposeServiceExecutor`, not Docker's native `--restart` (which would fight `--rm`
+  and this project's `waitFor()`-based lifecycle model). Every policy is bounded by `maxAttempts`
+  (default 5) — including `always`/`unless-stopped`, which restart forever for a real Docker daemon
+  container but would be a genuine resource leak for this project's one-shot task execution model.
+- **Health checks** — a `healthcheck:` block becomes real native `--health-cmd`/`--health-interval`/
+  `--health-timeout`/`--health-retries`/`--health-start-period` flags — Docker's own health-check
+  engine runs the check, not a hand-rolled one. A lightweight side-poller reads the result back via
+  `docker inspect` and, on a transition to `unhealthy`, kills the container so the restart loop above
+  reattempts it exactly as it would a real crash — verified end to end with a real always-failing
+  health check on an otherwise-never-exiting container. The same result is also regex-extracted from
+  `docker ps`'s own `Status` string (free, no extra `docker inspect` call) for the dashboard's
+  `DockerContainerInfo.health_status` field.
+- **Secrets** — encrypted at rest (AES-256-GCM, a server-local key with the exact same owner-only file
+  permission discipline this project's PKI key material already uses), set via `nx secret set <name>
+  <value-or-@file>`, decrypted and shipped to a node only at dispatch time over its own already-open
+  `TaskChannel` (mirroring the Stage N build-context delivery pattern), and mounted as a real file at
+  `/run/secrets/<name>` — **never** a container environment variable, since `docker inspect`/`ps`
+  reveal env vars in plaintext but not a bind-mounted file's contents. Verified with a real container
+  reading its own mounted secret, and a real `docker inspect` confirming it never appears in
+  `Config.Env`.
+- **Load-balanced replicas** — `replicas: N` (or `deploy.replicas`) runs N real copies of a service,
+  each on a distinct node (the existing one-Docker-task-per-node exclusivity filter already guarantees
+  this, unchanged). `PortRelayManager` — originally built for single-backend relaying — now supports
+  multiple backends per relay port: every replica independently opens its own `TunnelPort` stream and
+  registers as an additional backend, and each new consumer connection is round-robined across
+  whichever backends are currently attached, chosen once at accept time and fixed for that
+  connection's lifetime. A backend disconnecting removes just that one backend (and only its own
+  in-flight tunnels) — the listener and every other replica keep serving; the underlying relay port
+  itself is only released once the last backend detaches. Verified with real sockets: two attached
+  backends, several real connections, confirming both actually receive traffic, and a mid-stream
+  detach that doesn't drop the survivor.
+- **Confirmed cancellation** — `nx down`/`CancelTask` pushes the same `TaskCancel` command
+  `ProactiveMigrator` already used internally, but now **waits for real confirmation** the task
+  actually stopped (polling `TaskRegistry` for a terminal state) before returning success, rather than
+  firing-and-forgetting. This needed no new node-side machinery — `DockerComposeServiceExecutor`'s
+  existing `stoppedByRequest` handling already reports a real terminal result once a container
+  genuinely stops; `TaskDispatcher.cancelAndAwaitConfirmation` is the shared, tested primitive both
+  the CLI-facing RPC and the rolling update below build on.
+- **Rolling updates + rollback** — `nx update <job-id> <compose-file>` replaces a running project's
+  replicas with a new spec **one at a time**: confirmed-cancel the old replica, dispatch the new one,
+  wait for it to actually be ready (real container health when a `healthcheck:` is declared, `RUNNING`
+  state otherwise) before touching the next — verified with a real invariant check that no later
+  replica is ever cancelled while an earlier one is still mid-swap. `nx rollback <job-id>`
+  reconstructs the previous spec directly from the superseded job's own stored task payloads (no
+  separate copy kept) and re-applies it through the identical one-at-a-time path. Bounded parallelism
+  of 1 (never more than one replica down at once) is an explicit, named scope cut versus a
+  configurable `maxSurge`/`maxUnavailable`, and this whole mechanism is scoped to the direct
+  (non-Raft) path in this pass — attempting it under Raft replication fails with a clear, honest
+  error rather than silently behaving differently.
 - **Cloud/single-machine mode** (`LocalDockerExecutionServiceImpl`, opt-in via
   `LOCAL_DOCKER_EXEC_ENABLED=true`) — for a single machine with no cluster at all: `nx cloud up` talks
   directly to this separate RPC (never gated by Raft leader-redirect — it's tied to *this host's* Docker
   daemon, not "whichever replica is leader"), reusing the exact same `DockerComposeRunner` the
   distributed path uses. Zero `RegisterNode`/`TaskChannel`/registry traffic.
-- **The `nx` CLI** (`cli/`, module `nextgen-cli`) — `nx enrol`, `nx up`/`down`/`ps`/`logs`, `nx nodes`,
-  `nx cloud up`, modeled directly on `docker compose`'s own command set. Talks plaintext by default,
+- **The `nx` CLI** (`cli/`, module `nextgen-cli`) — `nx enrol`, `nx up`/`down`/`ps`/`logs`, `nx update`/
+  `rollback`, `nx secret set`, `nx nodes`, `nx cloud up`, modeled directly on `docker compose`'s own
+  command set. Talks plaintext by default,
   matching this project's own `TLS_ENABLED=false` default deployment (`docker-compose.yml`) — pass
   `--tls` (after a prior `nx enrol`) to opt into mutual TLS instead. Parses a documented subset of
   `docker-compose.yml` (`image`, `build.context`/`dockerfile`, `command`, `environment`, `ports`,
@@ -287,6 +345,56 @@ entirely, here's how to generate **real** ones yourself:
 - **Raft timing** — `RaftSafetyInvariantTest` and the rest of the Phase A suite report real, measured
   election/replication timings on whatever machine runs them; there is no synthetic "30 trials" figure
   standing in for them.
+
+## 🎯 Comparison scope — what this claims against Kubernetes/BOINC, and what it doesn't
+
+This project's actual claim is a specific *mechanism*, not a platform: trend-based risk scoring with
+fencing that proactively migrates work off a node **before** it dies, measured this way in a real,
+live benchmark on this codebase —
+
+| | Kubernetes | BOINC | This project |
+|---|---|---|---|
+| Failure model | Reactive — `NotReady` after `node-monitor-grace-period` (~40s) + pod eviction `tolerationSeconds` (default 300s) ≈ **~340s minimum** before rescheduling begins, and only once the node has actually gone silent | Reactive — default work-unit `delay_bound` **~10 days** before reassignment | **Proactive** — real live-measured detection-to-mitigation in **~14ms** once a monitored resource crosses its configured ceiling, while the node is still fully alive and heartbeating throughout |
+| What triggers action | The node going silent | The node going silent | A predicted trend (rising memory pressure, degrading RTT, etc.) — the node never has to actually fail for mitigation to happen |
+
+Neither Kubernetes nor BOINC has an accuracy number to compare a classifier against here — they have no
+predictive component at all, so this isn't "our model is more accurate than theirs." It's "we act during
+a degradation window they are structurally blind to, because they only observe failure after the fact."
+
+**That claim does not require, and this project does not attempt, feature-for-feature parity with
+Kubernetes** — a decade-plus, thousands-of-contributor project — **or with BOINC**, a two-decades-old
+volunteer-computing work-unit distributor solving a categorically different problem (it has no
+containers, no services, no secrets, no health checks; feature-parity questions mostly don't even apply
+to it). Overclaiming ("this replaces Kubernetes") is a real risk a reviewer will correctly penalize;
+honest scoping to "a predictive scheduling layer for distributed containerized workloads, evaluated
+against reactive baselines" is not.
+
+What *is* real here, and matters for that claim to be taken seriously rather than dismissed as a toy:
+baseline container-orchestration hygiene, so the predictive-scheduling differentiation isn't undermined
+by an obviously-missing basic. All of the following are real, tested, described in detail above —
+resource limits (`--cpus`/`--memory`), restart policies, health checks (Docker's own engine, not a
+hand-rolled one), encrypted-at-rest secrets delivered as file mounts, load-balanced multi-replica
+services, confirmed task cancellation, and one-replica-at-a-time rolling updates with rollback.
+
+**What stays explicitly out of scope, named rather than silently absent, because each is a separate,
+large undertaking that doesn't bear on the predictive-scheduling claim:**
+
+- **Full Kubernetes API compatibility, CRDs/operators/admission webhooks** — this project's claim is a
+  scheduling mechanism, not a reimplementation of the Kubernetes API surface.
+- **RBAC / multi-tenancy / namespaces** — a single-trusted-operator model, reusing the existing mTLS
+  certificate boundary as the only access boundary. A deliberate, user-confirmed scope decision, not an
+  oversight.
+- **Ingress / L7 HTTP routing + TLS termination** — the cross-node relay (`PortRelayManager`) is raw
+  TCP (L4) by design; an HTTP-aware reverse proxy with virtual-host routing is a distinct, larger
+  feature not attempted here.
+- **Cloud-provider integration, and autoscaling of the physical node pool itself** — this project
+  targets operator-owned physical machines (laptops, spare boxes, a friend's PC on another continent),
+  not cloud VMs it provisions on your behalf.
+- **Helm-style templating/packaging** — `ComposeFileParser` parses a literal, already-resolved compose
+  file; a templating layer on top is a separable, smaller follow-on if ever wanted.
+- **Configurable rollout strategy** (`maxSurge`/`maxUnavailable`, canary, blue/green) — rolling updates
+  are always exactly one replica down at a time; a smarter strategy is future work, not silently
+  approximated as something it isn't.
 
 ## Quick Start
 

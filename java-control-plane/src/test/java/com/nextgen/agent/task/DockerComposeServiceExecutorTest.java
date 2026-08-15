@@ -106,6 +106,211 @@ class DockerComposeServiceExecutorTest {
         }
     }
 
+    /** Stage KK: real Docker, real limit — proves the flags built in {@code buildRunArgs} actually reach
+     * the container, not just that the right JSON shape was constructed. */
+    @Test
+    void executeAppliesRealCpuAndMemoryLimits() throws Exception {
+        DockerComposeServiceExecutor executor = new DockerComposeServiceExecutor();
+        String taskId = UUID.randomUUID().toString();
+        String containerNamePrefix = "nx-nxtest-limited-" + taskId.substring(0, 8);
+        String payload = MAPPER.createObjectNode()
+                .put("project_name", "nxtest")
+                .put("service_name", "limited")
+                .put("image", "busybox")
+                .put("command", "sleep 20")
+                .set("resources", MAPPER.createObjectNode()
+                        .put("cpuLimit", "1.5")
+                        .put("memoryLimit", "134217728")) // 128MB, in bytes so docker inspect's numeric
+                                                            // field is directly comparable without parsing
+                                                            // a unit suffix back out.
+                .toString();
+
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try {
+            Future<String> future = pool.submit(() -> executor.execute(taskId, payload, NO_OP_SINK));
+            Thread.sleep(2000);
+
+            Process inspect = new ProcessBuilder("docker", "inspect", "--format",
+                    "{{.HostConfig.NanoCpus}} {{.HostConfig.Memory}}", containerNamePrefix)
+                    .redirectErrorStream(true).start();
+            String inspectOutput;
+            try (var reader = inspect.inputReader()) {
+                inspectOutput = reader.readLine();
+            }
+            assertTrue(inspect.waitFor(10, TimeUnit.SECONDS), "docker inspect timed out");
+            assertTrue(inspectOutput != null && inspectOutput.contains("1500000000"),
+                    "expected NanoCpus for 1.5 CPUs (1500000000), got: " + inspectOutput);
+            assertTrue(inspectOutput.contains("134217728"),
+                    "expected Memory limit of 134217728 bytes, got: " + inspectOutput);
+
+            executor.cancel(taskId);
+            future.get(20, TimeUnit.SECONDS);
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+    /** Stage LL: {@code restart: "no"} (the default) — a real crashing container fails immediately,
+     * zero restarts, matching pre-Stage-LL behavior exactly. */
+    @Test
+    void policyNoFailsImmediatelyWithoutRestarting() {
+        DockerComposeServiceExecutor executor = new DockerComposeServiceExecutor();
+        String payload = MAPPER.createObjectNode()
+                .put("project_name", "nxtest")
+                .put("service_name", "crasher")
+                .put("image", "busybox")
+                .put("command", "sh -c \"exit 1\"")
+                .toString();
+
+        Exception e = assertThrows(RuntimeException.class,
+                () -> executor.execute(UUID.randomUUID().toString(), payload, NO_OP_SINK));
+        assertTrue(e.getMessage().contains("after 0 restart(s)"), e.getMessage());
+    }
+
+    /** Stage LL: {@code restart: "on-failure:2"} against a container that always exits 1 — restarts
+     * exactly up to the cap, then fails honestly rather than looping forever. */
+    @Test
+    void onFailurePolicyRestartsUpToMaxAttemptsThenFails() {
+        DockerComposeServiceExecutor executor = new DockerComposeServiceExecutor();
+        String payload = MAPPER.createObjectNode()
+                .put("project_name", "nxtest")
+                .put("service_name", "alwaysfails")
+                .put("image", "busybox")
+                .put("command", "sh -c \"exit 1\"")
+                .set("restart", MAPPER.createObjectNode().put("policy", "on-failure").put("maxAttempts", 2))
+                .toString();
+
+        Exception e = assertThrows(RuntimeException.class,
+                () -> executor.execute(UUID.randomUUID().toString(), payload, NO_OP_SINK));
+        assertTrue(e.getMessage().contains("after 2 restart(s)"), e.getMessage());
+    }
+
+    /** Stage LL: {@code restart: "always"} restarts even a cleanly-exiting container — real Docker
+     * semantics for a long-lived daemon, bounded here by {@code maxAttempts} since this is one-shot task
+     * execution, not a daemon. Proves the task ends up {@code COMPLETED} (no exception), not
+     * {@code FAILED}, once the cap is hit on a policy that isn't {@code on-failure}. */
+    @Test
+    void alwaysPolicyKeepsRestartingAfterACleanExitUntilTheCap() throws Exception {
+        DockerComposeServiceExecutor executor = new DockerComposeServiceExecutor();
+        String payload = MAPPER.createObjectNode()
+                .put("project_name", "nxtest")
+                .put("service_name", "alwaysexits0")
+                .put("image", "busybox")
+                .put("command", "sh -c \"exit 0\"")
+                .set("restart", MAPPER.createObjectNode().put("policy", "always").put("maxAttempts", 2))
+                .toString();
+
+        String resultJson = executor.execute(UUID.randomUUID().toString(), payload, NO_OP_SINK);
+
+        JsonNode result = MAPPER.readTree(resultJson);
+        assertEquals(0, result.get("exit_code").asInt());
+        assertFalse(result.get("stopped_by_request").asBoolean());
+        assertEquals(2, result.get("restart_count").asInt());
+    }
+
+    /** Stage MM end-to-end: a real {@code healthCheck} that always fails, on a container that would
+     * otherwise run forever ({@code sleep 300}) — the ONLY way this task ever terminates is the health
+     * poller detecting real "unhealthy" via {@code docker inspect} and killing the container, which then
+     * flows through the exact same Stage LL restart-loop machinery as a real crash. Proves the health
+     * flags reached the real {@code docker run} AND that an unhealthy container gets killed and retried,
+     * not just left running and ignored. */
+    @Test
+    void anAlwaysUnhealthyContainerGetsKilledAndRetriedByTheRestartLoop() throws Exception {
+        DockerComposeServiceExecutor executor = new DockerComposeServiceExecutor();
+        String payload = MAPPER.createObjectNode()
+                .put("project_name", "nxtest")
+                .put("service_name", "unhealthy")
+                .put("image", "busybox")
+                .put("command", "sleep 300")
+                .set("healthCheck", MAPPER.createObjectNode()
+                        .put("command", "exit 1")
+                        .put("intervalSeconds", 1)
+                        .put("retries", 1))
+                .toString();
+        com.fasterxml.jackson.databind.node.ObjectNode payloadNode =
+                (com.fasterxml.jackson.databind.node.ObjectNode) MAPPER.readTree(payload);
+        payloadNode.set("restart", MAPPER.createObjectNode().put("policy", "on-failure").put("maxAttempts", 1));
+
+        long start = System.currentTimeMillis();
+        Exception e = assertThrows(RuntimeException.class,
+                () -> executor.execute(UUID.randomUUID().toString(), payloadNode.toString(), NO_OP_SINK));
+        assertTrue(e.getMessage().contains("after 1 restart(s)"), e.getMessage());
+        assertTrue(System.currentTimeMillis() - start < 60_000,
+                "should fail well within the health-check + restart-backoff window, not hang");
+    }
+
+    /** Stage NN end-to-end: a real secret, pre-populated in a {@link NodeSecretStore} exactly as
+     * {@link TaskChannelClient} would have buffered it after a real {@code SecretMaterial} message,
+     * must actually be readable from {@code /run/secrets/<name>} inside the container, AND must never
+     * appear in {@code docker inspect}'s {@code Config.Env} — the whole reason it's a file mount and not
+     * an environment variable. */
+    @Test
+    void aSecretIsMountedAsAFileAndNeverAppearsAsAnEnvVar() throws Exception {
+        NodeSecretStore nodeSecretStore = new NodeSecretStore();
+        String secretValue = "sup3r-s3cr3t-" + UUID.randomUUID();
+        nodeSecretStore.put("db-password", secretValue.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        DockerComposeServiceExecutor executor =
+                new DockerComposeServiceExecutor(new NodeBuildContextStore(), null, nodeSecretStore);
+        String taskId = UUID.randomUUID().toString();
+        String payload = MAPPER.createObjectNode()
+                .put("project_name", "nxtest")
+                .put("service_name", "secretreader")
+                .put("image", "busybox")
+                .put("command", "cat /run/secrets/db-password")
+                .set("secrets", MAPPER.createArrayNode().add("db-password"))
+                .toString();
+
+        StringBuilder capturedOutput = new StringBuilder();
+        String resultJson = executor.execute(taskId, payload,
+                (line, stderr) -> capturedOutput.append(line).append('\n'));
+
+        JsonNode result = MAPPER.readTree(resultJson);
+        assertEquals(0, result.get("exit_code").asInt());
+        assertTrue(capturedOutput.toString().contains(secretValue),
+                "container must have actually read the real secret from /run/secrets/db-password");
+    }
+
+    /** Companion to the test above: proves the negative directly against a REAL running container's
+     * {@code docker inspect} output, rather than only checking this process's own args construction. */
+    @Test
+    void aSecretNeverAppearsInDockerInspectsEnvOnARunningContainer() throws Exception {
+        NodeSecretStore nodeSecretStore = new NodeSecretStore();
+        String secretValue = "sup3r-s3cr3t-" + UUID.randomUUID();
+        nodeSecretStore.put("api-key", secretValue.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        DockerComposeServiceExecutor executor =
+                new DockerComposeServiceExecutor(new NodeBuildContextStore(), null, nodeSecretStore);
+        String taskId = UUID.randomUUID().toString();
+        String containerName = "nx-nxtest-secretlive-" + taskId.substring(0, 8);
+        String payload = MAPPER.createObjectNode()
+                .put("project_name", "nxtest")
+                .put("service_name", "secretlive")
+                .put("image", "busybox")
+                .put("command", "sleep 20")
+                .set("secrets", MAPPER.createArrayNode().add("api-key"))
+                .toString();
+
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try {
+            Future<String> future = pool.submit(() -> executor.execute(taskId, payload, NO_OP_SINK));
+            Thread.sleep(2000);
+
+            Process inspect = new ProcessBuilder("docker", "inspect", "--format", "{{.Config.Env}}",
+                    containerName).redirectErrorStream(true).start();
+            String inspectOutput;
+            try (var reader = inspect.inputReader()) {
+                inspectOutput = reader.readLine();
+            }
+            inspect.waitFor(10, TimeUnit.SECONDS);
+            assertTrue(inspectOutput != null && !inspectOutput.contains(secretValue),
+                    "secret value must never appear in docker inspect's Config.Env; got: " + inspectOutput);
+
+            executor.cancel(taskId);
+            future.get(20, TimeUnit.SECONDS);
+        } finally {
+            pool.shutdown();
+        }
+    }
+
     /**
      * Stage N end-to-end: a real build context (a tiny Dockerfile, tar.gz'd via the actual {@code tar}
      * binary — the same tool {@link DockerComposeServiceExecutor} itself shells out to for extraction)

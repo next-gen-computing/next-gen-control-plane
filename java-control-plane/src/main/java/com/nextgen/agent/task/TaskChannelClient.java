@@ -71,6 +71,7 @@ public final class TaskChannelClient {
     private final Object writeLock = new Object();
 
     private final NodeBuildContextStore buildContextStore;
+    private final NodeSecretStore secretStore;
 
     public TaskChannelClient(ControlPlaneConnection connection, String nodeId,
                              Map<TaskKindDomain, TaskExecutor> executors, BackoffPolicy backoff) {
@@ -83,16 +84,31 @@ public final class TaskChannelClient {
     public TaskChannelClient(ControlPlaneConnection connection, String nodeId,
                              Map<TaskKindDomain, TaskExecutor> executors, BackoffPolicy backoff,
                              NodeBuildContextStore buildContextStore) {
+        this(connection, nodeId, executors, backoff, buildContextStore, new NodeSecretStore());
+    }
+
+    /** @param secretStore Stage NN: receives {@code SecretMaterial} traffic — see its own Javadoc.
+     * Injectable for tests, same discipline as {@code buildContextStore}. */
+    public TaskChannelClient(ControlPlaneConnection connection, String nodeId,
+                             Map<TaskKindDomain, TaskExecutor> executors, BackoffPolicy backoff,
+                             NodeBuildContextStore buildContextStore, NodeSecretStore secretStore) {
         this.connection = connection;
         this.nodeId = nodeId;
         this.executors = executors;
         this.backoff = backoff;
         this.buildContextStore = buildContextStore;
+        this.secretStore = secretStore;
         this.taskExecutorPool = Executors.newCachedThreadPool(r -> {
             Thread t = new Thread(r, "task-executor");
             t.setDaemon(true);
             return t;
         });
+    }
+
+    /** Exposed so {@code NodeAgent} can hand the SAME instance to the {@link DockerComposeServiceExecutor}
+     * it wires up — this class only ever writes into the store; the executor is what reads/consumes. */
+    public NodeSecretStore secretStore() {
+        return secretStore;
     }
 
     public void start() {
@@ -216,6 +232,10 @@ public final class TaskChannelClient {
                     LOG.warn("⚠ Failed buffering build context chunk for '{}': {}",
                             chunk.getContextId(), e.getMessage());
                 }
+            }
+            case SECRET_MATERIAL -> {
+                var material = command.getSecretMaterial();
+                secretStore.put(material.getName(), material.getValue().toByteArray());
             }
             default -> { /* COMMAND_NOT_SET */ }
         }

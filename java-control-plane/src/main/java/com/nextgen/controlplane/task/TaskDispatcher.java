@@ -12,6 +12,9 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.security.GeneralSecurityException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.LongSupplier;
 
@@ -42,6 +45,9 @@ public final class TaskDispatcher {
      * {@code build.context_id} fails honestly rather than silently sending a {@code TaskDispatch} the
      * node can never actually build (see {@link #shipBuildContextIfNeeded}). */
     private final BuildContextStore buildContextStore;
+    /** Null means Stage NN secret shipping is unavailable — a dispatch referencing a {@code secrets}
+     * name fails honestly (see {@link #shipSecrets}), same discipline as {@code buildContextStore}. */
+    private final SecretStore secretStore;
 
     public TaskDispatcher(TaskRegistry taskRegistry, NodeTaskChannelRegistry channelRegistry) {
         this(taskRegistry, channelRegistry, System::currentTimeMillis);
@@ -58,11 +64,18 @@ public final class TaskDispatcher {
 
     public TaskDispatcher(TaskRegistry taskRegistry, NodeTaskChannelRegistry channelRegistry,
                           LongSupplier clock, ControlPlaneWriter writer, BuildContextStore buildContextStore) {
+        this(taskRegistry, channelRegistry, clock, writer, buildContextStore, null);
+    }
+
+    public TaskDispatcher(TaskRegistry taskRegistry, NodeTaskChannelRegistry channelRegistry,
+                          LongSupplier clock, ControlPlaneWriter writer, BuildContextStore buildContextStore,
+                          SecretStore secretStore) {
         this.taskRegistry = taskRegistry;
         this.channelRegistry = channelRegistry;
         this.clock = clock;
         this.writer = writer;
         this.buildContextStore = buildContextStore;
+        this.secretStore = secretStore;
     }
 
     /**
@@ -108,6 +121,10 @@ public final class TaskDispatcher {
             return false;
         }
 
+        if (!shipSecrets(outbound, extractSecretNames(dispatched.get().getPayloadJson()), taskId, nodeId)) {
+            return false;
+        }
+
         ControlPlaneProto.TaskDispatch payload = ControlPlaneProto.TaskDispatch.newBuilder()
                 .setTaskId(taskId)
                 .setJobId(dispatched.get().getJobId())
@@ -127,6 +144,68 @@ public final class TaskDispatcher {
             failDispatch(taskId, nodeId, "FAILED — task channel write failed: " + e.getMessage());
             return false;
         }
+    }
+
+    private static final long DEFAULT_CANCEL_TIMEOUT_MS = 20_000;
+    private static final long CANCEL_POLL_INTERVAL_MS = 100;
+
+    public record CancelOutcome(boolean accepted, String message) { }
+
+    /** Stage U: a real, CONFIRMED cancel — pushes the same {@code TaskCancel} command {@code
+     * ProactiveMigrator}'s best-effort push already uses, then blocks (bounded) until the task actually
+     * reaches a terminal state, rather than returning as soon as the command was merely sent. Shared by
+     * {@code ControlPlaneServiceImpl.cancelTask} (the client-invocable RPC {@code nx down} calls) and
+     * {@code JobCoordinator.updateJob} (Stage PP's rolling update, which needs the exact same
+     * "confirmed-stopped" guarantee before it's safe to dispatch a replacement replica). */
+    public CancelOutcome cancelAndAwaitConfirmation(String taskId, String reason) {
+        return cancelAndAwaitConfirmation(taskId, reason, DEFAULT_CANCEL_TIMEOUT_MS);
+    }
+
+    public CancelOutcome cancelAndAwaitConfirmation(String taskId, String reason, long timeoutMs) {
+        Optional<TaskRecord> taskOpt = taskRegistry.get(taskId);
+        if (taskOpt.isEmpty()) {
+            return new CancelOutcome(false, "no such task '" + taskId + "'");
+        }
+        TaskRecord task = taskOpt.get();
+        if (isTerminal(task.getState())) {
+            return new CancelOutcome(false,
+                    "task '" + taskId + "' is already " + task.getState() + " — nothing to cancel");
+        }
+        String nodeId = task.getAssignedNodeId();
+        Optional<StreamObserver<ControlPlaneProto.ServerTaskCommand>> outbound =
+                nodeId.isBlank() ? Optional.empty() : channelRegistry.get(nodeId);
+        if (outbound.isEmpty()) {
+            return new CancelOutcome(false, "task '" + taskId + "' has no reachable node to cancel on");
+        }
+        try {
+            outbound.get().onNext(ControlPlaneProto.ServerTaskCommand.newBuilder()
+                    .setCancel(ControlPlaneProto.TaskCancel.newBuilder()
+                            .setTaskId(taskId)
+                            .setReason(reason == null || reason.isBlank() ? "cancel requested" : reason)
+                            .build())
+                    .build());
+        } catch (RuntimeException e) {
+            return new CancelOutcome(false, "failed to send cancel to node: " + e.getMessage());
+        }
+
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            Optional<TaskRecord> current = taskRegistry.get(taskId);
+            if (current.isEmpty() || isTerminal(current.get().getState())) {
+                return new CancelOutcome(true, "task '" + taskId + "' stopped");
+            }
+            try {
+                Thread.sleep(CANCEL_POLL_INTERVAL_MS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return new CancelOutcome(false, "interrupted while waiting for cancel confirmation");
+            }
+        }
+        return new CancelOutcome(false, "cancel sent but no confirmation within " + timeoutMs + "ms");
+    }
+
+    private static boolean isTerminal(TaskStateDomain state) {
+        return state == TaskStateDomain.COMPLETED || state == TaskStateDomain.FAILED;
     }
 
     /** @return the {@code build.context_id} from a Stage N docker-compose-service spec, or null if this
@@ -191,6 +270,82 @@ public final class TaskDispatcher {
             failDispatch(taskId, nodeId, "FAILED — failed shipping build context: " + e.getMessage());
             return false;
         }
+    }
+
+    /** @return every name in this payload's {@code "secrets"} array, or an empty list if it has none/
+     * isn't that shape. Never throws on malformed JSON — same discipline as
+     * {@link #extractBuildContextId}. */
+    private static List<String> extractSecretNames(String payloadJson) {
+        List<String> names = new ArrayList<>();
+        if (payloadJson == null || payloadJson.isBlank()) {
+            return names;
+        }
+        try {
+            JsonNode secretsNode = MAPPER.readTree(payloadJson).path("secrets");
+            if (secretsNode.isArray()) {
+                secretsNode.forEach(n -> {
+                    String name = n.asText();
+                    if (!name.isBlank()) {
+                        names.add(name);
+                    }
+                });
+            }
+        } catch (IOException ignored) {
+            // Malformed payload JSON is the node executor's problem to fail on, not this method's.
+        }
+        return names;
+    }
+
+    /**
+     * Decrypts and ships each referenced secret down {@code outbound} as a {@code SecretMaterial}
+     * message, immediately BEFORE the caller sends the {@code TaskDispatch} that references it — the
+     * node buffers these in memory, keyed by name, until the executor consumes them building its
+     * {@code docker run} arguments (see {@code NodeSecretStore}). Unchunked: secrets are small, unlike a
+     * build context tarball, so the {@link #shipBuildContext} chunking machinery would be needless here.
+     *
+     * @return true if every referenced secret was fully shipped (or none were referenced); false if a
+     *         referenced secret doesn't exist server-side or shipping failed, in which case the task has
+     *         already been marked FAILED and the caller must not proceed to send the TaskDispatch.
+     */
+    private boolean shipSecrets(StreamObserver<ControlPlaneProto.ServerTaskCommand> outbound,
+                                List<String> secretNames, String taskId, String nodeId) {
+        if (secretNames.isEmpty()) {
+            return true;
+        }
+        if (secretStore == null) {
+            failDispatch(taskId, nodeId, "FAILED — this control plane has no secret store configured");
+            return false;
+        }
+        for (String name : secretNames) {
+            byte[] value;
+            try {
+                Optional<byte[]> found = secretStore.get(name);
+                if (found.isEmpty()) {
+                    failDispatch(taskId, nodeId, "FAILED — secret '" + name + "' was never set (nx secret set)");
+                    return false;
+                }
+                value = found.get();
+            } catch (GeneralSecurityException | IOException e) {
+                LOG.warn("Failed decrypting secret '{}' for task {} to node {}: {}",
+                        name, taskId, nodeId, e.getMessage());
+                failDispatch(taskId, nodeId, "FAILED — could not decrypt secret '" + name + "': " + e.getMessage());
+                return false;
+            }
+            try {
+                outbound.onNext(ControlPlaneProto.ServerTaskCommand.newBuilder()
+                        .setSecretMaterial(ControlPlaneProto.SecretMaterial.newBuilder()
+                                .setName(name)
+                                .setValue(ByteString.copyFrom(value))
+                                .build())
+                        .build());
+            } catch (RuntimeException e) {
+                LOG.warn("Failed shipping secret '{}' for task {} to node {}: {}",
+                        name, taskId, nodeId, e.getMessage());
+                failDispatch(taskId, nodeId, "FAILED — failed shipping secret '" + name + "': " + e.getMessage());
+                return false;
+            }
+        }
+        return true;
     }
 
     private void failDispatch(String taskId, String nodeId, String reason) {

@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -63,10 +64,15 @@ public final class JobCoordinator {
     /** Null (every constructor below except the last two) means "mutate taskRegistry/jobRegistry
      * directly" — today's exact behavior. See {@link ControlPlaneWriter}'s Javadoc. */
     private final ControlPlaneWriter writer;
-    /** Null (every constructor below except the last) disables Stage O peer/relay-port env injection —
-     * a docker-compose job with declared {@code peers} still runs every service, they simply stay
-     * cross-node-unreachable, matching every other optional-capability-off degrade in this project. */
+    /** Null (every constructor below except the last two) disables Stage O peer/relay-port env
+     * injection — a docker-compose job with declared {@code peers} still runs every service, they
+     * simply stay cross-node-unreachable, matching every other optional-capability-off degrade in this
+     * project. */
     private final PortRelayManager portRelayManager;
+    /** Null (every constructor below except the last) means Stage PP's rolling update falls back to
+     * gating each replaced replica on {@code RUNNING} only, never real container health — see
+     * {@link #awaitReplicaReady}. */
+    private final com.nextgen.controlplane.docker.NodeDockerStateRegistry dockerStateRegistry;
 
     public JobCoordinator(TaskRegistry taskRegistry, TaskDispatcher taskDispatcher, JobRegistry jobRegistry,
                           NodeRegistry nodeRegistry, RoundRobinScheduler scheduler) {
@@ -106,6 +112,18 @@ public final class JobCoordinator {
                           NodeRegistry nodeRegistry, RoundRobinScheduler scheduler,
                           NodeCapacityScorer capacityScorer, JobOutcomeLogger jobOutcomeLogger,
                           ControlPlaneWriter writer, PortRelayManager portRelayManager) {
+        this(taskRegistry, taskDispatcher, jobRegistry, nodeRegistry, scheduler, capacityScorer,
+                jobOutcomeLogger, writer, portRelayManager, null);
+    }
+
+    /** @param dockerStateRegistry Stage PP: real per-node Docker container inventory (Stage T) — lets a
+     *                             rolling update gate each replaced replica on real container health
+     *                             (Stage MM) instead of just {@code RUNNING}. Null everywhere else. */
+    public JobCoordinator(TaskRegistry taskRegistry, TaskDispatcher taskDispatcher, JobRegistry jobRegistry,
+                          NodeRegistry nodeRegistry, RoundRobinScheduler scheduler,
+                          NodeCapacityScorer capacityScorer, JobOutcomeLogger jobOutcomeLogger,
+                          ControlPlaneWriter writer, PortRelayManager portRelayManager,
+                          com.nextgen.controlplane.docker.NodeDockerStateRegistry dockerStateRegistry) {
         this.taskRegistry = taskRegistry;
         this.taskDispatcher = taskDispatcher;
         this.jobRegistry = jobRegistry;
@@ -115,6 +133,7 @@ public final class JobCoordinator {
         this.portRelayManager = portRelayManager;
         this.jobOutcomeLogger = jobOutcomeLogger;
         this.writer = writer;
+        this.dockerStateRegistry = dockerStateRegistry;
     }
 
     /**
@@ -244,8 +263,7 @@ public final class JobCoordinator {
             projectName = jobId;
         }
 
-        List<JsonNode> services = new ArrayList<>();
-        servicesNode.forEach(services::add);
+        List<JsonNode> services = flattenServices(servicesNode);
 
         List<NodeRecord> candidates = nodeRegistry.aliveSnapshot().stream()
                 .filter(n -> n.getCapabilities().getDockerAvailable())
@@ -307,17 +325,264 @@ public final class JobCoordinator {
         return jobRegistry.get(jobId).orElseThrow();
     }
 
+    private static final long REPLICA_READY_TIMEOUT_MS = 30_000;
+    private static final long REPLICA_READY_POLL_INTERVAL_MS = 200;
+
+    /**
+     * Stage PP: a rolling update for an already-running {@code DOCKER_COMPOSE_SERVICE} job — replaces
+     * {@code oldJobId}'s replicas with {@code newJobId}'s, ONE AT A TIME: real-confirmed-cancel the old
+     * replica ({@link TaskDispatcher#cancelAndAwaitConfirmation} — the exact guarantee Stage U's
+     * client-invocable {@code CancelTask} RPC gives an operator), THEN dispatch the new replica, THEN
+     * wait for it to be ready ({@link #awaitReplicaReady}) before moving to the next. Bounded
+     * parallelism of 1 (never more than one replica of a service down at once) is an explicit, named
+     * scope cut versus a configurable {@code maxSurge}/{@code maxUnavailable}.
+     *
+     * <p>Old and new replicas are paired positionally within each service NAME (a compose file that
+     * doesn't reorder/rename services between updates — the overwhelmingly common case — pairs up
+     * correctly). A service present only in the new spec is a fresh addition (no old replica to cancel
+     * first); one present only in the old spec is simply left cancelled with nothing replacing it.
+     *
+     * <p>Deliberately scoped to the direct (non-Raft) path only in this pass — seeing this whole
+     * sequential cancel/dispatch/await flow through {@link ControlPlaneWriter}'s "propose the whole
+     * plan atomically once" shape is materially more work than this stage's other pieces and is named
+     * explicitly as follow-on rather than silently unsupported.
+     */
+    public JobRecord updateJob(String newJobId, String oldJobId, String payloadJson) {
+        if (writer != null) {
+            throw new UnsupportedOperationException(
+                    "rolling updates are not yet supported when Raft replication is enabled");
+        }
+        JobRecord oldJob = jobRegistry.get(oldJobId)
+                .orElseThrow(() -> new IllegalArgumentException("no such job to update: '" + oldJobId + "'"));
+        if (oldJob.getKind() != TaskKindDomain.DOCKER_COMPOSE_SERVICE) {
+            throw new IllegalArgumentException("only docker-compose jobs can be rolling-updated");
+        }
+
+        JsonNode payload;
+        try {
+            payload = MAPPER.readTree(payloadJson);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("invalid payload JSON: " + e.getMessage());
+        }
+        JsonNode servicesNode = payload.path("services");
+        if (!servicesNode.isArray() || servicesNode.isEmpty()) {
+            throw new IllegalArgumentException("docker-compose job payload must have a non-empty 'services' array");
+        }
+        String projectName = payload.path("project_name").asText();
+        if (projectName.isBlank()) {
+            projectName = newJobId;
+        }
+
+        List<JsonNode> newServices = flattenServices(servicesNode);
+
+        Map<String, List<String>> oldTaskIdsByService = new LinkedHashMap<>();
+        for (String taskId : oldJob.getTaskIds()) {
+            String serviceName = taskRegistry.get(taskId)
+                    .map(record -> extractServiceName(record.getPayloadJson())).orElse("");
+            oldTaskIdsByService.computeIfAbsent(serviceName, k -> new ArrayList<>()).add(taskId);
+        }
+        Map<String, Integer> consumedByService = new HashMap<>();
+
+        List<String> newTaskIds = new ArrayList<>(newServices.size());
+        List<ObjectNode> resolvedSpecs = new ArrayList<>(newServices.size());
+        for (int i = 0; i < newServices.size(); i++) {
+            newTaskIds.add(newJobId + "-" + i);
+            ObjectNode spec = newServices.get(i).deepCopy();
+            spec.put("project_name", projectName);
+            resolvedSpecs.add(spec);
+        }
+        // Relay PORTS are stable virtual endpoints independent of which specific replica currently
+        // backs them (PortRelayManager's multi-backend support, Stage OO) — reserved for the whole new
+        // topology up front exactly like a fresh submit, even though actual node assignment below
+        // happens one replica at a time. Every entry is "to be placed" at this point in time.
+        injectPeerRelayInfo(projectName, newServices, resolvedSpecs,
+                java.util.Collections.nCopies(newServices.size(), "pending"));
+
+        LOG.info("🔄 Rolling update {} → {} ('{}'): replacing {} replica(s), one at a time",
+                oldJobId, newJobId, projectName, newTaskIds.size());
+
+        for (int i = 0; i < newServices.size(); i++) {
+            String serviceName = newServices.get(i).path("service_name").asText();
+            List<String> oldIds = oldTaskIdsByService.get(serviceName);
+            int consumed = consumedByService.getOrDefault(serviceName, 0);
+            if (oldIds != null && consumed < oldIds.size()) {
+                String oldTaskId = oldIds.get(consumed);
+                consumedByService.put(serviceName, consumed + 1);
+                TaskDispatcher.CancelOutcome cancelOutcome = taskDispatcher.cancelAndAwaitConfirmation(
+                        oldTaskId, "superseded by rolling update " + newJobId);
+                if (!cancelOutcome.accepted()) {
+                    LOG.warn("⚠ Rolling update {}: could not confirm '{}' stopped ({}) — proceeding anyway",
+                            newJobId, oldTaskId, cancelOutcome.message());
+                }
+            }
+
+            // A fresh candidate, picked NOW — after the old replica (if any) has actually freed its
+            // node — never a precomputed snapshot the way submitDockerComposeJob's initial placement is.
+            Optional<NodeRecord> candidate = nodeRegistry.aliveSnapshot().stream()
+                    .filter(n -> n.getCapabilities().getDockerAvailable())
+                    .filter(n -> taskRegistry.tasksOnNode(n.getNodeId()).stream()
+                            .noneMatch(t -> t.getKind() == TaskKindDomain.DOCKER_COMPOSE_SERVICE))
+                    .max(Comparator.comparingDouble(capacityScorer::scoreCapacity));
+
+            String taskId = newTaskIds.get(i);
+            String subPayload = resolvedSpecs.get(i).toString();
+            taskRegistry.createAndQueue(taskId, newJobId, TaskKindDomain.DOCKER_COMPOSE_SERVICE, subPayload);
+
+            if (candidate.isEmpty()) {
+                taskRegistry.markFailed(taskId, "", "FAILED — no eligible idle Docker-capable node available");
+                LOG.warn("⚠ Rolling update {}: no node available for replica '{}' of service '{}'",
+                        newJobId, taskId, serviceName);
+                continue;
+            }
+            String newNodeId = candidate.get().getNodeId();
+            if (!taskDispatcher.dispatch(taskId, newNodeId)) {
+                LOG.warn("⚠ Rolling update {}: dispatch of '{}' to '{}' failed", newJobId, taskId, newNodeId);
+                continue;
+            }
+            if (!awaitReplicaReady(taskId, resolvedSpecs.get(i), newNodeId)) {
+                LOG.warn("⚠ Rolling update {}: replica '{}' did not become ready within {}ms — proceeding "
+                                + "to the next replica anyway",
+                        newJobId, taskId, REPLICA_READY_TIMEOUT_MS);
+            }
+        }
+
+        return jobRegistry.createUpdateJob(newJobId, TaskKindDomain.DOCKER_COMPOSE_SERVICE, newTaskIds, oldJobId);
+    }
+
+    /**
+     * Stage PP: {@code nx rollback} — re-applies {@code currentJobId}'s own {@link
+     * JobRecord#getSupersedesJobId()} job's specs as a NEW update superseding the current one. The
+     * "previous spec" is reconstructed directly from the superseded job's real {@link TaskRecord}
+     * payloads (each one IS a fully-resolved per-service spec already) rather than kept as a separately-
+     * stored copy — bounded to one rollback step by construction, since the superseded job's own
+     * {@code supersedesJobId} is not chased any further back.
+     */
+    public JobRecord rollbackJob(String rollbackJobId, String currentJobId) {
+        JobRecord currentJob = jobRegistry.get(currentJobId)
+                .orElseThrow(() -> new IllegalArgumentException("no such job: '" + currentJobId + "'"));
+        if (currentJob.getSupersedesJobId().isBlank()) {
+            throw new IllegalArgumentException(
+                    "job '" + currentJobId + "' was never a rolling update — nothing to roll back to");
+        }
+        JobRecord supersededJob = jobRegistry.get(currentJob.getSupersedesJobId())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "the job '" + currentJobId + "' superseded ('" + currentJob.getSupersedesJobId()
+                                + "') is no longer known — cannot reconstruct its spec"));
+
+        ArrayNode services = MAPPER.createArrayNode();
+        String projectName = "";
+        for (String taskId : supersededJob.getTaskIds()) {
+            TaskRecord record = taskRegistry.get(taskId)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "superseded job '" + supersededJob.getJobId() + "' references unknown task '"
+                                    + taskId + "'"));
+            JsonNode spec;
+            try {
+                spec = MAPPER.readTree(record.getPayloadJson());
+            } catch (Exception e) {
+                throw new IllegalStateException("unreadable stored spec for task '" + taskId + "'", e);
+            }
+            if (projectName.isBlank()) {
+                projectName = spec.path("project_name").asText();
+            }
+            services.add(spec);
+        }
+        String payloadJson = MAPPER.createObjectNode()
+                .put("project_name", projectName)
+                .set("services", services)
+                .toString();
+
+        return updateJob(rollbackJobId, currentJobId, payloadJson);
+    }
+
+    /** Stage PP: waits for a freshly-dispatched replica to be safe to consider "up" before the rolling
+     * update proceeds to the next one — {@code RUNNING} at minimum (always checked), and additionally
+     * real {@code "healthy"} status (Stage MM/Stage T) when the service declares a {@code healthCheck}
+     * AND this server tracks live Docker observability data for the node — falling back to
+     * RUNNING-only when either isn't available, an honest degrade rather than blocking forever on a
+     * signal that will never arrive. */
+    private boolean awaitReplicaReady(String taskId, ObjectNode spec, String nodeId) {
+        long deadline = System.currentTimeMillis() + REPLICA_READY_TIMEOUT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            Optional<TaskRecord> record = taskRegistry.get(taskId);
+            if (record.isEmpty() || record.get().getState() == TaskStateDomain.FAILED) {
+                return false; // the new replica itself failed to start — nothing to wait for
+            }
+            if (record.get().getState() == TaskStateDomain.COMPLETED) {
+                return true; // a one-shot service that already finished counts as "ready"
+            }
+            if (record.get().getState() == TaskStateDomain.RUNNING) {
+                String healthCommand = spec.path("healthCheck").path("command").asText();
+                if (healthCommand.isBlank() || dockerStateRegistry == null || isContainerHealthy(nodeId, spec, taskId)) {
+                    return true;
+                }
+            }
+            sleepQuietly(REPLICA_READY_POLL_INTERVAL_MS);
+        }
+        return false;
+    }
+
+    private boolean isContainerHealthy(String nodeId, ObjectNode spec, String taskId) {
+        String expectedContainerName = expectedContainerName(spec, taskId);
+        return dockerStateRegistry.snapshot().stream()
+                .filter(n -> n.getNodeId().equals(nodeId))
+                .findFirst()
+                .map(n -> n.getReport().getContainersList().stream()
+                        .anyMatch(c -> c.getName().contains(expectedContainerName)
+                                && "healthy".equals(c.getHealthStatus())))
+                .orElse(false);
+    }
+
+    /** Mirrors {@code DockerComposeServiceExecutor.sanitizeContainerName}'s exact naming scheme — this
+     * is how the server finds THIS specific replica's own container among everything else running on
+     * the node. */
+    private static String expectedContainerName(ObjectNode spec, String taskId) {
+        String projectName = spec.path("project_name").asText("project");
+        String serviceName = spec.path("service_name").asText("service");
+        String shortId = taskId.substring(0, Math.min(8, taskId.length()));
+        return ("nx-" + projectName + "-" + serviceName + "-" + shortId).replaceAll("[^a-zA-Z0-9_.-]", "-");
+    }
+
+    private static void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /** Stage OO: flattens {@code servicesNode} to one entry per (service, replica-index) — a service
+     * declaring {@code "replicas": N} appears N times here, back-to-back, sharing the same underlying
+     * spec node. Every downstream step (taskIds/assignedNodeIds/resolvedSpecs, peer-relay injection,
+     * dispatch) is driven purely by this flat list's own index, so a replica is indistinguishable from
+     * any other distinct service as far as candidate-node assignment/dispatch is concerned — the
+     * existing one-Docker-compose-task-per-node candidate filter is what guarantees replicas of the SAME
+     * service land on distinct nodes too, with zero further change needed to that filter. Shared by
+     * {@link #submitDockerComposeJob} and Stage PP's {@link #updateJob}. */
+    private static List<JsonNode> flattenServices(JsonNode servicesNode) {
+        List<JsonNode> services = new ArrayList<>();
+        for (JsonNode serviceNode : servicesNode) {
+            int replicas = Math.max(1, serviceNode.path("replicas").asInt(1));
+            for (int r = 0; r < replicas; r++) {
+                services.add(serviceNode);
+            }
+        }
+        return services;
+    }
+
     /**
      * Stage O's env-var peer-discovery wiring, resolved here (not at submit time on the CLI) because
      * only the control plane knows which node each service actually landed on. For every service that
      * declares a {@code peers} entry naming another service in this SAME job: reserves (once, deduped)
-     * a relay port for the named peer via {@link PortRelayManager}, injects that port into the peer's
-     * OWN resolved spec as {@code relay_ports} (so its node knows to open a tunnel — see
-     * {@code DockerComposeServiceExecutor}), and injects {@code <env_prefix>_HOST}/{@code _PORT} into
-     * the CONSUMING service's {@code environment} map. A peer that doesn't exist in this job, or never
-     * got placed on a node, is skipped — the consumer still runs, just without that env var set, an
-     * honest degrade rather than a crash (matching this project's "never fabricate a capability"
-     * discipline for a capability that genuinely isn't available).
+     * a relay port for the named peer via {@link PortRelayManager}, injects that port into EVERY
+     * placed replica of the peer's own resolved spec as {@code relay_ports} (so each of that peer's
+     * nodes independently opens a tunnel and registers as a load-balanced backend for the same relay
+     * port — see {@code DockerComposeServiceExecutor} and {@link PortRelayManager}'s Stage OO multi-
+     * backend support), and injects {@code <env_prefix>_HOST}/{@code _PORT} into the CONSUMING service's
+     * {@code environment} map. A peer that doesn't exist in this job, or never got placed on ANY node,
+     * is skipped — the consumer still runs, just without that env var set, an honest degrade rather than
+     * a crash (matching this project's "never fabricate a capability" discipline for a capability that
+     * genuinely isn't available).
      */
     private void injectPeerRelayInfo(String projectName, List<JsonNode> services, List<ObjectNode> resolvedSpecs,
                                      List<String> assignedNodeIds) {
@@ -340,8 +605,10 @@ public final class JobCoordinator {
                 String envPrefixRaw = peer.path("env_prefix").asText();
                 String envPrefix = envPrefixRaw.isBlank()
                         ? peerServiceName.toUpperCase(Locale.ROOT) : envPrefixRaw;
-                int peerIndex = indexOfService(services, peerServiceName);
-                if (peerIndex < 0 || assignedNodeIds.get(peerIndex).isEmpty()) {
+                List<Integer> placedPeerIndices = indicesOfService(services, peerServiceName).stream()
+                        .filter(idx -> !assignedNodeIds.get(idx).isEmpty())
+                        .toList();
+                if (placedPeerIndices.isEmpty()) {
                     continue;
                 }
                 Integer relayPort = reservedPortsByPeerService.get(peerServiceName);
@@ -358,15 +625,19 @@ public final class JobCoordinator {
                     // PortTunnelClient dials as localhost:<port> on the provider's own node) — NOT the
                     // externally-reserved relay port above, which only ever means anything on the
                     // control plane's machine. Consumers get the reserved port via <PEER>_PORT below;
-                    // the provider gets its own port so it knows which local container to bridge to.
-                    Integer providerLocalPort = extractPrimaryHostPort(services.get(peerIndex));
-                    if (providerLocalPort == null) {
-                        LOG.warn("⚠ Peer service '{}/{}' has no published 'ports' entry to relay — "
-                                        + "'{}' will get {}_HOST/{}_PORT but the connection will fail",
-                                projectName, peerServiceName, services.get(i).path("service_name").asText(),
-                                envPrefix, envPrefix);
-                    } else {
-                        addRelayPort(resolvedSpecs.get(peerIndex), providerLocalPort);
+                    // each replica gets its own port entry so it knows which local container to bridge
+                    // to (they're all the same published port number, just on different nodes).
+                    for (int peerIdx : placedPeerIndices) {
+                        Integer providerLocalPort = extractPrimaryHostPort(services.get(peerIdx));
+                        if (providerLocalPort == null) {
+                            LOG.warn("⚠ Peer service '{}/{}' replica has no published 'ports' entry to "
+                                            + "relay — '{}' will get {}_HOST/{}_PORT but the connection "
+                                            + "will fail",
+                                    projectName, peerServiceName, services.get(i).path("service_name").asText(),
+                                    envPrefix, envPrefix);
+                        } else {
+                            addRelayPort(resolvedSpecs.get(peerIdx), providerLocalPort);
+                        }
                     }
                 }
                 ObjectNode env = ensureObjectField(resolvedSpecs.get(i), "environment");
@@ -376,13 +647,14 @@ public final class JobCoordinator {
         }
     }
 
-    private static int indexOfService(List<JsonNode> services, String serviceName) {
+    private static List<Integer> indicesOfService(List<JsonNode> services, String serviceName) {
+        List<Integer> indices = new ArrayList<>();
         for (int i = 0; i < services.size(); i++) {
             if (services.get(i).path("service_name").asText().equals(serviceName)) {
-                return i;
+                indices.add(i);
             }
         }
-        return -1;
+        return indices;
     }
 
     /** @return the host-side port of a service's first {@code ports} entry (accepting either a bare

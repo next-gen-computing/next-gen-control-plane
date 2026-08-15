@@ -151,6 +151,12 @@ service ControlPlaneService {
   rpc GetJobStatus (JobStatusRequest) returns (JobStatusResponse);
   rpc ListJobs     (Empty)            returns (JobList);
 
+  // Stage PP: a rolling update. Reuses JobStatusRequest's shape verbatim (just a job_id) — no new
+  // message needed. Re-applies the CURRENT job's own supersedes_job_id chain one step back, replacing
+  // this job's replicas with the ones it itself superseded, one at a time, gated the same way a forward
+  // update is (see JobCoordinator.rollbackJob).
+  rpc RollbackJob (JobStatusRequest) returns (JobSubmitResponse);
+
   // Stage J: answerable by ANY replica (leader or follower) — the discovery mechanism a client uses
   // to find the current leader proactively, rather than only learning it from a rejected write's
   // trailer. NOT gated by RaftLeaderRedirectInterceptor, unlike every other RPC on this service.
@@ -172,6 +178,12 @@ service ControlPlaneService {
   // uploading, to catch a corrupted transfer immediately rather than at build time on some node three
   // hops later.
   rpc UploadBuildContext (stream BuildContextChunk) returns (UploadBuildContextResponse);
+
+  // Stage NN: operator-set secret, encrypted at rest server-side (see
+  // com.nextgen.controlplane.task.SecretStore) and shipped to a node only at dispatch time, over the
+  // node's own already-open TaskChannel — see SecretMaterial's Javadoc. Never persisted in plaintext,
+  // never delivered as a container env var (docker inspect/ps reveal those); mounted as a file instead.
+  rpc SetSecret (SetSecretRequest) returns (Empty);
 
   // Stage O: cross-node service networking relay. A node opens this ONCE per one of its own service's
   // ports that a peer service on another node may need to reach, and keeps it open for as long as that
@@ -262,6 +274,9 @@ message DockerContainerInfo {
   repeated string ports          = 6;  // e.g. "0.0.0.0:8080->80/tcp", already formatted by docker
   int64  created_at_epoch_millis = 7;
   string command                 = 8;
+  // Stage MM: "healthy"/"unhealthy"/"starting", regex-extracted from docker's own Status string (see
+  // DockerStateCollector) — empty when the container declares no HEALTHCHECK at all, never fabricated.
+  string health_status            = 9;
 }
 
 message DockerImageInfo {
@@ -549,6 +564,9 @@ message ServerTaskCommand {
     // Stage N: the server-to-node push half of build-context delivery — sent as a sequence of chunks
     // immediately before the TaskDispatch whose payload_json references this context_id.
     BuildContextChunk build_context_chunk = 3;
+    // Stage NN: one decrypted secret, sent unchunked (secrets are small, unlike a build context)
+    // immediately before the TaskDispatch whose payload_json's "secrets" list references this name.
+    SecretMaterial secret_material = 4;
   }
 }
 
@@ -653,6 +671,23 @@ message UploadBuildContextResponse {
 }
 
 // ────────────────────────────────────────────────
+// Stage NN: secrets — encrypted at rest server-side, decrypted and shipped to a node only at dispatch
+// time over its own already-open TaskChannel, mounted as a file (never a container env var).
+//
+
+message SetSecretRequest {
+  string name  = 1;
+  bytes  value = 2;
+}
+
+// Node → this is what TaskDispatcher.shipSecrets sends, once per referenced secret, immediately before
+// the TaskDispatch that references it — see DockerComposeServiceExecutor for how it's mounted.
+message SecretMaterial {
+  string name  = 1;
+  bytes  value = 2;
+}
+
+// ────────────────────────────────────────────────
 // Stage O: cross-node service networking (control-plane relay)
 //
 // This does NOT reproduce Docker Compose's transparent same-daemon DNS resolution — a service reaches
@@ -703,6 +738,9 @@ message JobRequest {
   // sub_task_count contiguous sub-ranges.
   string   payload_json    = 3;
   int32    sub_task_count  = 4;
+  // Stage PP: a rolling update, not a fresh job — set to the job_id this one replaces. Only meaningful
+  // for TASK_KIND_DOCKER_COMPOSE_SERVICE; empty means "an ordinary new job" (every existing caller).
+  string   supersedes_job_id = 5;
 }
 
 message JobSubmitResponse {

@@ -214,6 +214,77 @@ class ControlPlaneServiceImplTaskChannelTest {
         assertEquals("", status.getResultJson(), "the fake, stale result must never surface as real data");
     }
 
+    /** Stage U: proves {@code CancelTask} is a real, CONFIRMED cancel — the RPC must not return success
+     * until the task has actually reached a terminal state, not merely once the cancel command was sent
+     * down the wire. */
+    @Test
+    void cancelTaskWaitsForRealConfirmationBeforeReturningSuccess() throws Exception {
+        registerAliveNode("node1");
+        LinkedBlockingQueue<ServerTaskCommand> node1Commands = openTaskChannel("node1");
+        submitUntilDispatched("t1", "{\"range_start\":0,\"range_end\":101}");
+        assertNotNull(node1Commands.poll(5, TimeUnit.SECONDS)); // the initial TaskDispatch
+        lastOpenedOutbound.onNext(NodeTaskEvent.newBuilder()
+                .setProgress(TaskProgressEvent.newBuilder().setTaskId("t1").setState(TaskState.TASK_STATE_RUNNING))
+                .build());
+        awaitTaskState("t1", TaskState.TASK_STATE_RUNNING);
+
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            var future = pool.submit(() -> blockingStub.cancelTask(
+                    ControlPlaneProto.TaskCancelRequest.newBuilder().setTaskId("t1").setReason("test").build()));
+
+            // The real TaskCancel command must actually arrive on the node's stream.
+            ServerTaskCommand cancelCommand = node1Commands.poll(5, TimeUnit.SECONDS);
+            assertNotNull(cancelCommand);
+            assertTrue(cancelCommand.hasCancel());
+            assertEquals("t1", cancelCommand.getCancel().getTaskId());
+
+            // The RPC must still be blocked — no confirmation has arrived yet.
+            sleep(300);
+            assertFalse(future.isDone(), "cancelTask must not return before the task actually stops");
+
+            // The fake node now does what a real DockerComposeServiceExecutor/TaskChannelClient would:
+            // report a real terminal result once the container actually stopped.
+            lastOpenedOutbound.onNext(NodeTaskEvent.newBuilder()
+                    .setResult(TaskResultEvent.newBuilder()
+                            .setTaskId("t1").setSuccess(true)
+                            .setResultJson("{\"stopped_by_request\":true}"))
+                    .build());
+
+            ControlPlaneProto.TaskCancelResponse response = future.get(5, TimeUnit.SECONDS);
+            assertTrue(response.getAccepted(), response.getMessage());
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void cancelTaskOnAnAlreadyTerminalTaskIsRejectedHonestly() throws InterruptedException {
+        registerAliveNode("node1");
+        openTaskChannel("node1");
+        submitUntilDispatched("t1", "{\"range_start\":0,\"range_end\":101}");
+        lastOpenedOutbound.onNext(NodeTaskEvent.newBuilder()
+                .setResult(TaskResultEvent.newBuilder()
+                        .setTaskId("t1").setSuccess(true).setResultJson("{\"prime_count\":25}"))
+                .build());
+        awaitTaskState("t1", TaskState.TASK_STATE_COMPLETED);
+
+        ControlPlaneProto.TaskCancelResponse response = blockingStub.cancelTask(
+                ControlPlaneProto.TaskCancelRequest.newBuilder().setTaskId("t1").build());
+
+        assertFalse(response.getAccepted());
+        assertTrue(response.getMessage().toLowerCase(java.util.Locale.ROOT).contains("already"),
+                response.getMessage());
+    }
+
+    @Test
+    void cancelTaskOnAnUnknownTaskIsRejectedHonestly() {
+        ControlPlaneProto.TaskCancelResponse response = blockingStub.cancelTask(
+                ControlPlaneProto.TaskCancelRequest.newBuilder().setTaskId("ghost").build());
+
+        assertFalse(response.getAccepted());
+    }
+
     @Test
     void getTaskStatusOnAnUnknownTaskIsNotFound() {
         StatusRuntimeException ex = assertThrows(StatusRuntimeException.class, () ->

@@ -43,6 +43,15 @@ public final class DockerStateCollector {
     private static final Pattern SIZE_PATTERN =
             Pattern.compile("([0-9.]+)\\s*([kKmMgGtT]?i?)[bB]?");
 
+    /** Stage MM: Docker embeds a health-check's result as a parenthetical inside its own `Status` string
+     * (e.g. "Up 5 minutes (healthy)", "Up 2 minutes (health: starting)") — no separate `docker ps --format`
+     * placeholder exposes it directly, and calling `docker inspect` per-container here would multiply
+     * this collector's real process-spawn cost by however many containers exist. Extracting from data
+     * already being read into {@code state_text} is free. A container with no HEALTHCHECK at all has no
+     * parenthetical, correctly yielding an empty (never fabricated) health_status. */
+    private static final Pattern HEALTH_STATUS_PATTERN =
+            Pattern.compile("\\((healthy|unhealthy|health: starting)\\)");
+
     public ControlPlaneProto.DockerStateReport collect() {
         return ControlPlaneProto.DockerStateReport.newBuilder()
                 .addAllContainers(listContainers())
@@ -56,18 +65,32 @@ public final class DockerStateCollector {
     public List<ControlPlaneProto.DockerContainerInfo> listContainers() {
         List<ControlPlaneProto.DockerContainerInfo> result = new ArrayList<>();
         for (JsonNode row : runFormatJson("docker", "ps", "-a", "--format", "{{json .}}")) {
+            String statusText = text(row, "Status");
             result.add(ControlPlaneProto.DockerContainerInfo.newBuilder()
                     .setContainerId(text(row, "ID"))
                     .setName(text(row, "Names"))
                     .setImage(text(row, "Image"))
                     .setStatus(text(row, "State"))
-                    .setStateText(text(row, "Status"))
+                    .setStateText(statusText)
                     .addAllPorts(splitPorts(text(row, "Ports")))
                     .setCreatedAtEpochMillis(parseDockerCreatedAt(text(row, "CreatedAt")))
                     .setCommand(text(row, "Command"))
+                    .setHealthStatus(extractHealthStatus(statusText))
                     .build());
         }
         return result;
+    }
+
+    /** @return "healthy"/"unhealthy"/"health: starting" extracted from Docker's own {@code Status}
+     * string, or "" when the container declares no HEALTHCHECK at all — see {@link
+     * #HEALTH_STATUS_PATTERN}'s Javadoc for why this is a regex extraction rather than a second
+     * {@code docker inspect} call. */
+    private static String extractHealthStatus(String statusText) {
+        if (statusText == null || statusText.isBlank()) {
+            return "";
+        }
+        Matcher matcher = HEALTH_STATUS_PATTERN.matcher(statusText);
+        return matcher.find() ? matcher.group(1) : "";
     }
 
     public List<ControlPlaneProto.DockerImageInfo> listImages() {

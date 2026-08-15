@@ -13,6 +13,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -135,6 +136,290 @@ class ComposeFileParserTest {
                 """);
 
         assertThrows(IllegalArgumentException.class, () -> ComposeFileParser.parse(file));
+    }
+
+    @Test
+    void parsesDeployResourcesLimitsAndReservations(@TempDir Path dir) throws Exception {
+        Path file = writeCompose(dir, """
+                services:
+                  web:
+                    image: busybox
+                    deploy:
+                      resources:
+                        limits:
+                          cpus: "1.5"
+                          memory: "512m"
+                        reservations:
+                          memory: "256m"
+                """);
+
+        ParsedService web = ComposeFileParser.parse(file).get(0);
+
+        assertFalse(web.resources().isEmpty());
+        assertEquals("1.5", web.resources().cpuLimit());
+        assertEquals("512m", web.resources().memoryLimit());
+        assertEquals("256m", web.resources().memoryReservation());
+    }
+
+    @Test
+    void aServiceWithNoDeployBlockHasEmptyResources(@TempDir Path dir) throws Exception {
+        Path file = writeCompose(dir, """
+                services:
+                  web:
+                    image: busybox
+                """);
+
+        ParsedService web = ComposeFileParser.parse(file).get(0);
+
+        assertTrue(web.resources().isEmpty());
+    }
+
+    @Test
+    void resourcesAppearInTheJobPayloadOnlyWhenDeclared(@TempDir Path dir) throws Exception {
+        Path file = writeCompose(dir, """
+                services:
+                  web:
+                    image: busybox
+                    deploy:
+                      resources:
+                        limits:
+                          cpus: "0.5"
+                  plain:
+                    image: busybox
+                """);
+        List<ParsedService> services = ComposeFileParser.parse(file);
+
+        String payload = ComposeFileParser.buildJobPayload("proj", services, Map.of(), Map.of());
+
+        JsonNode webSpec = findService(MAPPER.readTree(payload), "web");
+        assertEquals("0.5", webSpec.get("resources").get("cpuLimit").asText());
+        assertFalse(webSpec.get("resources").has("memoryLimit"));
+
+        JsonNode plainSpec = findService(MAPPER.readTree(payload), "plain");
+        assertFalse(plainSpec.has("resources"));
+    }
+
+    @Test
+    void parsesPlainRestartPolicy(@TempDir Path dir) throws Exception {
+        Path file = writeCompose(dir, """
+                services:
+                  web:
+                    image: busybox
+                    restart: on-failure
+                """);
+
+        ParsedService web = ComposeFileParser.parse(file).get(0);
+
+        assertTrue(web.restart().restarts());
+        assertEquals("on-failure", web.restart().policy());
+        assertNull(web.restart().maxAttempts());
+    }
+
+    @Test
+    void parsesOnFailureShorthandWithAMaxAttemptsCount(@TempDir Path dir) throws Exception {
+        Path file = writeCompose(dir, """
+                services:
+                  web:
+                    image: busybox
+                    restart: "on-failure:3"
+                """);
+
+        ParsedService web = ComposeFileParser.parse(file).get(0);
+
+        assertEquals("on-failure", web.restart().policy());
+        assertEquals(3, web.restart().maxAttempts());
+    }
+
+    @Test
+    void parsesDeployRestartPolicyMaxAttemptsAsAFallback(@TempDir Path dir) throws Exception {
+        Path file = writeCompose(dir, """
+                services:
+                  web:
+                    image: busybox
+                    restart: always
+                    deploy:
+                      restart_policy:
+                        max_attempts: 7
+                """);
+
+        ParsedService web = ComposeFileParser.parse(file).get(0);
+
+        assertEquals("always", web.restart().policy());
+        assertEquals(7, web.restart().maxAttempts());
+    }
+
+    @Test
+    void aServiceWithNoRestartKeyDefaultsToNoAndIsOmittedFromThePayload(@TempDir Path dir) throws Exception {
+        Path file = writeCompose(dir, """
+                services:
+                  web:
+                    image: busybox
+                """);
+        List<ParsedService> services = ComposeFileParser.parse(file);
+
+        ParsedService web = services.get(0);
+        assertFalse(web.restart().restarts());
+
+        String payload = ComposeFileParser.buildJobPayload("proj", services, Map.of(), Map.of());
+        assertFalse(findService(MAPPER.readTree(payload), "web").has("restart"));
+    }
+
+    @Test
+    void parsesAShellFormHealthcheck(@TempDir Path dir) throws Exception {
+        Path file = writeCompose(dir, """
+                services:
+                  web:
+                    image: busybox
+                    healthcheck:
+                      test: "curl -f http://localhost/ || exit 1"
+                      interval: 10s
+                      timeout: 5s
+                      retries: 3
+                      start_period: 1m30s
+                """);
+
+        ParsedService web = ComposeFileParser.parse(file).get(0);
+
+        assertFalse(web.healthCheck().isEmpty());
+        assertEquals("curl -f http://localhost/ || exit 1", web.healthCheck().command());
+        assertEquals(10, web.healthCheck().intervalSeconds());
+        assertEquals(5, web.healthCheck().timeoutSeconds());
+        assertEquals(3, web.healthCheck().retries());
+        assertEquals(90, web.healthCheck().startPeriodSeconds());
+    }
+
+    @Test
+    void parsesACmdShellFormHealthcheckList(@TempDir Path dir) throws Exception {
+        Path file = writeCompose(dir, """
+                services:
+                  web:
+                    image: busybox
+                    healthcheck:
+                      test: ["CMD-SHELL", "curl -f http://localhost/ || exit 1"]
+                """);
+
+        ParsedService web = ComposeFileParser.parse(file).get(0);
+        assertEquals("curl -f http://localhost/ || exit 1", web.healthCheck().command());
+    }
+
+    @Test
+    void parsesACmdFormHealthcheckListByJoiningTheArgv(@TempDir Path dir) throws Exception {
+        Path file = writeCompose(dir, """
+                services:
+                  web:
+                    image: busybox
+                    healthcheck:
+                      test: ["CMD", "curl", "-f", "http://localhost/"]
+                """);
+
+        ParsedService web = ComposeFileParser.parse(file).get(0);
+        assertEquals("curl -f http://localhost/", web.healthCheck().command());
+    }
+
+    @Test
+    void aNoneHealthcheckParsesToEmptyJustLikeNoHealthcheckAtAll(@TempDir Path dir) throws Exception {
+        Path file = writeCompose(dir, """
+                services:
+                  web:
+                    image: busybox
+                    healthcheck:
+                      test: ["NONE"]
+                """);
+
+        ParsedService web = ComposeFileParser.parse(file).get(0);
+        assertTrue(web.healthCheck().isEmpty());
+    }
+
+    @Test
+    void aServiceWithNoHealthcheckKeyIsOmittedFromThePayload(@TempDir Path dir) throws Exception {
+        Path file = writeCompose(dir, """
+                services:
+                  web:
+                    image: busybox
+                """);
+        List<ParsedService> services = ComposeFileParser.parse(file);
+
+        String payload = ComposeFileParser.buildJobPayload("proj", services, Map.of(), Map.of());
+        assertFalse(findService(MAPPER.readTree(payload), "web").has("healthCheck"));
+    }
+
+    @Test
+    void parsesAServicesSecretsListIntoThePayload(@TempDir Path dir) throws Exception {
+        Path file = writeCompose(dir, """
+                services:
+                  web:
+                    image: busybox
+                    secrets:
+                      - db-password
+                      - api-key
+                """);
+        List<ParsedService> services = ComposeFileParser.parse(file);
+
+        ParsedService web = services.get(0);
+        assertEquals(List.of("db-password", "api-key"), web.secrets());
+
+        String payload = ComposeFileParser.buildJobPayload("proj", services, Map.of(), Map.of());
+        JsonNode webSpec = findService(MAPPER.readTree(payload), "web");
+        assertEquals("db-password", webSpec.get("secrets").get(0).asText());
+        assertEquals("api-key", webSpec.get("secrets").get(1).asText());
+    }
+
+    @Test
+    void aServiceWithNoSecretsKeyIsOmittedFromThePayload(@TempDir Path dir) throws Exception {
+        Path file = writeCompose(dir, """
+                services:
+                  web:
+                    image: busybox
+                """);
+        List<ParsedService> services = ComposeFileParser.parse(file);
+
+        assertTrue(services.get(0).secrets().isEmpty());
+        String payload = ComposeFileParser.buildJobPayload("proj", services, Map.of(), Map.of());
+        assertFalse(findService(MAPPER.readTree(payload), "web").has("secrets"));
+    }
+
+    @Test
+    void parsesBareReplicasShorthand(@TempDir Path dir) throws Exception {
+        Path file = writeCompose(dir, """
+                services:
+                  web:
+                    image: busybox
+                    replicas: 3
+                """);
+
+        ParsedService web = ComposeFileParser.parse(file).get(0);
+
+        assertEquals(3, web.replicas());
+        String payload = ComposeFileParser.buildJobPayload("proj", List.of(web), Map.of(), Map.of());
+        assertEquals(3, findService(MAPPER.readTree(payload), "web").get("replicas").asInt());
+    }
+
+    @Test
+    void parsesDeployReplicas(@TempDir Path dir) throws Exception {
+        Path file = writeCompose(dir, """
+                services:
+                  web:
+                    image: busybox
+                    deploy:
+                      replicas: 5
+                """);
+
+        ParsedService web = ComposeFileParser.parse(file).get(0);
+        assertEquals(5, web.replicas());
+    }
+
+    @Test
+    void aServiceWithNoReplicasKeyDefaultsToOneAndIsOmittedFromThePayload(@TempDir Path dir) throws Exception {
+        Path file = writeCompose(dir, """
+                services:
+                  web:
+                    image: busybox
+                """);
+        List<ParsedService> services = ComposeFileParser.parse(file);
+
+        assertEquals(1, services.get(0).replicas());
+        String payload = ComposeFileParser.buildJobPayload("proj", services, Map.of(), Map.of());
+        assertFalse(findService(MAPPER.readTree(payload), "web").has("replicas"));
     }
 
     @Test

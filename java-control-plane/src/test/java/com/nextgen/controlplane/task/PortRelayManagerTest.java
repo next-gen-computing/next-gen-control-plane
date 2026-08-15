@@ -136,6 +136,95 @@ class PortRelayManagerTest {
         }
     }
 
+    /** Stage OO: two backends attached to the SAME (project, service) key, several consumer connections
+     * opened in sequence, must distribute across BOTH backends — not just the first one attached. */
+    @Test
+    void multipleAttachedBackendsBothReceiveTraffic() throws Exception {
+        PortRelayManager manager = new PortRelayManager(RANGE_START, RANGE_END);
+        LinkedBlockingQueue<TunnelFrame> receivedByFirst = new LinkedBlockingQueue<>();
+        LinkedBlockingQueue<TunnelFrame> receivedBySecond = new LinkedBlockingQueue<>();
+        try {
+            int port = manager.reservePort("proj", "replicated");
+            assertTrue(manager.attachStream("proj", "replicated", fakeNodeStream(receivedByFirst)));
+            assertTrue(manager.attachStream("proj", "replicated", fakeNodeStream(receivedBySecond)));
+
+            // Open several real connections — round-robin means alternating backends, so more than one
+            // connection is needed to observe both being used.
+            for (int i = 0; i < 4; i++) {
+                try (Socket consumer = new Socket("localhost", port)) {
+                    consumer.getOutputStream().write(("req" + i).getBytes(StandardCharsets.UTF_8));
+                    consumer.getOutputStream().flush();
+                }
+            }
+
+            long deadline = System.currentTimeMillis() + 5_000;
+            while ((receivedByFirst.isEmpty() || receivedBySecond.isEmpty())
+                    && System.currentTimeMillis() < deadline) {
+                Thread.sleep(50);
+            }
+            assertFalse(receivedByFirst.isEmpty(), "the first backend must have received at least one request");
+            assertFalse(receivedBySecond.isEmpty(), "the second backend must have received at least one request");
+        } finally {
+            manager.release("proj", "replicated");
+        }
+    }
+
+    /** Stage OO: one of two backends disconnecting must not tear down the listener — new connections
+     * keep being routed (to whichever backend remains), and the port stays bound. */
+    @Test
+    void detachingOneOfTwoBackendsLeavesTheListenerAndTheOtherBackendRunning() throws Exception {
+        PortRelayManager manager = new PortRelayManager(RANGE_START, RANGE_END);
+        LinkedBlockingQueue<TunnelFrame> receivedByFirst = new LinkedBlockingQueue<>();
+        LinkedBlockingQueue<TunnelFrame> receivedBySecond = new LinkedBlockingQueue<>();
+        StreamObserver<TunnelFrame> firstBackend = fakeNodeStream(receivedByFirst);
+        try {
+            int port = manager.reservePort("proj", "replicated2");
+            manager.attachStream("proj", "replicated2", firstBackend);
+            manager.attachStream("proj", "replicated2", fakeNodeStream(receivedBySecond));
+
+            manager.detachStream("proj", "replicated2", firstBackend);
+
+            // The listener must still be up and routing — to the one remaining backend.
+            try (Socket consumer = new Socket("localhost", port)) {
+                consumer.getOutputStream().write("after-detach".getBytes(StandardCharsets.UTF_8));
+                consumer.getOutputStream().flush();
+                TunnelFrame forwarded = receivedBySecond.poll(5, TimeUnit.SECONDS);
+                assertNotNull(forwarded, "the remaining backend must still receive new connections");
+                assertEquals("after-detach", forwarded.getData().toStringUtf8());
+            }
+            assertTrue(receivedByFirst.isEmpty(), "the detached backend must receive nothing new");
+        } finally {
+            manager.release("proj", "replicated2");
+        }
+    }
+
+    /** Stage OO: detaching the LAST backend must fully close the entry — the port becomes free again,
+     * exactly like an explicit {@link PortRelayManager#release}. */
+    @Test
+    void detachingTheLastBackendFullyClosesTheListener() throws Exception {
+        PortRelayManager manager = new PortRelayManager(RANGE_START, RANGE_END);
+        LinkedBlockingQueue<TunnelFrame> received = new LinkedBlockingQueue<>();
+        StreamObserver<TunnelFrame> onlyBackend = fakeNodeStream(received);
+
+        int port = manager.reservePort("proj", "solo");
+        manager.attachStream("proj", "solo", onlyBackend);
+
+        manager.detachStream("proj", "solo", onlyBackend);
+
+        // The listener socket must actually be released — a fresh bind on the same port must succeed.
+        long deadline = System.currentTimeMillis() + 5_000;
+        boolean rebound = false;
+        while (!rebound && System.currentTimeMillis() < deadline) {
+            try (var freshSocket = new java.net.ServerSocket()) {
+                freshSocket.bind(new java.net.InetSocketAddress("localhost", port));
+                rebound = true;
+            } catch (IOException notYetFree) {
+                Thread.sleep(50);
+            }
+        }
+        assertTrue(rebound, "the relay port must be fully released once the last backend detaches");
+    }
+
     private static StreamObserver<TunnelFrame> fakeNodeStream(LinkedBlockingQueue<TunnelFrame> sink) {
         return new StreamObserver<>() {
             @Override public void onNext(TunnelFrame value) { sink.add(value); }

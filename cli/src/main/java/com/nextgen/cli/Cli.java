@@ -28,6 +28,7 @@ import com.nextgen.proto.ControlPlaneProto.JobSubmitResponse;
 import com.nextgen.proto.ControlPlaneProto.NodeCapabilities;
 import com.nextgen.proto.ControlPlaneProto.NodeInfo;
 import com.nextgen.proto.ControlPlaneProto.NodeList;
+import com.nextgen.proto.ControlPlaneProto.SetSecretRequest;
 import com.nextgen.proto.ControlPlaneProto.TaskCancelRequest;
 import com.nextgen.proto.ControlPlaneProto.TaskEvent;
 import com.nextgen.proto.ControlPlaneProto.TaskKind;
@@ -92,6 +93,8 @@ public final class Cli {
         switch (command) {
             case "enrol", "enroll" -> cmdEnrol(rest);
             case "up" -> cmdUp(rest);
+            case "update" -> cmdUpdate(rest);
+            case "rollback" -> cmdRollback(rest);
             case "down" -> cmdDown(rest);
             case "ps" -> cmdPs(rest);
             case "logs" -> cmdLogs(rest);
@@ -100,6 +103,7 @@ public final class Cli {
             case "images" -> cmdImages(rest);
             case "volumes" -> cmdVolumes(rest);
             case "networks" -> cmdNetworks(rest);
+            case "secret" -> cmdSecret(rest);
             case "cloud" -> cmdCloud(rest);
             case "help", "-h", "--help" -> printUsage();
             default -> throw new UsageException("unknown command '" + command + "' — try 'nx help'");
@@ -113,6 +117,8 @@ public final class Cli {
                 Usage:
                   nx enrol --token <token> --control-plane <host:port> [--ca-cert <path>]
                   nx up <compose-file> [--project NAME] [--build] [--no-follow] [--control-plane <host:port>]
+                  nx update <job-id> <compose-file> [--project NAME] [--build] [--no-follow] [--control-plane <host:port>]
+                  nx rollback <job-id> [--control-plane <host:port>]
                   nx down <job-id> [--control-plane <host:port>]
                   nx ps [job-id] [--control-plane <host:port>]
                   nx logs <job-id> [--control-plane <host:port>]
@@ -122,6 +128,7 @@ public final class Cli {
                   nx images [--control-plane <host:port>]
                   nx volumes [--control-plane <host:port>]
                   nx networks [--control-plane <host:port>]
+                  nx secret set <name> <value-or-@file> [--control-plane <host:port>]
                   nx cloud up --target <host:port> [--build] <compose-file>
                 """);
     }
@@ -267,6 +274,81 @@ public final class Cli {
         } else {
             System.out.println("Started detached — use 'nx logs " + jobId + "' or 'nx ps " + jobId + "' to check on it.");
         }
+    }
+
+    // ── nx update / nx rollback ────────────────────────────────────────
+    // Stage PP. Identified by job-id (not "project name" — job-id is this system's real lookup key,
+    // matching every other job-scoped command here), following the same nx up-style parse/build/submit
+    // path, but marking the submission as a rolling update via supersedes_job_id.
+
+    private static void cmdUpdate(String[] rawArgs) throws Exception {
+        ArgReader args = new ArgReader(rawArgs);
+        List<String> positionals = args.positionals();
+        if (positionals.size() < 2) {
+            throw new UsageException("nx update <job-id> <compose-file> [--build] [--no-follow]");
+        }
+        String oldJobId = positionals.get(0);
+        Path composeFile = Path.of(positionals.get(1));
+        boolean build = args.flag("--build");
+        boolean follow = !args.flag("--no-follow");
+
+        List<ParsedService> services = ComposeFileParser.parse(composeFile);
+        ControlPlaneConnection connection = connect(args);
+
+        String project = args.option("--project");
+        if (project == null) {
+            project = composeFile.toAbsolutePath().getParent() != null
+                    ? composeFile.toAbsolutePath().getParent().getFileName().toString() : "project";
+        }
+
+        Map<String, String> contextIds = new HashMap<>();
+        Map<String, String> sha256s = new HashMap<>();
+        if (build) {
+            for (ParsedService service : services) {
+                if (service.needsBuild()) {
+                    System.out.println("Uploading build context for '" + service.name() + "'...");
+                    UploadBuildContextResponse response =
+                            uploadBuildContext(connection, Path.of(service.buildContext()));
+                    contextIds.put(service.name(), response.getContextId());
+                    sha256s.put(service.name(), response.getSha256());
+                }
+            }
+        }
+
+        String payloadJson = ComposeFileParser.buildJobPayload(project, services, contextIds, sha256s);
+        String newJobId = oldJobId + "-update-" + UUID.randomUUID().toString().substring(0, 8);
+
+        System.out.println("Rolling update: replacing '" + oldJobId + "' with '" + newJobId
+                + "', one replica at a time...");
+        JobSubmitResponse response = connection.blockingStub().submitJob(JobRequest.newBuilder()
+                .setJobId(newJobId)
+                .setKind(TaskKind.TASK_KIND_DOCKER_COMPOSE_SERVICE)
+                .setPayloadJson(payloadJson)
+                .setSubTaskCount(services.size())
+                .setSupersedesJobId(oldJobId)
+                .build());
+
+        System.out.println("Job '" + newJobId + "': " + response.getResult());
+        if (!response.getResult().startsWith("ACCEPTED")) {
+            return;
+        }
+        if (follow) {
+            followJobEvents(connection, newJobId, resolveTaskIdToServiceName(connection, newJobId, services));
+        } else {
+            System.out.println("Use 'nx logs " + newJobId + "' or 'nx ps " + newJobId + "' to check on it.");
+        }
+    }
+
+    private static void cmdRollback(String[] rawArgs) throws IOException {
+        ArgReader args = new ArgReader(rawArgs);
+        List<String> positionals = args.positionals();
+        if (positionals.isEmpty()) {
+            throw new UsageException("nx rollback <job-id>");
+        }
+        ControlPlaneConnection connection = connect(args);
+        JobSubmitResponse response = connection.blockingStub()
+                .rollbackJob(JobStatusRequest.newBuilder().setJobId(positionals.get(0)).build());
+        System.out.println(response.getResult());
     }
 
     private static Map<String, String> resolveTaskIdToServiceName(ControlPlaneConnection connection, String jobId,
@@ -520,6 +602,33 @@ public final class Cli {
 
     private static String shortId(String id) {
         return id.length() > 12 ? id.substring(0, 12) : id;
+    }
+
+    // ── nx secret ──────────────────────────────────────
+    // Stage NN. Only "set" today — reading a secret's value back is deliberately not exposed (the whole
+    // point is that only the control plane and the node a task is dispatched to ever see the plaintext).
+
+    private static void cmdSecret(String[] rawArgs) throws IOException {
+        if (rawArgs.length == 0 || !"set".equals(rawArgs[0])) {
+            throw new UsageException("nx secret set <name> <value-or-@file>");
+        }
+        ArgReader args = new ArgReader(java.util.Arrays.copyOfRange(rawArgs, 1, rawArgs.length));
+        List<String> positionals = args.positionals();
+        if (positionals.size() < 2) {
+            throw new UsageException("nx secret set <name> <value-or-@file>");
+        }
+        String name = positionals.get(0);
+        String rawValue = positionals.get(1);
+        byte[] value = rawValue.startsWith("@")
+                ? Files.readAllBytes(Path.of(rawValue.substring(1)))
+                : rawValue.getBytes(StandardCharsets.UTF_8);
+
+        ControlPlaneConnection connection = connect(args);
+        connection.blockingStub().setSecret(SetSecretRequest.newBuilder()
+                .setName(name)
+                .setValue(ByteString.copyFrom(value))
+                .build());
+        System.out.println("OK: secret '" + name + "' stored (" + value.length + " bytes)");
     }
 
     // ── nx images / nx volumes / nx networks ──────────────────────────

@@ -70,6 +70,7 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
     private final JobRegistry jobRegistry;
     private final JobCoordinator jobCoordinator;
     private final BuildContextStore buildContextStore;
+    private final com.nextgen.controlplane.task.SecretStore secretStore;
     private final PortRelayManager portRelayManager;
     /** Always constructed internally, like {@link #nodeHistory} — purely in-memory, ephemeral live
      * fan-out with nothing to configure. See {@link #streamJobEvents}. */
@@ -232,18 +233,35 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
                                    NodeCapacityScorer capacityScorer, JobOutcomeLogger jobOutcomeLogger,
                                    JobRegistry jobRegistry, ControlPlaneWriter writer, RaftNode raftNode,
                                    BuildContextStore buildContextStore, PortRelayManager portRelayManager) {
+        this(registry, scheduler, taskRegistry, channelRegistry, capacityScorer, jobOutcomeLogger,
+                jobRegistry, writer, raftNode, buildContextStore, portRelayManager, defaultSecretStore());
+    }
+
+    /**
+     * @param secretStore Stage NN: server-side encrypted-at-rest secret storage — see
+     *                    {@link com.nextgen.controlplane.task.SecretStore}'s Javadoc. Every shorter
+     *                    constructor builds its own default instance, same discipline as
+     *                    {@code buildContextStore}.
+     */
+    public ControlPlaneServiceImpl(NodeRegistry registry, RoundRobinScheduler scheduler,
+                                   TaskRegistry taskRegistry, NodeTaskChannelRegistry channelRegistry,
+                                   NodeCapacityScorer capacityScorer, JobOutcomeLogger jobOutcomeLogger,
+                                   JobRegistry jobRegistry, ControlPlaneWriter writer, RaftNode raftNode,
+                                   BuildContextStore buildContextStore, PortRelayManager portRelayManager,
+                                   com.nextgen.controlplane.task.SecretStore secretStore) {
         this.registry = registry;
         this.scheduler = scheduler;
         this.nodeHistory = new NodeHistory();
         this.taskRegistry = taskRegistry;
         this.channelRegistry = channelRegistry;
         this.buildContextStore = buildContextStore;
+        this.secretStore = secretStore;
         this.portRelayManager = portRelayManager;
         this.taskDispatcher = new TaskDispatcher(taskRegistry, channelRegistry, System::currentTimeMillis, writer,
-                buildContextStore);
+                buildContextStore, secretStore);
         this.jobRegistry = jobRegistry;
         this.jobCoordinator = new JobCoordinator(taskRegistry, taskDispatcher, jobRegistry, registry, scheduler,
-                capacityScorer, jobOutcomeLogger, writer, portRelayManager);
+                capacityScorer, jobOutcomeLogger, writer, portRelayManager, dockerStateRegistry);
         this.writer = writer;
         this.raftNode = raftNode;
     }
@@ -262,8 +280,18 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
                 EnvConfig.intValue("RELAY_PORT_RANGE_END", 40999));
     }
 
+    private static com.nextgen.controlplane.task.SecretStore defaultSecretStore() {
+        Path dataDir = Paths.get(EnvConfig.stringValue("NEXTGEN_DATA_DIR",
+                Paths.get(System.getProperty("user.home", "."), ".nextgen", "data").toString()));
+        return new com.nextgen.controlplane.task.SecretStore(dataDir);
+    }
+
     public BuildContextStore buildContextStore() {
         return buildContextStore;
+    }
+
+    public com.nextgen.controlplane.task.SecretStore secretStore() {
+        return secretStore;
     }
 
     public PortRelayManager portRelayManager() {
@@ -715,6 +743,30 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
         };
     }
 
+    // ── SetSecret (Stage NN) ───────────────────────────
+
+    /** Operator-invoked (via {@code nx secret set}), never called by a node. Encrypts and persists via
+     * {@link com.nextgen.controlplane.task.SecretStore} — see its Javadoc for the at-rest crypto. The
+     * plaintext travels in this unary request only as far as this method call; it's re-encrypted before
+     * ever touching disk and is never logged. */
+    @Override
+    public void setSecret(SetSecretRequest request, StreamObserver<Empty> responseObserver) {
+        if (request.getName().isBlank()) {
+            responseObserver.onError(Status.INVALID_ARGUMENT
+                    .withDescription("secret name must not be blank").asRuntimeException());
+            return;
+        }
+        try {
+            secretStore.put(request.getName(), request.getValue().toByteArray());
+            responseObserver.onNext(Empty.getDefaultInstance());
+            responseObserver.onCompleted();
+        } catch (java.security.GeneralSecurityException | IOException e) {
+            LOG.warn("Failed storing secret '{}': {}", request.getName(), e.getMessage());
+            responseObserver.onError(Status.INTERNAL
+                    .withDescription("Could not store secret: " + e.getMessage()).asRuntimeException());
+        }
+    }
+
     // ── TunnelPort (Stage O) ───────────────────────────
 
     /**
@@ -766,7 +818,10 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
             @Override
             public void onError(Throwable t) {
                 if (attached) {
-                    portRelayManager.release(projectName, serviceName);
+                    // detachStream (not release): this stream is only ONE of possibly several replica
+                    // backends for this (project, service) under Stage OO — removing just this one
+                    // leaves the others (and the shared listener) untouched.
+                    portRelayManager.detachStream(projectName, serviceName, safeObserver);
                     LOG.warn("🔀 TunnelPort stream for '{}/{}' closed with error: {}",
                             projectName, serviceName, t.getMessage());
                 }
@@ -775,7 +830,7 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
             @Override
             public void onCompleted() {
                 if (attached) {
-                    portRelayManager.release(projectName, serviceName);
+                    portRelayManager.detachStream(projectName, serviceName, safeObserver);
                     LOG.info("🔀 TunnelPort stream closed for '{}/{}'", projectName, serviceName);
                 }
                 responseObserver.onCompleted();
@@ -805,6 +860,25 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
             builder.addTasks(toStatusResponse(record));
         }
         responseObserver.onNext(builder.build());
+        responseObserver.onCompleted();
+    }
+
+    /**
+     * Stage U: a real, CONFIRMED cancel — not the fire-and-forget push {@code ProactiveMigrator} already
+     * sends internally. This is the client-invocable RPC {@code nx down} calls (previously
+     * {@code UNIMPLEMENTED} — confirmed live during an end-to-end run). The actual confirmed-wait logic
+     * lives in {@link TaskDispatcher#cancelAndAwaitConfirmation}, shared with Stage PP's rolling update
+     * (which needs the identical guarantee before it's safe to dispatch a replacement replica) — this
+     * handler is a thin wire adapter over it.
+     */
+    @Override
+    public void cancelTask(TaskCancelRequest request, StreamObserver<TaskCancelResponse> responseObserver) {
+        TaskDispatcher.CancelOutcome outcome =
+                taskDispatcher.cancelAndAwaitConfirmation(request.getTaskId(), request.getReason());
+        responseObserver.onNext(TaskCancelResponse.newBuilder()
+                .setAccepted(outcome.accepted())
+                .setMessage(outcome.message())
+                .build());
         responseObserver.onCompleted();
     }
 
@@ -845,9 +919,15 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
 
         JobRecord job;
         try {
-            job = jobCoordinator.submitJob(request.getJobId(), kind, request.getPayloadJson(),
-                    request.getSubTaskCount());
-        } catch (IllegalArgumentException e) {
+            // Stage PP: a non-blank supersedes_job_id means this is a rolling update, not a fresh job —
+            // routed to JobCoordinator.updateJob's real cancel-then-redispatch-then-await sequence
+            // instead of a plain split+dispatch.
+            job = request.getSupersedesJobId().isBlank()
+                    ? jobCoordinator.submitJob(request.getJobId(), kind, request.getPayloadJson(),
+                            request.getSubTaskCount())
+                    : jobCoordinator.updateJob(request.getJobId(), request.getSupersedesJobId(),
+                            request.getPayloadJson());
+        } catch (IllegalArgumentException | UnsupportedOperationException e) {
             LOG.error("❌ SubmitJob {} rejected: {}", request.getJobId(), e.getMessage());
             responseObserver.onNext(JobSubmitResponse.newBuilder()
                     .setJobId(request.getJobId())
@@ -862,6 +942,34 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
 
         responseObserver.onNext(JobSubmitResponse.newBuilder()
                 .setJobId(request.getJobId())
+                .setResult(result)
+                .setSubTaskCount(job.getTaskIds().size())
+                .build());
+        responseObserver.onCompleted();
+    }
+
+    /** Stage PP: {@code nx rollback} — re-applies whatever job {@code request.getJobId()} itself
+     * superseded, as a new rolling update superseding the CURRENT one. See {@link
+     * JobCoordinator#rollbackJob} for how the previous spec is reconstructed. */
+    @Override
+    public void rollbackJob(JobStatusRequest request, StreamObserver<JobSubmitResponse> responseObserver) {
+        JobRecord job;
+        try {
+            String rollbackJobId = request.getJobId() + "-rollback-" + System.currentTimeMillis();
+            job = jobCoordinator.rollbackJob(rollbackJobId, request.getJobId());
+        } catch (IllegalArgumentException | IllegalStateException | UnsupportedOperationException e) {
+            LOG.error("❌ RollbackJob {} rejected: {}", request.getJobId(), e.getMessage());
+            responseObserver.onNext(JobSubmitResponse.newBuilder()
+                    .setJobId(request.getJobId())
+                    .setResult("FAILED — " + e.getMessage())
+                    .build());
+            responseObserver.onCompleted();
+            return;
+        }
+        String result = String.format("ACCEPTED — rolled back to %d sub-task(s)", job.getTaskIds().size());
+        LOG.info("↩ {} for job {}", result, job.getJobId());
+        responseObserver.onNext(JobSubmitResponse.newBuilder()
+                .setJobId(job.getJobId())
                 .setResult(result)
                 .setSubTaskCount(job.getTaskIds().size())
                 .build());

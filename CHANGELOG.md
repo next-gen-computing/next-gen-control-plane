@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Container-orchestration baseline hygiene: resource limits, restart policies, health checks, secrets, load-balanced replicas, confirmed cancellation, rolling updates
+
+Closes the concrete gap identified when scoping this project's predictive-scheduling differentiation
+claim against Kubernetes/BOINC: the claim itself (proactive, trend-based migration measured in the
+low milliseconds versus Kubernetes' ~340s reactive path and BOINC's ~10-day default) doesn't need
+feature parity with either — but baseline container-orchestration hygiene needed to actually be real,
+not just claimed, for that comparison to be taken seriously. See the README's new **Comparison
+scope** section for the full boundary — what's real, what's explicitly out of scope, and why BOINC
+isn't a meaningful comparison point for most of this.
+
+- **Resource limits** — `deploy.resources.limits.cpus`/`.memory` and `.reservations.memory` become
+  real `--cpus`/`--memory`/`--memory-reservation` flags, verified against real `docker inspect` output.
+- **Restart policies** — `restart: "no"|"always"|"on-failure"|"unless-stopped"` (plus
+  `"on-failure:N"` and `deploy.restart_policy.max_attempts`) drive a bounded Java-side retry loop in
+  `DockerComposeServiceExecutor`, deliberately not Docker's native `--restart` (incompatible with
+  `--rm` and this project's `waitFor()`-based lifecycle model).
+- **Health checks** — a `healthcheck:` block becomes real native `--health-*` flags; Docker's own
+  engine runs the check, a side-poller reads the result back and kills-and-retries an unhealthy
+  container through the same restart loop. Also surfaced on the dashboard via a new
+  `DockerContainerInfo.health_status` field, regex-extracted from `docker ps`'s own `Status` string.
+- **Secrets** — new `SecretStore` (AES-256-GCM, server-local key, same owner-only file-permission
+  discipline as this project's PKI key material), `nx secret set`, delivered to a node only at
+  dispatch time over its already-open `TaskChannel` (mirrors the Stage N build-context pattern), and
+  mounted as a real file at `/run/secrets/<name>` — never a container env var, verified against real
+  `docker inspect` output.
+- **Load-balanced replicas** — `replicas: N` runs N real copies of a service on distinct nodes;
+  `PortRelayManager` now supports multiple backends per relay port (round-robin at accept time, a
+  disconnecting backend removed without dropping the listener or its siblings), verified with real
+  sockets.
+- **Confirmed task cancellation** — the previously-`UNIMPLEMENTED` `CancelTask` RPC (`nx down`) is now
+  real: pushes the same `TaskCancel` command `ProactiveMigrator` already used internally, but waits
+  for genuine confirmation the task stopped before returning success, via a new shared
+  `TaskDispatcher.cancelAndAwaitConfirmation`.
+- **Rolling updates + rollback** — `nx update <job-id> <compose-file>` replaces a running project's
+  replicas one at a time (confirmed-cancel old → dispatch new → wait for real readiness before the
+  next), verified with a real invariant check that no later replica is ever touched mid-swap.
+  `nx rollback <job-id>` reconstructs and re-applies the previous spec directly from the superseded
+  job's own stored task payloads. Scoped to the direct (non-Raft) path in this pass.
+
 ### Fixed - Certificate renewal now runs on a timer, not just at startup
 
 Closes the "named limitation" both README.md and docs/ARCHITECTURE.md previously called out: a node's

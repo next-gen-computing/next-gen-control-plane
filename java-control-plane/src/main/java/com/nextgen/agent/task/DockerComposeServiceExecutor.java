@@ -20,6 +20,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -56,6 +58,7 @@ public final class DockerComposeServiceExecutor implements TaskExecutor {
     private final Map<String, List<PortTunnelClient>> tunnelsByTaskId = new ConcurrentHashMap<>();
     private final NodeBuildContextStore buildContextStore;
     private final ControlPlaneConnection connection;
+    private final NodeSecretStore secretStore;
 
     public DockerComposeServiceExecutor() {
         this(new NodeBuildContextStore(), null);
@@ -74,8 +77,17 @@ public final class DockerComposeServiceExecutor implements TaskExecutor {
      * warning and stays cross-node-unreachable), matching every constructor above used by tests that
      * don't exercise this feature. */
     public DockerComposeServiceExecutor(NodeBuildContextStore buildContextStore, ControlPlaneConnection connection) {
+        this(buildContextStore, connection, new NodeSecretStore());
+    }
+
+    /** @param secretStore Stage NN: where {@link TaskChannelClient} buffers a dispatched secret's
+     * plaintext before this executor writes it to a short-lived temp file and bind-mounts it — see
+     * {@link #resolveSecretMounts}. Injectable so a test can pre-populate it directly. */
+    public DockerComposeServiceExecutor(NodeBuildContextStore buildContextStore, ControlPlaneConnection connection,
+                                        NodeSecretStore secretStore) {
         this.buildContextStore = buildContextStore;
         this.connection = connection;
+        this.secretStore = secretStore;
     }
 
     @Override
@@ -90,10 +102,12 @@ public final class DockerComposeServiceExecutor implements TaskExecutor {
         String serviceName = textOrDefault(spec, "service_name", "service");
         String containerName = sanitizeContainerName(
                 "nx-" + projectName + "-" + serviceName + "-" + shortId(taskId));
+        RestartPolicySpec restartPolicy = parseRestartPolicy(spec);
 
         DockerComposeRunner runner = new DockerComposeRunner(containerName);
         runnersByTaskId.put(taskId, runner);
         Path extractedContextDir = null;
+        Map<String, Path> secretFiles = Map.of();
         try {
             String image = spec.path("image").asText();
             if (image.isBlank()) {
@@ -108,32 +122,75 @@ public final class DockerComposeServiceExecutor implements TaskExecutor {
                 image = tag;
             }
 
-            List<String> args = buildRunArgs(spec, image);
+            secretFiles = resolveSecretMounts(spec, taskId);
+            List<String> args = buildRunArgs(spec, image, secretFiles);
             openRelayTunnels(spec, taskId, projectName, serviceName);
+            boolean healthTriggersRestart = !spec.path("healthCheck").path("command").asText().isBlank()
+                    && restartPolicy.configuredToRestart();
+            long healthPollIntervalSeconds = Math.max(1,
+                    spec.path("healthCheck").path("intervalSeconds").asInt(30));
 
-            LOG.info("🐳 Starting service '{}' (project '{}', task {}) as container '{}'",
-                    serviceName, projectName, taskId, containerName);
-            int exitCode;
-            try {
-                exitCode = runner.run(args, events::logLine);
-            } catch (InterruptedException e) {
-                // The executor pool is being shut down (e.g. the agent process is exiting) — stop the
-                // real container rather than abandoning it running on the host, then restore the
-                // interrupt and propagate, matching Stage M's explicit shutdown-correctness requirement.
-                LOG.warn("Interrupted while running container '{}' — stopping it before shutting down",
-                        containerName);
-                runner.stop();
-                Thread.currentThread().interrupt();
-                throw e;
+            int exitCode = 0;
+            boolean stoppedByRequest = false;
+            int restartCount = 0;
+            while (true) {
+                LOG.info("🐳 Starting service '{}' (project '{}', task {}, attempt {}) as container '{}'",
+                        serviceName, projectName, taskId, restartCount + 1, containerName);
+                ScheduledExecutorService healthPoller = healthTriggersRestart
+                        ? startHealthPoller(containerName, healthPollIntervalSeconds) : null;
+                try {
+                    exitCode = runner.run(args, events::logLine);
+                } catch (InterruptedException e) {
+                    // The executor pool is being shut down (e.g. the agent process is exiting) — stop
+                    // the real container rather than abandoning it running on the host, then restore the
+                    // interrupt and propagate, matching Stage M's explicit shutdown-correctness
+                    // requirement.
+                    LOG.warn("Interrupted while running container '{}' — stopping it before shutting down",
+                            containerName);
+                    runner.stop();
+                    Thread.currentThread().interrupt();
+                    throw e;
+                } finally {
+                    if (healthPoller != null) {
+                        healthPoller.shutdownNow();
+                    }
+                }
+                stoppedByRequest = runner.wasStopRequested();
+                if (stoppedByRequest || !restartPolicy.shouldRestart(exitCode, restartCount)) {
+                    break;
+                }
+                restartCount++;
+                String logMessage = "service '" + serviceName + "' exited (code " + exitCode
+                        + ") — restarting per policy '" + restartPolicy.policy() + "' (attempt "
+                        + (restartCount + 1) + ")";
+                events.logLine(logMessage, false);
+                LOG.info("🔁 Restarting '{}' per policy '{}' (attempt {})", containerName,
+                        restartPolicy.policy(), restartCount + 1);
+                try {
+                    Thread.sleep(backoffMillis(restartCount));
+                } catch (InterruptedException e) {
+                    runner.stop();
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+                if (runner.wasStopRequested()) {
+                    // A cancel() arrived while we were backing off between attempts — honor it instead
+                    // of starting another attempt; the stale exitCode from the last real attempt is
+                    // irrelevant once stoppedByRequest is true (see the check below).
+                    stoppedByRequest = true;
+                    break;
+                }
             }
-            boolean stoppedByRequest = runner.wasStopRequested();
+
             if (exitCode != 0 && !stoppedByRequest) {
-                throw new RuntimeException("container '" + containerName + "' exited with code " + exitCode);
+                throw new RuntimeException("container '" + containerName + "' exited with code " + exitCode
+                        + " after " + restartCount + " restart(s)");
             }
             return MAPPER.createObjectNode()
                     .put("container_name", containerName)
                     .put("exit_code", exitCode)
                     .put("stopped_by_request", stoppedByRequest)
+                    .put("restart_count", restartCount)
                     .toString();
         } finally {
             runnersByTaskId.remove(taskId);
@@ -141,6 +198,7 @@ public final class DockerComposeServiceExecutor implements TaskExecutor {
             if (extractedContextDir != null) {
                 deleteRecursively(extractedContextDir);
             }
+            deleteSecretFiles(secretFiles);
         }
     }
 
@@ -181,7 +239,7 @@ public final class DockerComposeServiceExecutor implements TaskExecutor {
         }
     }
 
-    private List<String> buildRunArgs(JsonNode spec, String image) {
+    private List<String> buildRunArgs(JsonNode spec, String image, Map<String, Path> secretFiles) {
         List<String> args = new ArrayList<>();
         JsonNode envNode = spec.path("environment");
         for (Iterator<String> it = envNode.fieldNames(); it.hasNext(); ) {
@@ -196,6 +254,9 @@ public final class DockerComposeServiceExecutor implements TaskExecutor {
                 args.add(port.asText());
             }
         }
+        addResourceArgs(args, spec.path("resources"));
+        addHealthCheckArgs(args, spec.path("healthCheck"));
+        addSecretMountArgs(args, secretFiles);
         args.add(image);
         String commandText = spec.path("command").asText();
         if (!commandText.isBlank()) {
@@ -207,6 +268,219 @@ public final class DockerComposeServiceExecutor implements TaskExecutor {
             }
         }
         return args;
+    }
+
+    /** Stage KK: {@code --cpus}/{@code --memory}/{@code --memory-reservation} — the subset of Compose's
+     * {@code deploy.resources} that {@code docker run} itself directly supports on a single host. Values
+     * ride through from {@link com.nextgen.cli.ComposeFileParser.ResourceLimits} as the raw strings
+     * Docker already accepts (e.g. {@code "512m"}, {@code "1.5"}); a blank/absent field is simply
+     * omitted, never defaulted to a guessed value. Must run before {@code args.add(image)} — Docker
+     * requires every {@code docker run} option to precede the image argument. */
+    private static void addResourceArgs(List<String> args, JsonNode resources) {
+        addFlagIfPresent(args, "--cpus", resources, "cpuLimit");
+        addFlagIfPresent(args, "--memory", resources, "memoryLimit");
+        addFlagIfPresent(args, "--memory-reservation", resources, "memoryReservation");
+    }
+
+    private static void addFlagIfPresent(List<String> args, String flag, JsonNode node, String field) {
+        String value = node.path(field).asText();
+        if (!value.isBlank()) {
+            args.add(flag);
+            args.add(value);
+        }
+    }
+
+    /** Stage MM: reuses Docker's own health-check engine rather than hand-rolling one — {@code
+     * --health-cmd} runs {@code healthCheck.command} through the container's shell on the configured
+     * interval, and Docker itself exposes the result via {@code docker inspect}'s {@code State.Health.
+     * Status} (read by {@link #startHealthPoller}) and embedded in {@code docker ps}'s own {@code Status}
+     * string (read by {@code DockerStateCollector} for dashboard visibility). Interval/timeout/start
+     * period are already whole-second integers from {@link com.nextgen.cli.ComposeFileParser}; Docker's
+     * own {@code --health-*} flags want a duration string, hence the {@code "s"} suffix. */
+    private static void addHealthCheckArgs(List<String> args, JsonNode healthCheck) {
+        String command = healthCheck.path("command").asText();
+        if (command.isBlank()) {
+            return;
+        }
+        args.add("--health-cmd");
+        args.add(command);
+        addDurationFlag(args, "--health-interval", healthCheck, "intervalSeconds");
+        addDurationFlag(args, "--health-timeout", healthCheck, "timeoutSeconds");
+        addDurationFlag(args, "--health-start-period", healthCheck, "startPeriodSeconds");
+        JsonNode retriesNode = healthCheck.path("retries");
+        if (retriesNode.isInt()) {
+            args.add("--health-retries");
+            args.add(String.valueOf(retriesNode.asInt()));
+        }
+    }
+
+    private static void addDurationFlag(List<String> args, String flag, JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        if (value.isInt() || value.isLong()) {
+            args.add(flag);
+            args.add(value.asLong() + "s");
+        }
+    }
+
+    /** Stage NN: bind-mounts each resolved secret file read-only at {@code /run/secrets/<name>} —
+     * deliberately a file mount, never an environment variable, since {@code docker inspect}/{@code ps}
+     * reveal env vars in plaintext but not the contents of a bind-mounted file. Matches Docker's own
+     * {@code secrets:} convention exactly, so an application already written to read Docker/Compose
+     * secrets from {@code /run/secrets/} needs no changes to work here. */
+    private static void addSecretMountArgs(List<String> args, Map<String, Path> secretFiles) {
+        for (Map.Entry<String, Path> entry : secretFiles.entrySet()) {
+            args.add("-v");
+            args.add(entry.getValue() + ":/run/secrets/" + entry.getKey() + ":ro");
+        }
+    }
+
+    private static final int DEFAULT_MAX_RESTART_ATTEMPTS = 5;
+    private static final long BASE_RESTART_BACKOFF_MILLIS = 500;
+    private static final long MAX_RESTART_BACKOFF_MILLIS = 10_000;
+
+    /** Stage LL: deliberately a Java-side retry loop, not Docker's native {@code --restart} — see the
+     * class Javadoc for why (it would fight {@code --rm} and this class's {@code waitFor()}-based
+     * lifecycle model). {@code maxAttempts} bounds every restarting policy uniformly, including
+     * {@code always}/{@code unless-stopped} — real Docker restarts those forever for a long-lived daemon
+     * container, but this is a bounded, one-shot task execution, so an unbounded retry loop would be a
+     * real resource leak, not a feature. */
+    private record RestartPolicySpec(String policy, int maxAttempts) {
+        boolean shouldRestart(int exitCode, int restartsSoFar) {
+            if (restartsSoFar >= maxAttempts) {
+                return false;
+            }
+            return switch (policy) {
+                case "always", "unless-stopped" -> true;
+                case "on-failure" -> exitCode != 0;
+                default -> false;
+            };
+        }
+
+        /** Whether ANY restart could ever happen under this policy — gates the health poller (Stage
+         * MM): killing a still-running-but-unhealthy container only to have it end up {@code FAILED}
+         * with no reattempt (policy {@code "no"}) would be a pure downgrade versus just leaving it
+         * running, so the poller only starts when a restart is actually possible. */
+        boolean configuredToRestart() {
+            return !"no".equals(policy);
+        }
+    }
+
+    private static RestartPolicySpec parseRestartPolicy(JsonNode spec) {
+        JsonNode restartNode = spec.path("restart");
+        String policy = restartNode.path("policy").asText("no");
+        int maxAttempts = restartNode.path("maxAttempts").asInt(DEFAULT_MAX_RESTART_ATTEMPTS);
+        return new RestartPolicySpec(policy, maxAttempts);
+    }
+
+    /** Exponential backoff between restart attempts, capped — {@code attempt} is the 1-indexed restart
+     * count (the attempt about to be made, not the one that just failed). */
+    private static long backoffMillis(int attempt) {
+        long backoff = BASE_RESTART_BACKOFF_MILLIS * (1L << Math.min(attempt - 1, 10));
+        return Math.min(backoff, MAX_RESTART_BACKOFF_MILLIS);
+    }
+
+    /** Stage MM: the payoff of a health check — Docker already runs the check itself (via the
+     * {@code --health-*} flags {@link #addHealthCheckArgs} passed) and records the result in
+     * {@code docker inspect}'s {@code State.Health.Status}; this thread just polls that result and, on
+     * a transition to {@code "unhealthy"}, kills the container so {@code runner.run}'s blocking
+     * {@code waitFor()} unblocks with a non-zero exit — which the restart loop then evaluates through
+     * the normal {@link RestartPolicySpec#shouldRestart} path, exactly as if the process had crashed on
+     * its own. Deliberately does NOT go through {@link DockerComposeRunner#stop()} — that sets
+     * {@code stopRequested}, which the restart loop treats as an intentional cancel (never restart);
+     * an unhealthy container should be RETRIED, not treated as cleanly stopped. */
+    private ScheduledExecutorService startHealthPoller(String containerName, long intervalSeconds) {
+        ScheduledExecutorService poller = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "health-poll-" + containerName);
+            t.setDaemon(true);
+            return t;
+        });
+        poller.scheduleWithFixedDelay(() -> {
+            if ("unhealthy".equals(inspectHealthStatus(containerName))) {
+                LOG.warn("🩺 Container '{}' reported unhealthy — killing it so the restart policy can "
+                        + "reattempt", containerName);
+                killContainer(containerName);
+            }
+        }, intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
+        return poller;
+    }
+
+    private static String inspectHealthStatus(String containerName) {
+        try {
+            Process process = new ProcessBuilder("docker", "inspect", "--format",
+                    "{{.State.Health.Status}}", containerName).redirectErrorStream(true).start();
+            String line;
+            try (var reader = process.inputReader()) {
+                line = reader.readLine();
+            }
+            process.waitFor(5, TimeUnit.SECONDS);
+            return line == null ? "" : line.trim();
+        } catch (Exception e) {
+            // The container may already be gone (exited between polls) or docker may be transiently
+            // unreachable — either way, "no status" is the honest answer, not a crash of the poller.
+            return "";
+        }
+    }
+
+    private static void killContainer(String containerName) {
+        try {
+            new ProcessBuilder("docker", "kill", containerName)
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start()
+                    .waitFor(10, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            LOG.debug("docker kill for unhealthy container '{}' could not run: {}", containerName,
+                    e.getMessage());
+        }
+    }
+
+    /**
+     * Stage NN: resolves this service's declared {@code secrets} list into real, short-lived temp files
+     * — each name is {@link NodeSecretStore#consume consumed} (the plaintext was already shipped and
+     * buffered here BEFORE this dispatch arrived, same ordering guarantee {@link #resolveAndBuildImage}
+     * relies on for build contexts), written to an owner-only-permission file under the system temp
+     * directory, and bind-mounted read-only by {@link #addSecretMountArgs}. Deleted again in
+     * {@code execute}'s {@code finally} block via {@link #deleteSecretFiles} regardless of outcome.
+     *
+     * @throws IllegalArgumentException if a referenced secret was never received on this node — fails
+     *         the task honestly before ever invoking Docker, matching {@link #resolveAndBuildImage}'s
+     *         own precedent for a missing build context.
+     */
+    private Map<String, Path> resolveSecretMounts(JsonNode spec, String taskId) throws IOException {
+        JsonNode secretsNode = spec.path("secrets");
+        if (!secretsNode.isArray() || secretsNode.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Path> files = new java.util.LinkedHashMap<>();
+        Path secretsDir = Path.of(System.getProperty("java.io.tmpdir", "."), "nextgen-secrets");
+        Files.createDirectories(secretsDir);
+        for (JsonNode nameNode : secretsNode) {
+            String name = nameNode.asText();
+            if (name.isBlank()) {
+                continue;
+            }
+            var value = secretStore.consume(name);
+            if (value.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "FAILED — secret '" + name + "' was never received on this node");
+            }
+            Path file = secretsDir.resolve(sanitizeContainerName(taskId + "-" + name));
+            com.nextgen.security.PkiPaths.writeSecret(file, value.get());
+            files.put(name, file);
+        }
+        return files;
+    }
+
+    /** Best-effort — a leftover secret temp file is a disk-space nit, not a task-correctness issue,
+     * matching {@link #deleteRecursively}'s own precedent for extracted build contexts. */
+    private static void deleteSecretFiles(Map<String, Path> secretFiles) {
+        for (Path file : secretFiles.values()) {
+            try {
+                Files.deleteIfExists(file);
+            } catch (IOException e) {
+                LOG.debug("Could not clean up secret file '{}': {}", file, e.getMessage());
+            }
+        }
     }
 
     /**

@@ -98,6 +98,53 @@ class DockerStateCollectorTest {
         org.junit.jupiter.api.Assertions.fail("container was not actually removed from docker");
     }
 
+    /** Stage MM: a container with no HEALTHCHECK at all must report an empty (never fabricated)
+     * health_status — the baseline every other health-status assertion is contrasted against. */
+    @Test
+    void aContainerWithNoHealthcheckReportsEmptyHealthStatus() {
+        String name = runDetached();
+
+        ControlPlaneProto.DockerContainerInfo info = awaitContainer(name).orElseThrow();
+
+        assertEquals("", info.getHealthStatus());
+    }
+
+    /** Stage MM: a real {@code --health-cmd} that always succeeds must eventually report "healthy" —
+     * proves the regex extraction against Docker's own real {@code Status} string, not a synthetic one. */
+    @Test
+    void aContainerWithARealPassingHealthcheckEventuallyReportsHealthy() {
+        String name = "nx-test-collector-health-" + UUID.randomUUID().toString().substring(0, 8);
+        startedContainerNames.add(name);
+        try {
+            Process run = new ProcessBuilder("docker", "run", "-d", "--name", name,
+                    "--health-cmd", "true", "--health-interval", "1s", "--health-retries", "1",
+                    "--health-start-period", "1s", "busybox", "sh", "-c", "sleep 300")
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start();
+            assertTrue(run.waitFor(30, TimeUnit.SECONDS) && run.exitValue() == 0,
+                    "could not start real health-checked test container '" + name + "'");
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+        long deadline = System.currentTimeMillis() + 20_000;
+        String lastSeen = "";
+        while (System.currentTimeMillis() < deadline) {
+            Optional<ControlPlaneProto.DockerContainerInfo> found = collector.listContainers().stream()
+                    .filter(c -> c.getName().contains(name)).findFirst();
+            if (found.isPresent()) {
+                lastSeen = found.get().getHealthStatus();
+                if ("healthy".equals(lastSeen)) {
+                    return;
+                }
+            }
+            sleep(300);
+        }
+        org.junit.jupiter.api.Assertions.fail(
+                "container never reported healthy via listContainers(); last seen health_status: " + lastSeen);
+    }
+
     @Test
     void controlActionAgainstANonexistentContainerFailsHonestly() {
         DockerStateCollector.ControlResult result = collector.stop("nx-test-does-not-exist-" + UUID.randomUUID());
