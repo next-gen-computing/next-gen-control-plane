@@ -68,3 +68,6 @@ python-predictor/*_risk_examples*.jsonl
 # User-supplied local cluster-trace files for import_external_trace.py — never downloaded by this repo,
 # never committed (potentially large, and not this project's data to redistribute).
 data/external_traces/
+# Raw cluster-trace source archives (Alibaba/Google/etc.) staged locally for the import_*.py scripts —
+# the actual directory referenced by the comment above; many GB, never this project's data to redistribute.
+datasets/
