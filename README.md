@@ -921,11 +921,13 @@ views of the same real, per-node Docker state.
 > daemon is reachable on it — otherwise the call fails cleanly with `UNIMPLEMENTED` rather than
 > silently doing nothing.
 
-> **What's not built yet, stated plainly**: `nx logs` only follows live output — there's no
-> server-side history to replay if you attach after a container's already produced output.
-> Image/volume/network write actions (pull, rm, tag, create) aren't implemented, only listing.
-> Interactive `exec` into a running container isn't implemented either. None of these are silently
-> half-working — each fails or is simply absent, never faked.
+> **What's built vs. still not, stated plainly**: `nx logs <job-id>` (without `--follow`) now replays
+> real recent history from a bounded per-job ring buffer instead of returning nothing; `--follow` keeps
+> the live-tail behavior. `nx images pull/rm/tag`, `nx volumes create/rm`, and `nx networks create/rm`
+> are real, working write actions, not list-only anymore. Interactive `exec` into a running container is
+> still not implemented — it needs a new bidirectional real-time relay primitive, named explicitly as
+> future work in [ALGORITHMS.md](ALGORITHMS.md). None of the above is silently half-working: each either
+> works for real or fails/is absent cleanly, never faked.
 
 ---
 
