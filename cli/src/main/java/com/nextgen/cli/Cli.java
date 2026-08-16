@@ -15,6 +15,7 @@ import com.nextgen.proto.ControlPlaneProto.DockerControlCommand;
 import com.nextgen.proto.ControlPlaneProto.DockerControlResult;
 import com.nextgen.proto.ControlPlaneProto.DockerImageInfo;
 import com.nextgen.proto.ControlPlaneProto.DockerNetworkInfo;
+import com.nextgen.proto.ControlPlaneProto.DockerResourceKind;
 import com.nextgen.proto.ControlPlaneProto.DockerResourcesSnapshot;
 import com.nextgen.proto.ControlPlaneProto.DockerVolumeInfo;
 import com.nextgen.proto.ControlPlaneProto.NodeDockerState;
@@ -36,8 +37,11 @@ import com.nextgen.proto.ControlPlaneProto.UploadBuildContextResponse;
 import com.nextgen.proto.ControlPlaneProto.ComposeCommand;
 import com.nextgen.proto.ControlPlaneProto.ComposeEvent;
 import com.nextgen.proto.ControlPlaneProto.ComposeUpRequest;
+import com.nextgen.proto.ControlPlaneServiceGrpc;
 import com.nextgen.proto.LocalDockerExecutionGrpc;
 import io.grpc.ManagedChannel;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
 import io.grpc.stub.StreamObserver;
 
@@ -126,8 +130,12 @@ public final class Cli {
                   nx container ls [--control-plane <host:port>]
                   nx container <start|stop|restart|rm> <node-id> <container-id> [--control-plane <host:port>]
                   nx images [--control-plane <host:port>]
+                  nx images <pull|rm> <node-id> <image-ref> [--control-plane <host:port>]
+                  nx images tag <node-id> <source-ref> <target-ref> [--control-plane <host:port>]
                   nx volumes [--control-plane <host:port>]
+                  nx volumes <create|rm> <node-id> <name> [--control-plane <host:port>]
                   nx networks [--control-plane <host:port>]
+                  nx networks <create|rm> <node-id> <name> [--control-plane <host:port>]
                   nx secret set <name> <value-or-@file> [--control-plane <host:port>]
                   nx cloud up --target <host:port> [--build] <compose-file>
                 """);
@@ -179,6 +187,18 @@ public final class Cli {
         AgentCredentials credentials = tls ? loadCredentials() : new AgentCredentials(cliHomeDir());
         ControlPlaneEndpoints endpoints = ControlPlaneEndpoints.single(hostPort[0], Integer.parseInt(hostPort[1]));
         return new ControlPlaneConnection(endpoints, tls, credentials);
+    }
+
+    /** Stage W: every unary RPC call site below used a bare {@code blockingStub(connection)} with no
+     * bound at all — against a silently-unreachable (not actively-refused) host, that hangs the whole
+     * command forever with no error, no hint, nothing to Ctrl-C into. {@code nx enrol} was the one
+     * exception (its own 15s deadline via {@code NodeAgent.ensureEnrolled}); every other command now
+     * gets the same real bound through this one helper. */
+    private static final long DEFAULT_RPC_TIMEOUT_SECONDS = 10;
+
+    private static ControlPlaneServiceGrpc.ControlPlaneServiceBlockingStub blockingStub(
+            ControlPlaneConnection connection) {
+        return blockingStub(connection).withDeadlineAfter(DEFAULT_RPC_TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
     // ── nx enrol ───────────────────────────────────────────────────────
@@ -257,7 +277,7 @@ public final class Cli {
         String payloadJson = ComposeFileParser.buildJobPayload(project, services, contextIds, sha256s);
         String jobId = project + "-" + UUID.randomUUID().toString().substring(0, 8);
 
-        JobSubmitResponse response = connection.blockingStub().submitJob(JobRequest.newBuilder()
+        JobSubmitResponse response = blockingStub(connection).submitJob(JobRequest.newBuilder()
                 .setJobId(jobId)
                 .setKind(TaskKind.TASK_KIND_DOCKER_COMPOSE_SERVICE)
                 .setPayloadJson(payloadJson)
@@ -270,7 +290,7 @@ public final class Cli {
         }
 
         if (follow) {
-            followJobEvents(connection, jobId, resolveTaskIdToServiceName(connection, jobId, services));
+            followJobEvents(connection, jobId, resolveTaskIdToServiceName(connection, jobId, services), true);
         } else {
             System.out.println("Started detached — use 'nx logs " + jobId + "' or 'nx ps " + jobId + "' to check on it.");
         }
@@ -320,7 +340,7 @@ public final class Cli {
 
         System.out.println("Rolling update: replacing '" + oldJobId + "' with '" + newJobId
                 + "', one replica at a time...");
-        JobSubmitResponse response = connection.blockingStub().submitJob(JobRequest.newBuilder()
+        JobSubmitResponse response = blockingStub(connection).submitJob(JobRequest.newBuilder()
                 .setJobId(newJobId)
                 .setKind(TaskKind.TASK_KIND_DOCKER_COMPOSE_SERVICE)
                 .setPayloadJson(payloadJson)
@@ -333,7 +353,7 @@ public final class Cli {
             return;
         }
         if (follow) {
-            followJobEvents(connection, newJobId, resolveTaskIdToServiceName(connection, newJobId, services));
+            followJobEvents(connection, newJobId, resolveTaskIdToServiceName(connection, newJobId, services), true);
         } else {
             System.out.println("Use 'nx logs " + newJobId + "' or 'nx ps " + newJobId + "' to check on it.");
         }
@@ -346,7 +366,7 @@ public final class Cli {
             throw new UsageException("nx rollback <job-id>");
         }
         ControlPlaneConnection connection = connect(args);
-        JobSubmitResponse response = connection.blockingStub()
+        JobSubmitResponse response = blockingStub(connection)
                 .rollbackJob(JobStatusRequest.newBuilder().setJobId(positionals.get(0)).build());
         System.out.println(response.getResult());
     }
@@ -354,7 +374,7 @@ public final class Cli {
     private static Map<String, String> resolveTaskIdToServiceName(ControlPlaneConnection connection, String jobId,
                                                                    List<ParsedService> services) {
         Map<String, String> names = new HashMap<>();
-        JobStatusResponse status = connection.blockingStub()
+        JobStatusResponse status = blockingStub(connection)
                 .getJobStatus(JobStatusRequest.newBuilder().setJobId(jobId).build());
         List<String> taskIds = status.getTaskIdsList();
         for (int i = 0; i < taskIds.size() && i < services.size(); i++) {
@@ -363,13 +383,25 @@ public final class Cli {
         return names;
     }
 
+    /** How long {@link #followJobEvents} waits for the FIRST signal (a real event, or an honest error)
+     * before giving up on a silently-unreachable (not actively-refused) control plane — matches
+     * {@code NodeAgent.ensureEnrolled}'s own 15s convention. Deliberately NOT a cap on the whole follow
+     * session: once the stream is confirmed alive, following continues indefinitely (Ctrl+C to stop),
+     * matching `docker compose up`'s own attached behavior — a legitimately long-running job must never
+     * be cut off by a flat overall timeout. */
+    private static final long FOLLOW_CONNECT_TIMEOUT_SECONDS = 15;
+
     private static void followJobEvents(ControlPlaneConnection connection, String jobId,
-                                        Map<String, String> taskIdToServiceName) throws InterruptedException {
+                                        Map<String, String> taskIdToServiceName, boolean follow)
+            throws InterruptedException {
         CountDownLatch done = new CountDownLatch(1);
-        connection.asyncStub().streamJobEvents(JobEventsRequest.newBuilder().setJobId(jobId).build(),
+        CountDownLatch connected = new CountDownLatch(1);
+        connection.asyncStub().streamJobEvents(
+                JobEventsRequest.newBuilder().setJobId(jobId).setFollow(follow).build(),
                 new StreamObserver<>() {
                     @Override
                     public void onNext(TaskEvent event) {
+                        connected.countDown();
                         String service = taskIdToServiceName.getOrDefault(event.getTaskId(), event.getTaskId());
                         if (event.hasLog()) {
                             System.out.println(service + " | " + event.getLog().getLine());
@@ -384,15 +416,22 @@ public final class Cli {
 
                     @Override
                     public void onError(Throwable t) {
+                        connected.countDown();
                         System.err.println("stream error: " + t.getMessage());
                         done.countDown();
                     }
 
                     @Override
                     public void onCompleted() {
+                        connected.countDown();
                         done.countDown();
                     }
                 });
+        if (!connected.await(FOLLOW_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+            System.err.println("No response from the control plane within " + FOLLOW_CONNECT_TIMEOUT_SECONDS
+                    + "s — is it reachable?");
+            return;
+        }
         done.await(); // Ctrl+C to stop following, matching `docker compose up`'s own attached behavior.
     }
 
@@ -465,10 +504,9 @@ public final class Cli {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        JobStatusResponse status = connection.blockingStub()
-                .getJobStatus(JobStatusRequest.newBuilder().setJobId(jobId).build());
+        JobStatusResponse status = getJobStatusOrUsageError(connection, jobId);
         for (String taskId : status.getTaskIdsList()) {
-            var response = connection.blockingStub().cancelTask(TaskCancelRequest.newBuilder()
+            var response = blockingStub(connection).cancelTask(TaskCancelRequest.newBuilder()
                     .setTaskId(taskId).setReason("nx down").build());
             System.out.println(taskId + ": " + (response.getAccepted() ? "cancel requested" : response.getMessage()));
         }
@@ -486,11 +524,28 @@ public final class Cli {
             throw new RuntimeException(e);
         }
         if (!positionals.isEmpty()) {
-            printJobStatus(connection.blockingStub()
-                    .getJobStatus(JobStatusRequest.newBuilder().setJobId(positionals.get(0)).build()));
+            printJobStatus(getJobStatusOrUsageError(connection, positionals.get(0)));
         } else {
-            JobList list = connection.blockingStub().listJobs(Empty.getDefaultInstance());
+            JobList list = blockingStub(connection).listJobs(Empty.getDefaultInstance());
             list.getJobsList().forEach(Cli::printJobStatus);
+        }
+    }
+
+    /** Stage EE: {@code nx down}/{@code nx ps <job-id>} against an unknown job previously fell through
+     * to {@code main()}'s generic catch-all (exit code 1) — indistinguishable from a real internal or
+     * transport failure. {@code NOT_FOUND} is already a clean, honest server response (see {@code
+     * ControlPlaneServiceImpl.getJobStatus}); surfacing it as a {@link UsageException} gives it the
+     * dedicated exit code 2 that distinguishes "you asked for something that doesn't exist" from
+     * "something actually went wrong." */
+    private static JobStatusResponse getJobStatusOrUsageError(ControlPlaneConnection connection, String jobId) {
+        try {
+            return blockingStub(connection).getJobStatus(JobStatusRequest.newBuilder().setJobId(jobId).build());
+        } catch (StatusRuntimeException e) {
+            if (e.getStatus().getCode() == Status.Code.NOT_FOUND) {
+                String description = e.getStatus().getDescription();
+                throw new UsageException(description != null ? description : "no such job: " + jobId);
+            }
+            throw e;
         }
     }
 
@@ -523,9 +578,11 @@ public final class Cli {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        // No server-side log history exists yet (Stage S's own named scope cut) — this always follows
-        // live output regardless of --follow, which is accepted only for docker-compose-style familiarity.
-        followJobEvents(connection, positionals.get(0), Map.of());
+        // Stage FF: the server now keeps a bounded per-job history buffer (JobEventBroadcaster), so
+        // --follow can mean what it means for `docker logs`/`kubectl logs` — replay history and exit
+        // by default, only keep tailing live output when explicitly requested.
+        boolean follow = args.flag("--follow");
+        followJobEvents(connection, positionals.get(0), Map.of(), follow);
     }
 
     // ── nx nodes ───────────────────────────────────────────────────────
@@ -538,7 +595,7 @@ public final class Cli {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        NodeList nodes = connection.blockingStub().getNodes(Empty.getDefaultInstance());
+        NodeList nodes = blockingStub(connection).getNodes(Empty.getDefaultInstance());
         System.out.printf("%-20s %-10s %-8s %-16s%n", "NODE", "STATUS", "DOCKER", "DOCKER_VERSION");
         for (NodeInfo node : nodes.getNodesList()) {
             System.out.printf("%-20s %-10s %-8s %-16s%n", node.getNodeId(), node.getStatus(),
@@ -573,7 +630,7 @@ public final class Cli {
         ArgReader args = new ArgReader(rawArgs);
         ControlPlaneConnection connection = connect(args);
         DockerResourcesSnapshot snapshot =
-                connection.blockingStub().getDockerResources(Empty.getDefaultInstance());
+                blockingStub(connection).getDockerResources(Empty.getDefaultInstance());
         System.out.printf("%-16s %-14s %-22s %-24s %-10s %-20s%n",
                 "NODE", "CONTAINER_ID", "NAME", "IMAGE", "STATUS", "PORTS");
         for (NodeDockerState nodeState : snapshot.getNodesList()) {
@@ -592,7 +649,7 @@ public final class Cli {
             throw new UsageException("nx container <start|stop|restart|rm> <node-id> <container-id>");
         }
         ControlPlaneConnection connection = connect(args);
-        DockerControlResult result = connection.blockingStub().controlDockerContainer(DockerControlCommand.newBuilder()
+        DockerControlResult result = blockingStub(connection).controlDockerContainer(DockerControlCommand.newBuilder()
                 .setNodeId(positionals.get(0))
                 .setContainerId(positionals.get(1))
                 .setAction(action)
@@ -624,7 +681,7 @@ public final class Cli {
                 : rawValue.getBytes(StandardCharsets.UTF_8);
 
         ControlPlaneConnection connection = connect(args);
-        connection.blockingStub().setSecret(SetSecretRequest.newBuilder()
+        blockingStub(connection).setSecret(SetSecretRequest.newBuilder()
                 .setName(name)
                 .setValue(ByteString.copyFrom(value))
                 .build());
@@ -632,14 +689,33 @@ public final class Cli {
     }
 
     // ── nx images / nx volumes / nx networks ──────────────────────────
-    // List-only in this stage — see the plan's Stage T scope cuts for pull/rm/tag and volume/network
-    // create/rm.
+    // Stage FF: pull/rm/tag for images, create/rm for volumes/networks — extending Stage T's
+    // originally list-only coverage of these three resource types (containers already had full
+    // start/stop/restart/rm). Each write action targets exactly one node (docker images/volumes/
+    // networks are node-local, not cluster-wide resources), so every subcommand below takes a
+    // <node-id> the same way `nx container start/stop/...` already does.
 
     private static void cmdImages(String[] rawArgs) throws IOException {
+        if (rawArgs.length > 0 && !rawArgs[0].startsWith("--")) {
+            String[] rest = java.util.Arrays.copyOfRange(rawArgs, 1, rawArgs.length);
+            switch (rawArgs[0]) {
+                case "pull" -> cmdDockerResourceControl(rest, DockerResourceKind.DOCKER_RESOURCE_KIND_IMAGE,
+                        DockerControlAction.DOCKER_CONTROL_ACTION_PULL, "nx images pull <node-id> <image-ref>");
+                case "rm" -> cmdDockerResourceControl(rest, DockerResourceKind.DOCKER_RESOURCE_KIND_IMAGE,
+                        DockerControlAction.DOCKER_CONTROL_ACTION_REMOVE, "nx images rm <node-id> <image-ref>");
+                case "tag" -> cmdImageTag(rest);
+                default -> throw new UsageException("unknown 'nx images' subcommand '" + rawArgs[0] + "'");
+            }
+            return;
+        }
+        cmdImagesLs(rawArgs);
+    }
+
+    private static void cmdImagesLs(String[] rawArgs) throws IOException {
         ArgReader args = new ArgReader(rawArgs);
         ControlPlaneConnection connection = connect(args);
         DockerResourcesSnapshot snapshot =
-                connection.blockingStub().getDockerResources(Empty.getDefaultInstance());
+                blockingStub(connection).getDockerResources(Empty.getDefaultInstance());
         System.out.printf("%-16s %-30s %-14s %-14s%n", "NODE", "REPOSITORY:TAG", "IMAGE_ID", "SIZE");
         for (NodeDockerState nodeState : snapshot.getNodesList()) {
             for (DockerImageInfo i : nodeState.getReport().getImagesList()) {
@@ -649,11 +725,43 @@ public final class Cli {
         }
     }
 
+    private static void cmdImageTag(String[] rawArgs) throws IOException {
+        ArgReader args = new ArgReader(rawArgs);
+        List<String> positionals = args.positionals();
+        if (positionals.size() < 3) {
+            throw new UsageException("nx images tag <node-id> <source-ref> <target-ref>");
+        }
+        ControlPlaneConnection connection = connect(args);
+        DockerControlResult result = blockingStub(connection).controlDockerContainer(DockerControlCommand.newBuilder()
+                .setNodeId(positionals.get(0))
+                .setResourceKind(DockerResourceKind.DOCKER_RESOURCE_KIND_IMAGE)
+                .setAction(DockerControlAction.DOCKER_CONTROL_ACTION_TAG)
+                .setResourceId(positionals.get(1))
+                .setTagTarget(positionals.get(2))
+                .build());
+        System.out.println((result.getOk() ? "OK: " : "FAILED: ") + result.getMessage());
+    }
+
     private static void cmdVolumes(String[] rawArgs) throws IOException {
+        if (rawArgs.length > 0 && !rawArgs[0].startsWith("--")) {
+            String[] rest = java.util.Arrays.copyOfRange(rawArgs, 1, rawArgs.length);
+            switch (rawArgs[0]) {
+                case "create" -> cmdDockerResourceControl(rest, DockerResourceKind.DOCKER_RESOURCE_KIND_VOLUME,
+                        DockerControlAction.DOCKER_CONTROL_ACTION_CREATE, "nx volumes create <node-id> <name>");
+                case "rm" -> cmdDockerResourceControl(rest, DockerResourceKind.DOCKER_RESOURCE_KIND_VOLUME,
+                        DockerControlAction.DOCKER_CONTROL_ACTION_REMOVE, "nx volumes rm <node-id> <name>");
+                default -> throw new UsageException("unknown 'nx volumes' subcommand '" + rawArgs[0] + "'");
+            }
+            return;
+        }
+        cmdVolumesLs(rawArgs);
+    }
+
+    private static void cmdVolumesLs(String[] rawArgs) throws IOException {
         ArgReader args = new ArgReader(rawArgs);
         ControlPlaneConnection connection = connect(args);
         DockerResourcesSnapshot snapshot =
-                connection.blockingStub().getDockerResources(Empty.getDefaultInstance());
+                blockingStub(connection).getDockerResources(Empty.getDefaultInstance());
         System.out.printf("%-16s %-24s %-12s %-30s%n", "NODE", "NAME", "DRIVER", "MOUNTPOINT");
         for (NodeDockerState nodeState : snapshot.getNodesList()) {
             for (DockerVolumeInfo v : nodeState.getReport().getVolumesList()) {
@@ -664,10 +772,25 @@ public final class Cli {
     }
 
     private static void cmdNetworks(String[] rawArgs) throws IOException {
+        if (rawArgs.length > 0 && !rawArgs[0].startsWith("--")) {
+            String[] rest = java.util.Arrays.copyOfRange(rawArgs, 1, rawArgs.length);
+            switch (rawArgs[0]) {
+                case "create" -> cmdDockerResourceControl(rest, DockerResourceKind.DOCKER_RESOURCE_KIND_NETWORK,
+                        DockerControlAction.DOCKER_CONTROL_ACTION_CREATE, "nx networks create <node-id> <name>");
+                case "rm" -> cmdDockerResourceControl(rest, DockerResourceKind.DOCKER_RESOURCE_KIND_NETWORK,
+                        DockerControlAction.DOCKER_CONTROL_ACTION_REMOVE, "nx networks rm <node-id> <name>");
+                default -> throw new UsageException("unknown 'nx networks' subcommand '" + rawArgs[0] + "'");
+            }
+            return;
+        }
+        cmdNetworksLs(rawArgs);
+    }
+
+    private static void cmdNetworksLs(String[] rawArgs) throws IOException {
         ArgReader args = new ArgReader(rawArgs);
         ControlPlaneConnection connection = connect(args);
         DockerResourcesSnapshot snapshot =
-                connection.blockingStub().getDockerResources(Empty.getDefaultInstance());
+                blockingStub(connection).getDockerResources(Empty.getDefaultInstance());
         System.out.printf("%-16s %-14s %-24s %-12s %-10s%n", "NODE", "NETWORK_ID", "NAME", "DRIVER", "SCOPE");
         for (NodeDockerState nodeState : snapshot.getNodesList()) {
             for (DockerNetworkInfo n : nodeState.getReport().getNetworksList()) {
@@ -675,6 +798,26 @@ public final class Cli {
                         nodeState.getNodeId(), shortId(n.getNetworkId()), n.getName(), n.getDriver(), n.getScope());
             }
         }
+    }
+
+    /** Shared by {@code nx images pull/rm}, {@code nx volumes create/rm}, {@code nx networks create/rm}
+     * — every one of these is {@code <node-id> <resource-id>} plus a fixed kind/action pair, mirroring
+     * {@link #cmdContainerControl}'s identical shape for containers. */
+    private static void cmdDockerResourceControl(String[] rawArgs, DockerResourceKind kind,
+            DockerControlAction action, String usage) throws IOException {
+        ArgReader args = new ArgReader(rawArgs);
+        List<String> positionals = args.positionals();
+        if (positionals.size() < 2) {
+            throw new UsageException(usage);
+        }
+        ControlPlaneConnection connection = connect(args);
+        DockerControlResult result = blockingStub(connection).controlDockerContainer(DockerControlCommand.newBuilder()
+                .setNodeId(positionals.get(0))
+                .setResourceKind(kind)
+                .setAction(action)
+                .setResourceId(positionals.get(1))
+                .build());
+        System.out.println((result.getOk() ? "OK: " : "FAILED: ") + result.getMessage());
     }
 
     private static String formatBytes(long bytes) {
@@ -765,7 +908,10 @@ public final class Cli {
 
     // ── Tiny arg parser ────────────────────────────────────────────────
 
-    private static final class UsageException extends RuntimeException {
+    // Package-private (not private) so ArgReaderTest can assert on this specific exception type.
+    static final class UsageException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
         UsageException(String message) {
             super(message);
         }
@@ -773,8 +919,17 @@ public final class Cli {
 
     /** No external CLI-parsing dependency for a handful of flags — this covers exactly what the
      * command table above needs: {@code --flag value}, bare {@code --flag} booleans, and positionals. */
-    private static final class ArgReader {
+    // Package-private (not private) so ArgReaderTest can exercise it directly, real-object-not-mocked,
+    // matching this project's established testing discipline.
+    static final class ArgReader {
         private final Map<String, String> options = new HashMap<>();
+        // Stage EE: names ArgReader itself defaulted to "true" because no following value token was
+        // present (either end-of-args, or the next token itself looked like another --flag) — kept
+        // separate from `options` so require() can tell a genuine boolean flag apart from a value-taking
+        // option whose value was accidentally omitted (e.g. `nx enrol --token --control-plane host:1234`
+        // previously silently attempted a doomed enrolment with literal token "true" instead of failing
+        // with a clear "missing value for --token").
+        private final java.util.Set<String> defaultedFlags = new java.util.HashSet<>();
         private final List<String> positional = new ArrayList<>();
 
         ArgReader(String[] args) {
@@ -785,6 +940,7 @@ public final class Cli {
                         options.put(a, args[++i]);
                     } else {
                         options.put(a, "true");
+                        defaultedFlags.add(a);
                     }
                 } else {
                     positional.add(a);
@@ -800,6 +956,9 @@ public final class Cli {
             String v = options.get(name);
             if (v == null) {
                 throw new UsageException("missing required option " + name);
+            }
+            if (defaultedFlags.contains(name)) {
+                throw new UsageException("missing value for " + name);
             }
             return v;
         }

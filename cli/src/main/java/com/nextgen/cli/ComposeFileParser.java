@@ -85,9 +85,25 @@ public final class ComposeFileParser {
     /** @return every service declared under {@code services:}, in the file's own declaration order —
      * callers that build sub-task ids from list index depend on this order being stable. */
     public static List<ParsedService> parse(Path composeFile) throws IOException {
-        String text = Files.readString(composeFile);
-        Yaml yaml = new Yaml();
-        Object root = yaml.load(text);
+        // Stage EE: both of these previously threw their own raw, unwrapped exceptions — a missing
+        // file surfaced only as a bare NoSuchFileException with just the path as its message, and
+        // invalid YAML surfaced SnakeYAML's raw internal parser-position exception — neither matching
+        // the clear, project-authored IllegalArgumentException messages this same method already
+        // raises for every structural problem below (missing 'services:', a non-mapping service, ...).
+        String text;
+        try {
+            text = Files.readString(composeFile);
+        } catch (IOException e) {
+            throw new IllegalArgumentException(
+                    "could not read compose file '" + composeFile + "': " + e.getMessage(), e);
+        }
+        Object root;
+        try {
+            root = new Yaml().load(text);
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException(
+                    "'" + composeFile + "' is not valid YAML: " + e.getMessage(), e);
+        }
         if (!(root instanceof Map<?, ?> rootMap)) {
             throw new IllegalArgumentException("compose file has no top-level mapping: " + composeFile);
         }

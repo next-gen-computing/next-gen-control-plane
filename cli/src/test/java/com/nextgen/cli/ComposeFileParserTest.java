@@ -138,6 +138,27 @@ class ComposeFileParserTest {
         assertThrows(IllegalArgumentException.class, () -> ComposeFileParser.parse(file));
     }
 
+    /** Stage EE: a missing file previously surfaced as a raw, unwrapped NoSuchFileException with just
+     * the path as its message — now the same clean IllegalArgumentException every other structural
+     * problem in this class already gets. */
+    @Test
+    void aMissingComposeFileIsRejectedWithAClearMessageNotARawIOException(@TempDir Path dir) {
+        Path missing = dir.resolve("does-not-exist.yml");
+
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> ComposeFileParser.parse(missing));
+        assertTrue(e.getMessage().contains("does-not-exist.yml"), e.getMessage());
+    }
+
+    /** Stage EE: invalid YAML previously surfaced SnakeYAML's own raw internal parser-position
+     * exception — now the same clean IllegalArgumentException every other structural problem gets. */
+    @Test
+    void invalidYamlIsRejectedWithAClearMessageNotARawSnakeYamlException(@TempDir Path dir) throws Exception {
+        Path file = writeCompose(dir, "services:\n  web:\n\tbadly: [indented, mixing, tabs\n");
+
+        assertThrows(IllegalArgumentException.class, () -> ComposeFileParser.parse(file));
+    }
+
     @Test
     void parsesDeployResourcesLimitsAndReservations(@TempDir Path dir) throws Exception {
         Path file = writeCompose(dir, """
