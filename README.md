@@ -1,13 +1,13 @@
 <div align="center">
 
-# ⚡ Next-Gen Control Plane v1.0.0
+# ⚡ Next-Gen Control Plane
 
 **Production-grade distributed control plane with real-time predictive scheduling under failure conditions**
 
-[![Version](https://img.shields.io/badge/version-v1.0.0-blue.svg)](https://github.com/YOUR_USERNAME/next-gen-control-plane/releases)
+[![Build](https://img.shields.io/badge/build-1.0--SNAPSHOT-blue.svg)](pom.xml)
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org)
 [![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://python.org)
-[![gRPC](https://img.shields.io/badge/gRPC-1.68-green.svg)](https://grpc.io)
+[![gRPC](https://img.shields.io/badge/gRPC-1.83-green.svg)](https://grpc.io)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://docs.docker.com/compose/)
 [![JavaFX](https://img.shields.io/badge/JavaFX-21-purple.svg)](https://openjfx.io)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -45,7 +45,7 @@ separate "node" product and no requirement that a node be on the same network as
 - **Round-Robin Load Balancing** — fair task distribution across healthy nodes, rotating over node
   identity so churn in the cluster can't starve a node or double-load another.
 - **Prometheus Metrics** on the control plane and predictor. (Per-node metrics reach the UI over gRPC
-  through the control plane, not via a Prometheus scrape — see docs/ARCHITECTURE.md for why a
+  through the control plane, not via a Prometheus scrape — see ARCHITECTURE.md for why a
   pull-based scraper structurally can't reach a NAT'd worldwide node directly.)
 - **Docker for the server only** — one command self-hosts the coordinating server; nodes are never
   Docker containers.
@@ -99,7 +99,7 @@ differs is which one you pick on launch, not which machine you're allowed to run
 ```
 
 This is the only publicly-reachable point in the whole system: the control plane. Everything else —
-every node, on every OS, anywhere — only ever dials out to it. See `docs/ARCHITECTURE.md` for the
+every node, on every OS, anywhere — only ever dials out to it. See `ARCHITECTURE.md` for the
 full connectivity and mTLS trust model.
 
 > The old web dashboard and the Docker-simulated `node1`/`node2`/`node3` containers from earlier
@@ -113,7 +113,9 @@ full connectivity and mTLS trust model.
 
 Every algorithm below is real, tested code — not a description of an aspiration. Each entry says what
 problem it solves, exactly where it lives, and whether it's on **by default** or something an operator
-has to **opt into**.
+has to **opt into**. See **[ALGORITHMS.md](ALGORITHMS.md)** for the full deep-dive version of this same
+material — exact formulas/pseudocode, the alternative each design rejected and why, and the real
+measured numbers (model accuracy, live-migration latency) behind each one.
 
 ### Round-robin scheduling — always on
 `RoundRobinScheduler` (`java-control-plane/.../controlplane/RoundRobinScheduler.java`). Baseline fair
@@ -171,7 +173,7 @@ A hand-rolled implementation (`com.nextgen.controlplane.raft`) turning the contr
 process into a fault-tolerant 3-replica cluster: randomized-timeout leader election, log replication
 with the mandatory Figure-8 commit-safety check, a durable write-ahead log, and gRPC-based
 leader-redirect for both node RPCs and certificate issuance. Off by default (`RAFT_ENABLED=false`) —
-see [docs/ARCHITECTURE.md's **Consensus & replication**](docs/ARCHITECTURE.md#consensus--replication)
+see [ARCHITECTURE.md's **Consensus & replication**](ARCHITECTURE.md#consensus--replication)
 for what's replicated vs. leader-local and why, and `docker-compose.raft.yml` to actually run a
 3-replica cluster.
 
@@ -199,7 +201,7 @@ node-side execution engine, and the `nx` CLI tool that drives it:
 - **Build-from-source, not just pre-built images** — a service can `build:` from a local Dockerfile;
   the CLI tars and uploads the context (`UploadBuildContext`), the control plane stages it, and streams
   it down to whichever node ends up building it, SHA-256-verified end to end before the build ever
-  starts. See [Distributed container execution](docs/ARCHITECTURE.md#distributed-container-execution)
+  starts. See [Distributed container execution](ARCHITECTURE.md#distributed-container-execution)
   for the full operator → control plane → node path.
 - **Cross-node service networking, honestly scoped** — services on different nodes reach each other via
   injected `<PEER>_HOST`/`<PEER>_PORT` environment variables relayed through the control plane
@@ -311,7 +313,7 @@ java -jar cli/target/nextgen-cli-*.jar up my-compose.yml --project demo --contro
 Prototyping several "nodes" on one Docker Desktop host has exactly one topology-specific gotcha: set
 `RELAY_ADVERTISED_HOST=host.docker.internal` on the control plane (not the default `localhost`) so a
 container can reach the relay listener running on its own host machine — see
-[Distributed container execution](docs/ARCHITECTURE.md#distributed-container-execution). Genuinely
+[Distributed container execution](ARCHITECTURE.md#distributed-container-execution). Genuinely
 separate physical nodes need no such override.
 
 ## 📄 Paper ↔ Implementation
@@ -323,7 +325,7 @@ honestly underneath the table.
 
 | Paper claim | Real? | Where |
 |---|---|---|
-| Raft consensus with leader election | ✅ Now real | `com.nextgen.controlplane.raft`, [Consensus & replication](docs/ARCHITECTURE.md#consensus--replication) |
+| Raft consensus with leader election | ✅ Now real | `com.nextgen.controlplane.raft`, [Consensus & replication](ARCHITECTURE.md#consensus--replication) |
 | LSTM load forecasting (5-minute horizon) | ✅ Now real | `python-predictor/load_forecast_model.py` (opt-in) |
 | XGBoost failure-risk classification | ✅ Now real | `python-predictor/train_risk_model.py --model-type xgboost` (opt-in) |
 | Proactive / predictive workload migration | ✅ Real | `RiskMonitor` / `ProactiveMigrator` |
@@ -608,7 +610,7 @@ next-gen-control-plane/
 ├── python-predictor/                # Python ML service (XGBoost risk classifier, LSTM forecaster)
 ├── deploy/                          # Prometheus scrape config for self-hosting the server
 ├── scripts/                         # Utilities & testing
-├── docs/                            # Architecture docs
+├── ARCHITECTURE.md                  # Detailed architecture decisions, consensus/replication, trust model
 ├── docker-compose.yml               # Server-side deployment only (no simulated nodes)
 ├── docker-compose.raft.yml          # Opt-in 3-replica Raft topology
 ├── DEVELOPMENT.md
@@ -657,7 +659,7 @@ next-gen-control-plane/
   cluster — real leader election, log replication, a durable write-ahead log, and gRPC-based
   leader-redirect for both node RPCs and certificate issuance. Off by default
   (`RAFT_ENABLED=false`); see [Algorithms & Predictive Intelligence](#-algorithms--predictive-intelligence)
-  above and `docs/ARCHITECTURE.md`'s Consensus & replication section.
+  above and `ARCHITECTURE.md`'s Consensus & replication section.
 - **Phase-5** ✅ — ML-based predictive scheduling.
   Real gradient-boosted trees (XGBoost) for failure-risk classification and an LSTM for load
   forecasting, both opt-in and both honestly reporting `model_trained=false` until an operator
@@ -742,7 +744,7 @@ than failing startup.
 |---|---|---|
 | `TLS_ENABLED` | `false` | Enforce mutual TLS. When off, policy runs in audit mode and only counts what it would reject. |
 | `TLS_SAN_HOSTS` | `localhost,127.0.0.1` | Names the server certificate is valid for. **Must include the public hostname** clients dial. |
-| `TLS_SSL_PROVIDER` | `JDK` | `JDK` or `OPENSSL`. See the provider note in `docs/ARCHITECTURE.md`. |
+| `TLS_SSL_PROVIDER` | `JDK` | `JDK` or `OPENSSL`. See the provider note in `ARCHITECTURE.md`. |
 | `ENROLLMENT_ENABLED` | `true` | Set `false` after provisioning to close the only anonymous entry point. |
 | `ENROLLMENT_TOKENS` | *(unset)* | Comma-separated node ids to mint tokens for at startup |
 | `ENROLLMENT_TOKEN_TTL_MINUTES` | `60` | How long a minted token stays usable |
@@ -882,8 +884,9 @@ What actually happens, in order:
 2. Because `worker` has a `build:` block, the CLI tars `examples/hello-cluster/worker/`, hashes it
    (SHA-256), and streams it to the control plane over a chunked upload RPC.
 3. The control plane verifies the hash against what it actually received, stages it, and picks one
-   idle, Docker-capable node per service via the capability-aware scheduler (Equation 1 in
-   `docs/paper/nextgen-control-plane.tex`, if you want the exact formula).
+   idle, Docker-capable node per service via the capability-aware scheduler (see
+   `HeuristicNodeCapacityScorer` in [Algorithms & Predictive Intelligence](#-algorithms--predictive-intelligence)
+   for the exact weighting formula).
 4. It streams the staged tarball down the target node's *already-open* outbound channel — the node
    never accepts a new inbound connection — where it's unpacked, the hash re-verified, and a real
    `docker build` runs before the container starts.
@@ -949,7 +952,7 @@ java -jar control-plane-1.0-SNAPSHOT-all.jar
 ```
 
 Once every node has enrolled, set `ENROLLMENT_ENABLED=false` and restart the control plane to close
-the only anonymous endpoint. See `docs/ARCHITECTURE.md` for the full connectivity and trust model.
+the only anonymous endpoint. See `ARCHITECTURE.md` for the full connectivity and trust model.
 
 > **Certificate renewal runs on a timer, not just at startup.** A node checks whether its certificate
 > needs renewing once at process start, and then periodically thereafter (`CERT_RENEWAL_CHECK_INTERVAL_MS`,
@@ -966,7 +969,9 @@ the only anonymous endpoint. See `docs/ARCHITECTURE.md` for the full connectivit
 ## 📚 Documentation
 
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** — Developer setup, building, debugging
-- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — Detailed architecture decisions
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** — Detailed architecture decisions
+- **[ALGORITHMS.md](ALGORITHMS.md)** — Every algorithm this project runs: which, how, why, what problem
+  it solves, and real measured evidence for each
 - **[CHANGELOG.md](CHANGELOG.md)** — Version history and release notes
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — How to contribute
 

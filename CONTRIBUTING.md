@@ -318,4 +318,4 @@ Thank you for contributing! 🎉
 ---
 
 **Maintainers:** Team Next-Gen  
-**Last Updated:** April 2026
+**Last Updated:** August 2026

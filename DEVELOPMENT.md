@@ -174,7 +174,7 @@ No `nx enrol` needed here — the CLI talks plaintext by default, matching `TLS_
 Prototyping several node agents as separate processes on this ONE machine has one topology-specific
 gotcha: pass `RELAY_ADVERTISED_HOST=host.docker.internal` to the server in Step 2 (not the default
 `localhost`) so a container can reach the relay listener on its own host — see
-[docs/ARCHITECTURE.md's Distributed container execution section](docs/ARCHITECTURE.md#distributed-container-execution).
+[ARCHITECTURE.md's Distributed container execution section](ARCHITECTURE.md#distributed-container-execution).
 Genuinely separate physical nodes need no such override.
 
 ### Step 4: Start Python Predictor
@@ -414,10 +414,9 @@ next-gen-control-plane/
 ├── examples/                               # Runnable example projects (e.g. hello-cluster compose)
 ├── datasets/                                # Local-only training data (gitignored, not distributed)
 ├── scripts/                                 # Utilities (integration/e2e test scripts)
-├── docs/                                    # ARCHITECTURE.md and the IEEE paper source
 ├── deploy/                                  # Prometheus config for the Raft-aware compose topology
 ├── docker-compose.yml, docker-compose.raft.yml
-├── README.md, DEVELOPMENT.md, CHANGELOG.md, CONTRIBUTING.md, LICENSE
+├── README.md, DEVELOPMENT.md, CHANGELOG.md, CONTRIBUTING.md, LICENSE, ARCHITECTURE.md, ALGORITHMS.md
 ```
 
 ## 🔄 Git Workflow
@@ -511,7 +510,8 @@ duplicating a version summary here is exactly the kind of second copy that goes 
 - [README.md](README.md) — Project overview and quick start
 - [CHANGELOG.md](CHANGELOG.md) — Version history
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Contribution guidelines
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Architecture decisions, including the full trust model and Raft's consensus/replication design
+- [ARCHITECTURE.md](ARCHITECTURE.md) — Architecture decisions, including the full trust model and Raft's consensus/replication design
+- [ALGORITHMS.md](ALGORITHMS.md) — Every algorithm this project runs, with real formulas and evidence
 
 ## ❓ Getting Help
 

@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed / Added - Bug fixes, hardening, and feature-completeness pass found via live end-to-end testing and three parallel deep-audit agents
+
+Everything below was found empirically (a real live multi-node run plus three read-only audits of the
+Java gRPC layer, the desktop-ui HTTP layer, and the CLI/Python predictor) rather than assumed, and every
+fix was verified with a real Docker/gRPC/Raft/file-I/O test — never a mock for the mechanism under test.
+
+- **Fixed real bugs found live**: a duplicate-`CancelTask` no-op turned real (waits for confirmed
+  container teardown, not fire-and-forget); container-name/build-context-directory collisions on a
+  migrate-away-then-back cycle (attempt-scoped naming); a `nx logs <bad-job-id>` hang (missing
+  `NOT_FOUND` check + missing CLI deadlines); three resource leaks (`nx cloud up` orphaning containers
+  on client disconnect, unattached relay-port reservations never being swept, a double-HELLO on
+  `TaskChannel`/`DockerStateChannel` orphaning the first node id's registry entry); a state-corruption
+  guard (`markDispatched`) that can no longer push a `COMPLETED` task back to `DISPATCHED`, correctly
+  scoped to not also break `JobCoordinator`'s legitimate one-retry-on-failure path.
+- **Predictor crash-per-request hardening**: `load_forecast_store.py`/`model_store.py` now survive an
+  empty or garbage-bytes model file, a non-dict JSON model file, and NaN anywhere in a
+  `PredictionRequest` — always falling back to the last-known-good model or an honest
+  `model_trained=false`, never crashing or returning a confidently-wrong verdict.
+- **Write-path validation parity**: blank-id rejection on every registration/submission path and both
+  channel HELLOs; `SubmitTask`'s direct-dispatch path now validates payload JSON before ever consuming
+  a node dispatch, matching `SubmitJob`'s existing discipline.
+- **desktop-ui HTTP hardening**: five handlers that could previously have their socket silently closed
+  by the JDK on a malformed body now return a real 400; wrong-method-on-a-real-path now returns 405 +
+  `Allow` instead of an indistinguishable-from-unknown-route 404; a persistently failing SSE poll now
+  force-closes connected clients so their `EventSource` actually reconnects.
+- **CLI/parser raw-error hardening**: `ComposeFileParser`, the trace-import scripts, and
+  `train_risk_model.py`'s JSONL reader now give clear, project-authored errors instead of a raw
+  stack trace for a missing file, invalid YAML, invalid UTF-8, or a missing CSV column; `ArgReader` now
+  rejects a value-taking flag whose value was accidentally omitted instead of silently treating it as
+  `"true"`.
+- **Docker resource write actions**: `nx images pull/rm/tag`, `nx volumes create/rm`,
+  `nx networks create/rm` — extending Stage T's originally list-only coverage.
+- **Bounded log replay**: `nx logs <job-id>` (without `--follow`) now replays real recent history from
+  a new bounded per-job ring buffer instead of returning nothing, matching `docker`/`kubectl logs`'
+  own show-and-exit default; `--follow` keeps today's indefinite-tail behavior.
+- **Real node-failure alerting**: a new `AlertNotifier` hook fires on `HeartbeatMonitor`'s reactive
+  `SUSPECTED_DEAD` transition and `RiskMonitor`'s predictive rising-edge trigger. `WebhookAlertNotifier`
+  is the concrete channel shipped (a real async HTTP POST, opt-in via `ALERT_WEBHOOK_URL`) — the
+  smallest real building block an email/desktop-notification channel could be layered on top of later.
+- **Durable task/job state outside Raft**: single-node (`RAFT_ENABLED=false`) deployments now survive a
+  plain restart — a new bounded `RegistrySnapshotStore` periodically snapshots `TaskRegistry`/
+  `JobRegistry` to disk (atomic write-then-rename) and restores from it on startup; unused, and
+  correctly not wired in, when Raft's own WAL is already authoritative.
+- **Raft-replicated enrollment tokens**: a token minted by a Raft leader that's then killed before the
+  token is used is still recognized by the newly-elected leader — closing the scope cut Stage J's own
+  design named explicitly. Minting blocks on real replication before the plaintext is ever handed to an
+  operator; consumption replicates best-effort immediately after the (already-atomic, already-correct)
+  local decision, closing the token-reuse-after-failover window without adding latency to a request
+  that's already succeeded.
+- **Multi-region deployment**: intentionally NOT attempted in this pass — the project plan itself names
+  this as having no existing code to extend and needing its own architecture/design pass (cross-region
+  Raft latency, topology-aware scheduling), not a fix pattern. Left as explicit future work rather than
+  forced.
+
 ### Added - Container-orchestration baseline hygiene: resource limits, restart policies, health checks, secrets, load-balanced replicas, confirmed cancellation, rolling updates
 
 Closes the concrete gap identified when scoping this project's predictive-scheduling differentiation
@@ -48,7 +102,7 @@ isn't a meaningful comparison point for most of this.
 
 ### Fixed - Certificate renewal now runs on a timer, not just at startup
 
-Closes the "named limitation" both README.md and docs/ARCHITECTURE.md previously called out: a node's
+Closes the "named limitation" both README.md and ARCHITECTURE.md previously called out: a node's
 certificate was only ever checked for renewal once, at process startup — a node left running longer
 than the certificate lifetime would silently lose connectivity mid-run with nothing re-checking.
 
@@ -126,7 +180,7 @@ Turns the cluster into a real distributed `docker compose`-style execution engin
 multi-service project spread across whichever nodes are currently idle — plus a single-machine "cloud"
 mode and the `nx` CLI tool that drives both. See
 [README's Distributed Docker-Compose execution section](README.md#distributed-docker-compose-execution--real-opt-in-per-task-kind)
-and [docs/ARCHITECTURE.md's Distributed container execution section](docs/ARCHITECTURE.md#distributed-container-execution)
+and [ARCHITECTURE.md's Distributed container execution section](ARCHITECTURE.md#distributed-container-execution)
 for the full design.
 
 - **New `TaskKind.DOCKER_COMPOSE_SERVICE`**, additive alongside the original `PRIME_COUNT_RANGE`.
@@ -210,7 +264,7 @@ committed project documentation, rather than continuing to carry them as unused 
 - Stray JVM crash-dump logs (`hs_err_pid*.log`) that had accumulated inside
   `desktop-ui/src/main/java/com/nextgen/desktop/ui/view/components/` — gitignored, never tracked, but
   cluttering the actual source directory on disk.
-- `README.md`/`docs/ARCHITECTURE.md`/`DEVELOPMENT.md`/`CONTRIBUTING.md`/`docker-compose.yml` updated
+- `README.md`/`ARCHITECTURE.md`/`DEVELOPMENT.md`/`CONTRIBUTING.md`/`docker-compose.yml` updated
   to stop referencing any of the above as though it still existed.
 
 ### Added - Phase-2 rebuild: the join flow actually works over the internet now
@@ -550,12 +604,43 @@ the shipped code, and each now has a named regression test.
 - The CA now lives on a named volume. Without one, restarting the control plane mints a new CA and
   every previously-enrolled node is instantly untrusted.
 
+### Housekeeping — repo cleanup, doc reorganization, zero-warnings pass
+
+- **`docs/ARCHITECTURE.md` moved to the repo root as `ARCHITECTURE.md`.** Every cross-reference across
+  `README.md`, `DEVELOPMENT.md`, `proto/control_plane.proto`, `docker-compose*.yml`,
+  `deploy/prometheus.yml`, and several Java source comments updated to the new path.
+- **The IEEE paper (real and draft) removed from the repository entirely** — both the current, real,
+  fully-cited paper and the earlier flawed draft (with fabricated benchmark numbers) now live outside
+  version control, since a paper submission isn't repo content. `docs/` is now empty and removed.
+- **New `ALGORITHMS.md`** — a complete, standalone technical reference for every algorithm this project
+  runs: exact formula/pseudocode, the rejected alternative and why, current real measured evidence
+  (model accuracy, live-migration latency), and default-vs-opt-in status for each. Linked from
+  `README.md` and `DEVELOPMENT.md`.
+- **Zero compiler/lint warnings.** `-Xlint:all` enabled project-wide in the root POM; fixed every real
+  warning it surfaced — missing `serialVersionUID` on three custom exceptions, a raw-type
+  `StreamObserver[]` array creation properly annotated, and a single-caller `@Deprecated` constructor
+  removed outright rather than kept around unused. `pyflakes` run across `python-predictor/`; removed
+  four genuinely-unused imports/variables (hand-written files only — generated `*_pb2_grpc.py` left
+  untouched). The one remaining numpy `RuntimeWarning` (a transient NaN from an intentionally-malformed
+  input test) is now explicitly suppressed at its one real call site rather than left as test-run noise.
+- **`.gitignore` gap closed**: the `datasets/` directory (raw, multi-GB cluster-trace source archives)
+  was never actually covered by any ignore pattern despite a comment implying it was — now it is.
+- **Three abandoned git worktrees removed** (`.claude/worktrees/agent-*`, each pinned to a stale commit
+  with zero unique history, confirmed via `git log main..<branch>` before deletion) along with their
+  now-orphaned local branches.
+- **Dead JavaFX-Scene theming code removed**, superseded by the current WebView + `web/css/tokens.css`/
+  `palette.js` frontend since the desktop app stopped rendering styled JavaFX `Scene` nodes directly:
+  `view/theme/Palette.java`, `styles/{base,dark,light}.css`, and `ThemeService`'s now-unreachable
+  `registerScene`/`applyTheme`/`getBackgroundColor`-family methods (confirmed zero production callers
+  before deletion). `ThemeService` itself stays — `isDarkMode`/`setDarkMode`/`toggleTheme` are genuinely
+  live, serving the real `/api/theme` HTTP endpoint the frontend actually reads.
+
 ### Planned
 - WebSocket support for dashboard
-- Alert system for node failures
-- Multi-region deployment support
-- Automated node recovery
-- Task queue persistence
+- Multi-region deployment support — needs its own architecture/design pass (cross-region Raft latency,
+  topology-aware scheduling); intentionally not attempted yet, see the Unreleased entry above
+- Additional alert channels (email, desktop notification) alongside the webhook one shipped above
+- Independent-host PKI for the 3-replica Raft cluster (today's replicas share one PKI filesystem)
 
 ## [3.0.0] - 2026-08-12
 
