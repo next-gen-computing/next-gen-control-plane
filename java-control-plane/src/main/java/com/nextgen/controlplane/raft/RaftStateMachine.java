@@ -9,6 +9,7 @@ import com.nextgen.controlplane.task.TaskKindDomain;
 import com.nextgen.controlplane.task.TaskRegistry;
 import com.nextgen.proto.ControlPlaneProto.JobSubTaskPlan;
 import com.nextgen.proto.ControlPlaneProto.StateCommand;
+import com.nextgen.security.EnrollmentTokenStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,13 +40,19 @@ public final class RaftStateMachine implements RaftApplier {
     private final TaskRegistry taskRegistry;
     private final JobRegistry jobRegistry;
     private final ApplyClock applyClock;
+    private final EnrollmentTokenStore tokenStore;
 
+    /** @param tokenStore Stage II: replicates {@code MintEnrollmentTokenCommand}/{@code
+     * ConsumeEnrollmentTokenCommand} into this replica's own store — see {@code EnrollmentTokenStore}'s
+     * {@code restoreMinted}/{@code removeIfPresentByHash} Javadoc. {@code null} leaves those two command
+     * cases a no-op (logged), matching this class's pre-Stage-II behavior exactly. */
     public RaftStateMachine(NodeRegistry nodeRegistry, TaskRegistry taskRegistry, JobRegistry jobRegistry,
-                            ApplyClock applyClock) {
+                            ApplyClock applyClock, EnrollmentTokenStore tokenStore) {
         this.nodeRegistry = nodeRegistry;
         this.taskRegistry = taskRegistry;
         this.jobRegistry = jobRegistry;
         this.applyClock = applyClock;
+        this.tokenStore = tokenStore;
     }
 
     @Override
@@ -120,9 +127,21 @@ public final class RaftStateMachine implements RaftApplier {
                 jobRegistry.completeJob(c.getJobId(), JobStateDomain.fromProto(c.getFinalState()),
                         c.getCombinedResultJson());
             }
-            case MINT_ENROLLMENT_TOKEN, CONSUME_ENROLLMENT_TOKEN ->
-                    LOG.warn("Enrollment-token commands have no state-machine handler yet (wired in a "
-                            + "later Stage J step) — ignoring");
+            case MINT_ENROLLMENT_TOKEN -> {
+                if (tokenStore == null) {
+                    LOG.warn("MintEnrollmentTokenCommand applied but no EnrollmentTokenStore is wired — ignoring");
+                } else {
+                    var c = command.getMintEnrollmentToken();
+                    tokenStore.restoreMinted(c.getNodeId(), c.getTokenHash(), c.getExpiresAtEpochMillis());
+                }
+            }
+            case CONSUME_ENROLLMENT_TOKEN -> {
+                if (tokenStore == null) {
+                    LOG.warn("ConsumeEnrollmentTokenCommand applied but no EnrollmentTokenStore is wired — ignoring");
+                } else {
+                    tokenStore.removeIfPresentByHash(command.getConsumeEnrollmentToken().getTokenHash());
+                }
+            }
             case COMMAND_NOT_SET -> LOG.warn("StateCommand with no command set — ignoring");
             default -> LOG.warn("Unrecognised StateCommand case {} — ignoring (likely proposed by a "
                     + "newer replica running a version this one doesn't understand yet)", command.getCommandCase());

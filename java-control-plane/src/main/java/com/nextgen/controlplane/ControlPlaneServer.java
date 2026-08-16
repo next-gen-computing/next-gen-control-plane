@@ -63,7 +63,7 @@ import java.util.function.LongSupplier;
  * server.
  *
  * <p>Every port and bind address is configurable so the control plane can run behind a public
- * address without code changes. See {@code docs/ARCHITECTURE.md} for the connectivity model.
+ * address without code changes. See {@code ARCHITECTURE.md} for the connectivity model.
  */
 public class ControlPlaneServer {
     private static final Logger LOG = LoggerFactory.getLogger(ControlPlaneServer.class);
@@ -129,21 +129,57 @@ public class ControlPlaneServer {
             collectorRegistered = true;
         }
 
-        TaskRegistry taskRegistry = new TaskRegistry(new ConcurrentHashMap<>(), registryClock);
-        JobRegistry jobRegistry = new JobRegistry(new ConcurrentHashMap<>(), registryClock);
+        // Real training data lives under one shared directory — (signal snapshot → eventual outcome)
+        // for risk, and (node properties + allocated share → duration/outcome) for job splitting.
+        // Computed here (rather than where it's first used further down) because Stage HH's registry
+        // snapshot below needs it too, before taskRegistry/jobRegistry are even constructed.
+        Path dataDir = Paths.get(EnvConfig.stringValue("NEXTGEN_DATA_DIR",
+                Paths.get(System.getProperty("user.home", "."), ".nextgen", "data").toString()));
+
+        // Stage HH: in single-node (RAFT_ENABLED=false) mode only — the Raft path has its own durable
+        // WAL and always replays from index 1 on restart, so mixing in a stale periodic snapshot there
+        // would risk resurrecting overwritten data on a freshly-elected leader. See
+        // RegistrySnapshotStore's own Javadoc for why a periodic snapshot, not a WAL, was chosen here.
+        Path registrySnapshotFile = dataDir.resolve("registry_snapshot.json");
+        com.nextgen.controlplane.persistence.RegistrySnapshotStore.Loaded restored = raftEnabled
+                ? new com.nextgen.controlplane.persistence.RegistrySnapshotStore.Loaded(
+                        new ConcurrentHashMap<>(), new ConcurrentHashMap<>())
+                : com.nextgen.controlplane.persistence.RegistrySnapshotStore.load(registrySnapshotFile);
+
+        TaskRegistry taskRegistry = new TaskRegistry(restored.tasks(), registryClock);
+        JobRegistry jobRegistry = new JobRegistry(restored.jobs(), registryClock);
+
+        // Constructed here (earlier than every other security/PKI piece further down) because Stage
+        // II's RaftStateMachine — built inside startRaft() right below — needs to already reference
+        // THIS exact store to replicate MintEnrollmentTokenCommand/ConsumeEnrollmentTokenCommand into
+        // it; its replicationSink itself is wired in further below, once `raft.node()` exists (see
+        // EnrollmentTokenStore.setReplicationSink's own Javadoc for why that's necessarily two steps).
+        SecurityPolicy securityPolicy = SecurityPolicy.fromEnvironment();
+        EnrollmentTokenStore tokenStore =
+                new EnrollmentTokenStore(Clock.systemUTC(), securityPolicy.enrollmentTokenTtl());
 
         RaftComponents raft = raftEnabled
                 ? startRaft(raftNodeId, raftMembers, raftAdvertisedAddress, raftDir, raftTimings, raftPort,
-                        registry, taskRegistry, jobRegistry, applyClock)
+                        registry, taskRegistry, jobRegistry, applyClock, tokenStore)
                 : RaftComponents.disabled();
         ControlPlaneWriter writer = raftEnabled
                 ? new RaftControlPlaneWriter(raft.node(), raftTimings.proposeTimeoutMs())
                 : null;
+        if (raftEnabled) {
+            tokenStore.setReplicationSink(
+                    new com.nextgen.controlplane.raft.RaftEnrollmentTokenReplicator(
+                            raft.node(), raftTimings.proposeTimeoutMs()));
+        }
 
-        // Real training data lives under one shared directory — (signal snapshot → eventual outcome)
-        // for risk, and (node properties + allocated share → duration/outcome) for job splitting.
-        Path dataDir = Paths.get(EnvConfig.stringValue("NEXTGEN_DATA_DIR",
-                Paths.get(System.getProperty("user.home", "."), ".nextgen", "data").toString()));
+        if (!raftEnabled) {
+            com.nextgen.controlplane.persistence.RegistrySnapshotStore snapshotStore =
+                    new com.nextgen.controlplane.persistence.RegistrySnapshotStore(registrySnapshotFile,
+                            taskRegistry, jobRegistry,
+                            EnvConfig.longValue("REGISTRY_SNAPSHOT_INTERVAL_MS", 5_000L));
+            Thread registrySnapshotThread = new Thread(snapshotStore, "registry-snapshot");
+            registrySnapshotThread.setDaemon(true);
+            registrySnapshotThread.start();
+        }
 
         HeuristicNodeCapacityScorer capacityScorer = new HeuristicNodeCapacityScorer(
                 EnvConfig.doubleValue("CAPACITY_CPU_CORE_WEIGHT", HeuristicNodeCapacityScorer.DEFAULT_CPU_CORE_WEIGHT),
@@ -184,16 +220,35 @@ public class ControlPlaneServer {
 
         RiskOutcomeLogger riskOutcomeLogger = new RiskOutcomeLogger(dataDir.resolve("risk_outcomes.jsonl"));
 
+        // Stage GG: opt-in real external alerting on node-down/at-risk events — disabled (null) unless
+        // an operator configures a real webhook target, matching every other opt-in feature's default-
+        // off precedent (ML_RISK_SCORER_ENABLED, RISK_SNAPSHOT_LOGGING_ENABLED, ...). See AlertNotifier's
+        // Javadoc for why webhook is the concrete channel implemented (the notification channel itself
+        // was an open question in the project plan).
+        String alertWebhookUrl = EnvConfig.stringValue("ALERT_WEBHOOK_URL", "");
+        com.nextgen.controlplane.alert.AlertNotifier alertNotifier = alertWebhookUrl.isBlank()
+                ? null : new com.nextgen.controlplane.alert.WebhookAlertNotifier(alertWebhookUrl);
+        if (alertNotifier != null) {
+            LOG.info("🔔 Alert webhook configured: node-down/at-risk events will POST to {}", alertWebhookUrl);
+        }
+
         // Start build-context TTL sweep daemon (Stage N) — evicts uploaded tarballs older than
         // BUILD_CONTEXT_TTL_MINUTES so they don't accumulate forever on disk.
         Thread buildContextSweepThread = new Thread(serviceImpl.buildContextStore(), "build-context-sweep");
         buildContextSweepThread.setDaemon(true);
         buildContextSweepThread.start();
 
+        // Stage X: evicts relay-port reservations that never got a first TunnelPort attach — without
+        // this, a provider task that never dispatches/starts/opens its stream leaks a real bound
+        // ServerSocket forever (see PortRelayManager's own Javadoc).
+        Thread relaySweepThread = new Thread(serviceImpl.portRelayManager(), "relay-reservation-sweep");
+        relaySweepThread.setDaemon(true);
+        relaySweepThread.start();
+
         // Start heartbeat monitor daemon
         Thread monitorThread = new Thread(
                 new HeartbeatMonitor(registry, heartbeatTimeoutMs, heartbeatCheckMs,
-                        serviceImpl.nodeHistory(), riskOutcomeLogger, heartbeatShouldSweep),
+                        serviceImpl.nodeHistory(), riskOutcomeLogger, heartbeatShouldSweep, alertNotifier),
                 "heartbeat-monitor");
         monitorThread.setDaemon(true);
         monitorThread.start();
@@ -230,7 +285,7 @@ public class ControlPlaneServer {
         // Start risk monitor daemon — the predictive counterpart to the heartbeat monitor above.
         Thread riskMonitorThread = new Thread(
                 new RiskMonitor(registry, serviceImpl.nodeHistory(), riskScorer, migrator, riskCheckMs,
-                        snapshotLogger, riskShouldSweep),
+                        snapshotLogger, riskShouldSweep, alertNotifier),
                 "risk-monitor");
         riskMonitorThread.setDaemon(true);
         riskMonitorThread.start();
@@ -258,11 +313,8 @@ public class ControlPlaneServer {
         LOG.info("══════════════════════════════════════════════════");
 
         // ── Security: PKI, enrolment, certificate policy ───
-        SecurityPolicy securityPolicy = SecurityPolicy.fromEnvironment();
         PkiPaths pkiPaths = PkiPaths.fromEnvironment();
         CertificateAuthority ca = new CertificateAuthority(pkiPaths, Clock.systemUTC());
-        EnrollmentTokenStore tokenStore =
-                new EnrollmentTokenStore(Clock.systemUTC(), securityPolicy.enrollmentTokenTtl());
         registerPkiGauge();
 
         // Redispatches (or fails) any task orphaned QUEUED by a leader dying between accept and
@@ -273,11 +325,11 @@ public class ControlPlaneServer {
         if (raftEnabled) {
             // A follower can't issue tokens (enrolment is leader-gated below, same as certificate
             // issuance) or accept its own dispatches — both re-run every time THIS replica newly wins
-            // an election, not just once at process start. EnrollmentTokenStore is leader-local, not
-            // Raft-replicated (a real, named scope cut — see NodeEnrollmentServiceImpl's leader gating
-            // below): a token minted by a previous leader is not known to a new one, so a new leader
-            // re-mints fresh tokens for the same configured node ids rather than silently leaving an
-            // unenrolled node stuck.
+            // an election, not just once at process start. Stage II: EnrollmentTokenStore's
+            // replicationSink (wired above, right after `raft` was built) means a token minted by THIS
+            // leader is already known to whichever replica wins the NEXT election too — re-minting here
+            // is now a defense-in-depth refresh for the configured node ids, not the only mechanism
+            // keeping a freshly-elected leader from being stuck with zero valid tokens.
             raft.node().onLeadershipChange(status -> {
                 if (status.isLeader()) {
                     becameLeaderAtMillis.set(System.currentTimeMillis());
@@ -344,9 +396,11 @@ public class ControlPlaneServer {
     private static RaftComponents startRaft(String raftNodeId, List<RaftPeer> members, String advertisedAddress,
                                             Path raftDir, RaftTimings timings, int raftPort,
                                             NodeRegistry registry, TaskRegistry taskRegistry,
-                                            JobRegistry jobRegistry, ApplyClock applyClock) throws IOException {
+                                            JobRegistry jobRegistry, ApplyClock applyClock,
+                                            EnrollmentTokenStore tokenStore) throws IOException {
         RaftLog log = new RaftLog(raftDir.resolve(raftNodeId));
-        RaftStateMachine stateMachine = new RaftStateMachine(registry, taskRegistry, jobRegistry, applyClock);
+        RaftStateMachine stateMachine =
+                new RaftStateMachine(registry, taskRegistry, jobRegistry, applyClock, tokenStore);
         GrpcRaftTransport transport = new GrpcRaftTransport();
         RaftNode node = new RaftNode(raftNodeId, advertisedAddress, members, log, stateMachine, transport, timings);
 
@@ -533,9 +587,17 @@ public class ControlPlaneServer {
             if (trimmed.isEmpty()) {
                 continue;
             }
-            String token = tokenStore.mint(trimmed);
-            LOG.info("🎫 Enrolment token for '{}': {}", trimmed, token);
-            LOG.info("   Pass it to the node as NEXTGEN_ENROLLMENT_TOKEN. It is single-use.");
+            // Stage II: under Raft, mint() now blocks on replicating the token before returning (see
+            // EnrollmentTokenStore.mint's Javadoc) — a quorum hiccup right at startup/election is a
+            // real, recoverable-later condition, not something that should crash the server or abort
+            // an election-change callback; log and move on to the next configured node id instead.
+            try {
+                String token = tokenStore.mint(trimmed);
+                LOG.info("🎫 Enrolment token for '{}': {}", trimmed, token);
+                LOG.info("   Pass it to the node as NEXTGEN_ENROLLMENT_TOKEN. It is single-use.");
+            } catch (RuntimeException e) {
+                LOG.warn("Could not mint/replicate an enrolment token for '{}': {}", trimmed, e.getMessage());
+            }
         }
     }
 

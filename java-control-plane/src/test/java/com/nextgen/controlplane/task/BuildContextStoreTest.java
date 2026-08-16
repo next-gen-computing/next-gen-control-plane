@@ -99,6 +99,37 @@ class BuildContextStoreTest {
         assertTrue(Files.exists(fresh.path()));
     }
 
+    /** Stage AA: if BOTH the atomic move and its fallback fail inside {@code finish()} (simulated here
+     * by pre-occupying the final path with a non-empty directory, so neither move variant can land),
+     * the partial upload must still be tracked — under its original temp path — so {@code
+     * sweepExpired()} can eventually reclaim the disk space instead of leaking it forever. */
+    @Test
+    void aFinishThatFailsBothMoveAttemptsStillTracksTheTempFileForEventualSweep(@TempDir Path tempDir)
+            throws Exception {
+        AtomicLong now = new AtomicLong(0);
+        BuildContextStore store = new BuildContextStore(tempDir, 1_000, 60_000, now::get);
+        BuildContextStore.Upload upload = store.beginUpload();
+        upload.write("doomed".getBytes(StandardCharsets.UTF_8));
+        String contextId = upload.contextId();
+
+        // Occupy the exact path finish() will try to move into with a non-empty directory — neither
+        // ATOMIC_MOVE nor its REPLACE_EXISTING fallback can move a file onto a non-empty directory.
+        Path finalPath = tempDir.resolve("build-contexts").resolve(contextId + ".tar.gz");
+        Files.createDirectory(finalPath);
+        Files.writeString(finalPath.resolve("blocker.txt"), "occupied");
+
+        assertThrows(IOException.class, upload::finish);
+
+        var tracked = store.get(contextId);
+        assertTrue(tracked.isPresent(), "a failed finish() must still be tracked so it can be swept");
+        assertTrue(Files.exists(tracked.get().path()), "the tracked path should be the still-real temp file");
+
+        now.set(2_000); // past the 1_000ms TTL
+        store.sweepExpired();
+
+        assertTrue(store.get(contextId).isEmpty(), "the sweep should have reclaimed the failed upload");
+    }
+
     private static String sha256Hex(String text) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         return HexFormat.of().formatHex(digest.digest(text.getBytes(StandardCharsets.UTF_8)));

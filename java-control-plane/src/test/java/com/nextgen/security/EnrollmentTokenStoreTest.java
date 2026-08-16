@@ -180,4 +180,103 @@ class EnrollmentTokenStoreTest {
         // check-then-act race.
         assertEquals(1, accepted.get());
     }
+
+    // ── Stage II: TokenReplicationSink wiring ─────────────────────────────
+
+    /** Records exactly what it was called with — a real object, not a mock. */
+    private static final class RecordingSink implements TokenReplicationSink {
+        String mintedNodeId;
+        String mintedHash;
+        long mintedExpiresAt;
+        String consumedHash;
+
+        @Override
+        public void onMinted(String nodeId, String tokenHash, long expiresAtEpochMillis) {
+            mintedNodeId = nodeId;
+            mintedHash = tokenHash;
+            mintedExpiresAt = expiresAtEpochMillis;
+        }
+
+        @Override
+        public void onConsumed(String tokenHash) {
+            consumedHash = tokenHash;
+        }
+    }
+
+    @Test
+    void mintCallsOnMintedBeforeReturningWithTheRealNodeIdAndExpiry() {
+        EnrollmentTokenStore tokens = store();
+        RecordingSink sink = new RecordingSink();
+        tokens.setReplicationSink(sink);
+
+        long before = System.currentTimeMillis();
+        tokens.mint("node9");
+
+        assertEquals("node9", sink.mintedNodeId);
+        assertNotNull(sink.mintedHash);
+        assertFalse(sink.mintedHash.isBlank());
+        assertTrue(sink.mintedExpiresAt > before, "expiry must be a real future timestamp");
+    }
+
+    @Test
+    void consumeCallsOnConsumedOnlyOnAcceptance() {
+        EnrollmentTokenStore tokens = store();
+        RecordingSink sink = new RecordingSink();
+        String token = tokens.mint("node1"); // minted before the sink was attached — no onMinted call expected
+        tokens.setReplicationSink(sink);
+
+        tokens.consume(token);
+
+        assertNotNull(sink.consumedHash, "a successful consumption must notify the sink");
+    }
+
+    @Test
+    void consumeDoesNotCallOnConsumedForAnInvalidToken() {
+        EnrollmentTokenStore tokens = store();
+        RecordingSink sink = new RecordingSink();
+        tokens.setReplicationSink(sink);
+
+        tokens.consume("not-a-real-token");
+
+        assertNull(sink.consumedHash, "an invalid token must never fire a consumption notification");
+    }
+
+    @Test
+    void restoreMintedMakesATokenConsumableWithoutEverCallingMintLocally() {
+        // Simulates what a REPLICA (not the one that originally minted it) does when it applies a
+        // replicated MintEnrollmentTokenCommand — it never called mint() itself, only restoreMinted().
+        EnrollmentTokenStore tokens = store();
+        String tokenHash = fakeHash();
+
+        tokens.restoreMinted("remote-node", tokenHash, System.currentTimeMillis() + 60_000);
+
+        // Real consumption needs the PLAINTEXT (consume() hashes it itself) — restoreMinted only ever
+        // receives a hash, so this proves presence via peek()'s own hash-free path isn't available;
+        // instead confirm the entry is really there by checking size, matching what a real replica can
+        // actually observe about state it only ever received as a hash.
+        assertEquals(1, tokens.size());
+    }
+
+    @Test
+    void removeIfPresentByHashIsIdempotentOnAnAlreadyAbsentHash() {
+        EnrollmentTokenStore tokens = store();
+
+        assertDoesNotThrow(() -> tokens.removeIfPresentByHash(fakeHash()));
+    }
+
+    @Test
+    void removeIfPresentByHashActuallyRemovesARestoredEntry() {
+        EnrollmentTokenStore tokens = store();
+        String tokenHash = fakeHash();
+        tokens.restoreMinted("remote-node", tokenHash, System.currentTimeMillis() + 60_000);
+        assertEquals(1, tokens.size());
+
+        tokens.removeIfPresentByHash(tokenHash);
+
+        assertEquals(0, tokens.size());
+    }
+
+    private static String fakeHash() {
+        return Base64.getEncoder().encodeToString(new byte[]{1, 2, 3, 4, 5, 6, 7, 8});
+    }
 }

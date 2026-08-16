@@ -94,6 +94,63 @@ class LocalDockerExecutionServiceImplTest {
         assertNotNull(finished, "compose down must eventually produce a finished event");
     }
 
+    /** Stage X: previously, {@code handleUp} never stored its runner anywhere — a dropped client stream
+     * (this test's stand-in for Ctrl-C/laptop sleep/a network blip) left the entire compose project,
+     * and every container it started, orphaned on the host forever. Proves the real fix: the project is
+     * actually torn down (verified via real {@code docker ps} filtered by compose's own project label)
+     * once the stream disconnects WITHOUT an explicit {@code down} ever being sent. */
+    @Test
+    void aDroppedClientStreamActuallyTearsDownTheOrphanedComposeProject() throws Exception {
+        String project = "nx-cloud-drop-test-" + System.currentTimeMillis();
+        String composeYaml = """
+                services:
+                  hello:
+                    image: busybox
+                    command: sh -c "echo drop-test-started; sleep 300"
+                """;
+
+        LinkedBlockingQueue<ComposeEvent> events = new LinkedBlockingQueue<>();
+        StreamObserver<ComposeCommand> outbound = stub.runCompose(new StreamObserver<>() {
+            @Override public void onNext(ComposeEvent value) { events.add(value); }
+            @Override public void onError(Throwable t) { }
+            @Override public void onCompleted() { }
+        });
+        outbound.onNext(ComposeCommand.newBuilder()
+                .setUp(ComposeUpRequest.newBuilder().setProjectName(project).setComposeYaml(composeYaml).build())
+                .build());
+        assertTrue(awaitLogContaining(events, "drop-test-started", 60),
+                "the real container must actually have started before we drop the stream");
+        assertTrue(realContainerExistsForProject(project), "sanity check: the container must be real, on Docker");
+
+        // Simulate a dropped client — Ctrl-C, laptop sleep, a network blip — WITHOUT ever sending `down`.
+        channel.shutdownNow();
+        channel.awaitTermination(5, TimeUnit.SECONDS);
+
+        long deadline = System.currentTimeMillis() + 30_000;
+        boolean cleanedUp = false;
+        while (System.currentTimeMillis() < deadline) {
+            if (!realContainerExistsForProject(project)) {
+                cleanedUp = true;
+                break;
+            }
+            Thread.sleep(500);
+        }
+        assertTrue(cleanedUp, "the orphaned compose project must actually be torn down after the stream drops, "
+                + "not left running forever");
+    }
+
+    private static boolean realContainerExistsForProject(String project) throws Exception {
+        Process ps = new ProcessBuilder("docker", "ps", "-q",
+                "--filter", "label=com.docker.compose.project=" + project)
+                .redirectErrorStream(true).start();
+        String output;
+        try (var reader = ps.inputReader()) {
+            output = reader.lines().reduce("", (a, b) -> a + b);
+        }
+        ps.waitFor(10, TimeUnit.SECONDS);
+        return !output.isBlank();
+    }
+
     private static boolean awaitLogContaining(LinkedBlockingQueue<ComposeEvent> events, String needle,
                                               int timeoutSeconds) throws InterruptedException {
         long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;

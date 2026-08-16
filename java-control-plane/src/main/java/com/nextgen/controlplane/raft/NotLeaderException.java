@@ -3,6 +3,8 @@ package com.nextgen.controlplane.raft;
 /** Thrown by {@code RaftNode.propose(...)} when this replica is not (or is no longer) the leader. */
 public final class NotLeaderException extends RuntimeException {
 
+    private static final long serialVersionUID = 1L;
+
     private final String leaderId;
     private final String leaderAddress;
 

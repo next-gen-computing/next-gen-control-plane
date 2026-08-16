@@ -72,6 +72,8 @@ public final class NodeBuildContextStore {
      * checked exceptions) so {@link #appendChunk} can unwrap and rethrow it as the checked exception its
      * own signature promises. */
     private static final class UncheckedIOExceptionForChunk extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
         private final IOException cause;
 
         UncheckedIOExceptionForChunk(IOException cause) {

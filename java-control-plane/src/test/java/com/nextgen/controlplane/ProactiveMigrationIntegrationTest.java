@@ -125,7 +125,7 @@ class ProactiveMigrationIntegrationTest {
                 .setOnAcPower(false).setOnAcPowerKnown(true)
                 .build());
 
-        @SuppressWarnings("unchecked")
+        @SuppressWarnings({"unchecked", "rawtypes"})
         StreamObserver<NodeTaskEvent>[] node1Outbound = new StreamObserver[1];
         LinkedBlockingQueue<ServerTaskCommand> node1Commands = openTaskChannelReturningOutbound("node1", node1Outbound);
 
@@ -148,7 +148,7 @@ class ProactiveMigrationIntegrationTest {
                 .setCpu(10f).setCpuAvailable(true).setMemory(10f).setMemoryAvailable(true)
                 .setBatteryAvailable(false) // desktop-style node2, e.g. no battery signal at all
                 .build());
-        @SuppressWarnings("unchecked")
+        @SuppressWarnings({"unchecked", "rawtypes"})
         StreamObserver<NodeTaskEvent>[] node2Outbound = new StreamObserver[1];
         LinkedBlockingQueue<ServerTaskCommand> node2Commands = openTaskChannelReturningOutbound("node2", node2Outbound);
 

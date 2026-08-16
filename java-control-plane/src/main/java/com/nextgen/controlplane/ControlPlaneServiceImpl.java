@@ -85,6 +85,13 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
      * side — the same "push down the stream, await the async reply" shape the whole RPC is built on. */
     private final ConcurrentHashMap<String, java.util.concurrent.CompletableFuture<DockerControlResult>>
             pendingDockerCommands = new ConcurrentHashMap<>();
+    /** Stage AA: bounds how many gRPC handler threads {@link #controlDockerContainer} can simultaneously
+     * hold blocked (each up to {@link #DOCKER_CONTROL_TIMEOUT_MS}) waiting on a node's reply — without
+     * this, many concurrent calls against dead/unresponsive nodes could each occupy a thread for the
+     * full 20s, exhausting the server's handler thread pool. A permit is denied immediately (never
+     * queued) rather than waited on, since queuing would just move the same exhaustion risk elsewhere. */
+    private final java.util.concurrent.Semaphore dockerControlConcurrencyLimiter =
+            new java.util.concurrent.Semaphore(MAX_CONCURRENT_DOCKER_CONTROL_CALLS);
     /** Null (every constructor below except the last) means "mutate the registries directly" —
      * today's exact behavior. See {@link ControlPlaneWriter}'s Javadoc. */
     private final ControlPlaneWriter writer;
@@ -350,6 +357,14 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
     @Override
     public void registerNode(NodeInfo request, StreamObserver<RegisterResponse> responseObserver) {
         String id = request.getNodeId();
+        // Stage AA: an empty node_id previously became a real, lookup-visible phantom registry entry
+        // keyed by "" — every registry read path (aliveSnapshot, scheduler selection, dashboard) would
+        // then have to cope with a node no operator ever meaningfully registered.
+        if (id.isBlank()) {
+            responseObserver.onError(Status.INVALID_ARGUMENT
+                    .withDescription("node_id must not be blank").asRuntimeException());
+            return;
+        }
         LOG.info("📥 RegisterNode: id={}, ip={}, hostname={}", id, request.getIp(), request.getHostname());
 
         boolean resumedExisting;
@@ -474,6 +489,14 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
                 request.getTaskId(), request.getPayload(), request.getKind());
         TASKS_SUBMITTED.inc();
 
+        // Stage AA: an empty task_id previously became a real, lookup-visible phantom registry entry,
+        // same reasoning as registerNode's own guard above.
+        if (request.getTaskId().isBlank()) {
+            responseObserver.onError(Status.INVALID_ARGUMENT
+                    .withDescription("task_id must not be blank").asRuntimeException());
+            return;
+        }
+
         // Selection stays scoped to liveness alone, exactly as before real dispatch existed —
         // RoundRobinScheduler's placement decision is a separate concern from both TaskDispatcher's
         // delivery mechanics and kind validity below. A selected node whose task then fails for either
@@ -508,6 +531,23 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
             return;
         }
 
+        // Stage AA: SubmitJob's JobCoordinator path already rejects an unparsable/structurally-invalid
+        // payload before ever touching a node (see submitPrimeCountJob/submitDockerComposeJob). This
+        // direct-submit path previously had no equivalent — a garbage payload consumed a real node
+        // dispatch (TaskDispatcher.extractBuildContextId deliberately never validates; it defers that
+        // to the node-side executor) before failing, instead of being rejected up front here.
+        try {
+            validateDirectSubmitPayload(kind, request.getPayload());
+        } catch (IllegalArgumentException e) {
+            LOG.error("❌ Task {} rejected: {}", request.getTaskId(), e.getMessage());
+            responseObserver.onNext(TaskResponse.newBuilder()
+                    .setAssignedNode(selectedNode.getNodeId())
+                    .setResult("FAILED — " + e.getMessage())
+                    .build());
+            responseObserver.onCompleted();
+            return;
+        }
+
         if (writer != null) {
             writer.submitTask(request.getTaskId(), kind, request.getPayload());
         } else {
@@ -537,6 +577,39 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
         responseObserver.onCompleted();
     }
 
+    /** Stage AA: the same structural checks {@code JobCoordinator}'s {@code submitPrimeCountJob}/
+     * {@code submitDockerComposeJob} already apply before ever dispatching, brought to parity for the
+     * direct {@code SubmitTask} path — deliberately just JSON-shape validation, not a full re-run of
+     * every node-side check (e.g. {@code DockerComposeServiceExecutor} still owns the final say on
+     * whether an image/build actually works).
+     * @throws IllegalArgumentException with a message safe to surface to the submitter as-is. */
+    private static void validateDirectSubmitPayload(TaskKindDomain kind, String payloadJson) {
+        JsonNode payload;
+        try {
+            payload = MAPPER.readTree(payloadJson);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("invalid payload JSON: " + e.getMessage());
+        }
+        switch (kind) {
+            case PRIME_COUNT_RANGE -> {
+                long rangeStart = payload.path("range_start").asLong();
+                long rangeEnd = payload.path("range_end").asLong();
+                if (rangeEnd < rangeStart) {
+                    throw new IllegalArgumentException(
+                            "range_end (" + rangeEnd + ") must be >= range_start (" + rangeStart + ")");
+                }
+            }
+            case DOCKER_COMPOSE_SERVICE -> {
+                boolean hasImage = !payload.path("image").asText().isBlank();
+                boolean hasBuild = !payload.path("build").path("context_id").asText().isBlank();
+                if (!hasImage && !hasBuild) {
+                    throw new IllegalArgumentException(
+                            "service spec has neither 'image' nor a 'build.context_id' — nothing to run");
+                }
+            }
+        }
+    }
+
     // ── TaskChannel ──────────────────────────────────
 
     /**
@@ -562,7 +635,26 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
             public void onNext(NodeTaskEvent event) {
                 switch (event.getEventCase()) {
                     case HELLO -> {
-                        nodeId = event.getHello().getNodeId();
+                        String newNodeId = event.getHello().getNodeId();
+                        if (newNodeId.isBlank()) {
+                            // Stage AA: a blank node_id here would register a phantom entry in
+                            // NodeTaskChannelRegistry — same reasoning as registerNode's own guard.
+                            LOG.warn("⚠ Task channel HELLO with a blank node_id — rejecting");
+                            safeObserver.onError(Status.INVALID_ARGUMENT
+                                    .withDescription("node_id must not be blank").asRuntimeException());
+                            return;
+                        }
+                        if (nodeId != null && !nodeId.equals(newNodeId)) {
+                            // Stage X: a second HELLO with a DIFFERENT node_id on the same stream
+                            // previously re-registered under the new id without ever unregistering the
+                            // first — the old id's registry entry pointed at this now-repurposed
+                            // observer forever, since disconnect cleanup only ever looks at whichever
+                            // node_id is currently bound.
+                            channelRegistry.unregister(nodeId, safeObserver);
+                            LOG.warn("🔌 Task channel re-helloed from '{}' to '{}' on the same stream",
+                                    nodeId, newNodeId);
+                        }
+                        nodeId = newNodeId;
                         channelRegistry.register(nodeId, safeObserver);
                         LOG.info("🔌 Task channel opened for node '{}'", nodeId);
                     }
@@ -907,6 +999,14 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
         LOG.info("📦 SubmitJob: job_id={}, kind={}, sub_task_count={}",
                 request.getJobId(), request.getKind(), request.getSubTaskCount());
 
+        // Stage AA: same reasoning as registerNode/submitTask's own guards — an empty job_id would
+        // otherwise become a real, lookup-visible phantom job registry entry.
+        if (request.getJobId().isBlank()) {
+            responseObserver.onError(Status.INVALID_ARGUMENT
+                    .withDescription("job_id must not be blank").asRuntimeException());
+            return;
+        }
+
         TaskKindDomain kind = TaskKindDomain.fromProto(request.getKind());
         if (kind == null) {
             responseObserver.onNext(JobSubmitResponse.newBuilder()
@@ -1009,7 +1109,25 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
     @Override
     public void streamJobEvents(JobEventsRequest request, StreamObserver<TaskEvent> responseObserver) {
         String jobId = request.getJobId();
+        // Stage W: previously subscribed unconditionally — an unknown or typo'd job_id got a live
+        // stream that emits nothing, forever (confirmed: nx logs <bad-job-id> hung the terminal
+        // indefinitely). getJobStatus already does this check; streamJobEvents just never did.
+        if (jobRegistry.get(jobId).isEmpty()) {
+            responseObserver.onError(Status.NOT_FOUND
+                    .withDescription("No such job: " + jobId)
+                    .asRuntimeException());
+            return;
+        }
         StreamObserver<TaskEvent> safeObserver = new SynchronizedStreamObserver<>(responseObserver);
+        if (!request.getFollow()) {
+            // Stage FF: a one-shot replay of whatever this job's bounded history buffer holds, then
+            // close — never actually registers a live subscription. Matches docker/kubectl's own
+            // `logs` default (show what's there and exit), the previously-named "no server-side log
+            // history buffer" scope cut.
+            jobEventBroadcaster.replayHistoryOnly(jobId, safeObserver);
+            responseObserver.onCompleted();
+            return;
+        }
         jobEventBroadcaster.subscribe(jobId, safeObserver);
         if (responseObserver instanceof io.grpc.stub.ServerCallStreamObserver<TaskEvent> serverCallObserver) {
             serverCallObserver.setOnCancelHandler(() -> jobEventBroadcaster.unsubscribe(jobId, safeObserver));
@@ -1194,6 +1312,7 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
     // ── DockerStateChannel / GetDockerResources / ControlDockerContainer (Stage T) ───
 
     private static final long DOCKER_CONTROL_TIMEOUT_MS = 20_000;
+    private static final int MAX_CONCURRENT_DOCKER_CONTROL_CALLS = 32;
 
     /**
      * The Stage T sibling of {@link #taskChannel}: a node-initiated stream a Docker-capable node opens
@@ -1219,7 +1338,21 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
             public void onNext(NodeDockerEvent event) {
                 switch (event.getEventCase()) {
                     case HELLO -> {
-                        nodeId = event.getHello().getNodeId();
+                        String newNodeId = event.getHello().getNodeId();
+                        if (newNodeId.isBlank()) {
+                            // Stage AA: same blank-node_id guard as taskChannel's own HELLO handler.
+                            LOG.warn("⚠ Docker-state channel HELLO with a blank node_id — rejecting");
+                            safeObserver.onError(Status.INVALID_ARGUMENT
+                                    .withDescription("node_id must not be blank").asRuntimeException());
+                            return;
+                        }
+                        if (nodeId != null && !nodeId.equals(newNodeId)) {
+                            // Stage X: same double-HELLO fix as TaskChannel — see that handler's comment.
+                            dockerCommandRegistry.unregister(nodeId, safeObserver);
+                            LOG.warn("🐳 Docker-state channel re-helloed from '{}' to '{}' on the same stream",
+                                    nodeId, newNodeId);
+                        }
+                        nodeId = newNodeId;
                         dockerCommandRegistry.register(nodeId, safeObserver);
                         LOG.info("🐳 Docker-state channel opened for node '{}'", nodeId);
                     }
@@ -1297,6 +1430,19 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
             return;
         }
 
+        // Stage AA: fail fast rather than let an unbounded number of calls each hold a handler thread
+        // for up to DOCKER_CONTROL_TIMEOUT_MS — see the limiter field's own Javadoc.
+        if (!dockerControlConcurrencyLimiter.tryAcquire()) {
+            responseObserver.onNext(DockerControlResult.newBuilder()
+                    .setCommandId(request.getCommandId())
+                    .setOk(false)
+                    .setMessage("server is already handling the maximum of "
+                            + MAX_CONCURRENT_DOCKER_CONTROL_CALLS + " concurrent Docker control calls — retry shortly")
+                    .build());
+            responseObserver.onCompleted();
+            return;
+        }
+
         String commandId = request.getCommandId().isBlank()
                 ? java.util.UUID.randomUUID().toString() : request.getCommandId();
         DockerControlCommand withId = request.toBuilder().setCommandId(commandId).build();
@@ -1315,6 +1461,7 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
                     .setMessage("Failed: " + e.getMessage()).build();
         } finally {
             pendingDockerCommands.remove(commandId);
+            dockerControlConcurrencyLimiter.release();
         }
         responseObserver.onNext(result);
         responseObserver.onCompleted();

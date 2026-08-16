@@ -100,8 +100,17 @@ public final class DockerComposeServiceExecutor implements TaskExecutor {
         JsonNode spec = MAPPER.readTree(payloadJson);
         String projectName = textOrDefault(spec, "project_name", "project");
         String serviceName = textOrDefault(spec, "service_name", "service");
+        // Stage V: a MIGRATED task keeps the SAME taskId when it's redispatched (to the original node or
+        // elsewhere) — ProactiveMigrator reassigns, it never mints a new id. A taskId-only-derived name
+        // is therefore not guaranteed unique across separate execute() invocations for the same task
+        // (confirmed live: migrating a task away and back moments later collided with the first
+        // attempt's still-settling container/extraction-dir names). A fresh random component per
+        // execute() call — not per taskId — is what actually guarantees no two invocations ever share a
+        // name, regardless of how Docker's own async cleanup timing lines up. This is defense-in-depth
+        // layered on Stage U's confirmed-cancel guarantee, not a replacement for it.
+        String attemptId = java.util.UUID.randomUUID().toString().substring(0, 8);
         String containerName = sanitizeContainerName(
-                "nx-" + projectName + "-" + serviceName + "-" + shortId(taskId));
+                "nx-" + projectName + "-" + serviceName + "-" + shortId(taskId) + "-" + attemptId);
         RestartPolicySpec restartPolicy = parseRestartPolicy(spec);
 
         DockerComposeRunner runner = new DockerComposeRunner(containerName);
@@ -117,8 +126,8 @@ public final class DockerComposeServiceExecutor implements TaskExecutor {
                             "service spec has neither 'image' nor a 'build.context_id' — nothing to run");
                 }
                 String tag = sanitizeContainerName(
-                        "nx-build-" + projectName + "-" + serviceName + "-" + shortId(taskId));
-                extractedContextDir = resolveAndBuildImage(build, tag, taskId, runner, events);
+                        "nx-build-" + projectName + "-" + serviceName + "-" + shortId(taskId) + "-" + attemptId);
+                extractedContextDir = resolveAndBuildImage(build, tag, taskId, attemptId, runner, events);
                 image = tag;
             }
 
@@ -494,8 +503,8 @@ public final class DockerComposeServiceExecutor implements TaskExecutor {
      *
      * @return the directory the context was unpacked into, so the caller can clean it up afterward.
      */
-    private Path resolveAndBuildImage(JsonNode build, String tag, String taskId, DockerComposeRunner runner,
-                                      TaskEventSink events) throws Exception {
+    private Path resolveAndBuildImage(JsonNode build, String tag, String taskId, String attemptId,
+                                      DockerComposeRunner runner, TaskEventSink events) throws Exception {
         String contextId = build.path("context_id").asText();
         String expectedSha256 = build.path("sha256").asText();
         String dockerfilePath = build.path("dockerfile_path").asText();
@@ -513,7 +522,10 @@ public final class DockerComposeServiceExecutor implements TaskExecutor {
             }
         }
 
-        Path extractedDir = tarball.resolveSibling(contextId + "-extracted-" + shortId(taskId));
+        // Stage V: attempt-scoped, same reasoning as containerName above — a redispatch of the SAME
+        // taskId (migrated away and back) must never reuse an extraction directory a prior, possibly
+        // still-settling attempt was using.
+        Path extractedDir = tarball.resolveSibling(contextId + "-extracted-" + shortId(taskId) + "-" + attemptId);
         extractTarGz(tarball, extractedDir);
 
         LOG.info("🔨 Building image '{}' from context '{}' (task {})", tag, contextId, taskId);

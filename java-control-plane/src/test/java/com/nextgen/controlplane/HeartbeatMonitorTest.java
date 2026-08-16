@@ -177,6 +177,59 @@ class HeartbeatMonitorTest {
         assertFalse(Files.exists(outputFile), "a node that stays alive must not produce an outcome record");
     }
 
+    // ── Stage GG: alert-notifier wiring ──────────────────────────────────────
+
+    /** Records exactly what it was called with — a real object, not a mock, matching this project's
+     * established discipline throughout. */
+    private static final class RecordingAlertNotifier implements com.nextgen.controlplane.alert.AlertNotifier {
+        final java.util.List<String> nodeDownCalls = new java.util.ArrayList<>();
+
+        @Override public void notifyNodeDown(String nodeId, String reason) { nodeDownCalls.add(nodeId + ":" + reason); }
+        @Override public void notifyNodeAtRisk(String nodeId, double riskScore, String reason) { }
+    }
+
+    @Test
+    void alertNotifierFiresExactlyOnceOnAliveToSuspectedDeadTransition() {
+        long now = 1_000_000L;
+        NodeRegistry registry = registryWithNode("node1", now - 10_000L, NodeStatus.ALIVE, now);
+        RecordingAlertNotifier notifier = new RecordingAlertNotifier();
+        HeartbeatMonitor monitor = new HeartbeatMonitor(registry, HeartbeatMonitor.DEFAULT_TIMEOUT_MS,
+                HeartbeatMonitor.DEFAULT_CHECK_INTERVAL_MS, new NodeHistory(), null, () -> true, notifier);
+
+        monitor.checkHeartbeats();
+
+        assertEquals(1, notifier.nodeDownCalls.size());
+        assertTrue(notifier.nodeDownCalls.get(0).startsWith("node1:"), notifier.nodeDownCalls.get(0));
+    }
+
+    @Test
+    void alertNotifierDoesNotFireOnRecoveryOrWhileStayingAlive() {
+        long now = 1_000_000L;
+        NodeRegistry recovering = registryWithNode("node1", now - 100L, NodeStatus.SUSPECTED_DEAD, now);
+        RecordingAlertNotifier recoveryNotifier = new RecordingAlertNotifier();
+        new HeartbeatMonitor(recovering, HeartbeatMonitor.DEFAULT_TIMEOUT_MS,
+                HeartbeatMonitor.DEFAULT_CHECK_INTERVAL_MS, null, null, () -> true, recoveryNotifier)
+                .checkHeartbeats();
+        assertTrue(recoveryNotifier.nodeDownCalls.isEmpty(), "recovery must not fire a node-down alert");
+
+        NodeRegistry stillAlive = registryWithNode("node2", now - 500L, NodeStatus.ALIVE, now);
+        RecordingAlertNotifier stayingAliveNotifier = new RecordingAlertNotifier();
+        new HeartbeatMonitor(stillAlive, HeartbeatMonitor.DEFAULT_TIMEOUT_MS,
+                HeartbeatMonitor.DEFAULT_CHECK_INTERVAL_MS, null, null, () -> true, stayingAliveNotifier)
+                .checkHeartbeats();
+        assertTrue(stayingAliveNotifier.nodeDownCalls.isEmpty(), "a node that stays alive must not fire an alert");
+    }
+
+    @Test
+    void aNullAlertNotifierIsSafeAndMatchesEveryOtherConstructorsBehavior() {
+        long now = 1_000_000L;
+        NodeRegistry registry = registryWithNode("node1", now - 10_000L, NodeStatus.ALIVE, now);
+
+        assertDoesNotThrow(() -> new HeartbeatMonitor(registry, HeartbeatMonitor.DEFAULT_TIMEOUT_MS,
+                HeartbeatMonitor.DEFAULT_CHECK_INTERVAL_MS, null, null, () -> true, null)
+                .checkHeartbeats());
+    }
+
     @Test
     void legacyConstructorsStillWorkWithoutAnOutcomeLogger() {
         long now = 1_000_000L;

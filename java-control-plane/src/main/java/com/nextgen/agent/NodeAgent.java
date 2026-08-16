@@ -225,7 +225,7 @@ public class NodeAgent {
         loop.start();
 
         // ── Certificate renewal — periodic, not just at startup ─────────────
-        // Named limitation until now (see README.md/docs/ARCHITECTURE.md): ensureEnrolled() above only
+        // Named limitation until now (see README.md/ARCHITECTURE.md): ensureEnrolled() above only
         // checks CERT_RENEW_WINDOW_MINUTES once, at process start. A node that stays up longer than its
         // certificate's remaining lifetime at boot would silently lose connectivity when it expired,
         // with no code path ever re-checking. This loop is what actually keeps a long-lived node's
@@ -397,7 +397,7 @@ public class NodeAgent {
                         + "verify the control plane during enrolment. Set NEXTGEN_CA_CERT to a copy "
                         + "of the control plane's ca.crt. Trust-on-first-use is deliberately not "
                         + "supported: it would expose the enrolment token to an active "
-                        + "man-in-the-middle. See docs/ARCHITECTURE.md."));
+                        + "man-in-the-middle. See ARCHITECTURE.md."));
 
         String token = EnvConfig.stringValue("NEXTGEN_ENROLLMENT_TOKEN", "");
         if (token.isBlank()) {

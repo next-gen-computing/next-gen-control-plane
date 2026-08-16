@@ -1,5 +1,6 @@
 package com.nextgen.controlplane;
 
+import com.nextgen.controlplane.alert.AlertNotifier;
 import com.nextgen.controlplane.risk.RiskScorer;
 import com.nextgen.controlplane.task.MigrationTrigger;
 import com.nextgen.controlplane.training.RiskSnapshotLogger;
@@ -43,6 +44,7 @@ public class RiskMonitor implements Runnable {
     private final long checkIntervalMs;
     private final RiskSnapshotLogger snapshotLogger;
     private final BooleanSupplier shouldSweep;
+    private final AlertNotifier alertNotifier;
 
     public RiskMonitor(NodeRegistry registry, NodeHistory history, RiskScorer scorer,
                        MigrationTrigger migrationTrigger, long checkIntervalMs) {
@@ -71,6 +73,18 @@ public class RiskMonitor implements Runnable {
     public RiskMonitor(NodeRegistry registry, NodeHistory history, RiskScorer scorer,
                        MigrationTrigger migrationTrigger, long checkIntervalMs,
                        RiskSnapshotLogger snapshotLogger, BooleanSupplier shouldSweep) {
+        this(registry, history, scorer, migrationTrigger, checkIntervalMs, snapshotLogger, shouldSweep, null);
+    }
+
+    /**
+     * @param alertNotifier Stage GG: opt-in real external alert on the rising edge of {@code atRisk} —
+     *                       {@code null} (every constructor above) disables alerting entirely,
+     *                       preserving this class's existing behavior.
+     */
+    public RiskMonitor(NodeRegistry registry, NodeHistory history, RiskScorer scorer,
+                       MigrationTrigger migrationTrigger, long checkIntervalMs,
+                       RiskSnapshotLogger snapshotLogger, BooleanSupplier shouldSweep,
+                       AlertNotifier alertNotifier) {
         this.registry = registry;
         this.history = history;
         this.scorer = scorer;
@@ -78,6 +92,7 @@ public class RiskMonitor implements Runnable {
         this.checkIntervalMs = checkIntervalMs;
         this.snapshotLogger = snapshotLogger;
         this.shouldSweep = shouldSweep;
+        this.alertNotifier = alertNotifier;
     }
 
     @Override
@@ -124,6 +139,9 @@ public class RiskMonitor implements Runnable {
                         LOG.warn("⚠ Node '{}' crossed into AT RISK (score={}): {}",
                                 node.getNodeId(), assessment.riskScore(), reason);
                         migrationTrigger.migrateAwayFrom(node.getNodeId(), reason);
+                        if (alertNotifier != null) {
+                            alertNotifier.notifyNodeAtRisk(node.getNodeId(), assessment.riskScore(), reason);
+                        }
                     });
         }
     }

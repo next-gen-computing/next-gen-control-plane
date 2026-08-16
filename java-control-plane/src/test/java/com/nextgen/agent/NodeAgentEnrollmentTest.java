@@ -159,7 +159,7 @@ class NodeAgentEnrollmentTest {
         AgentCredentials credentials = new AgentCredentials(agentDir.resolve("creds"));
 
         // No NEXTGEN_CA_CERT, no server even running: the CA check must happen before any network
-        // call, since trust-on-first-use is deliberately unsupported (see docs/ARCHITECTURE.md).
+        // call, since trust-on-first-use is deliberately unsupported (see ARCHITECTURE.md).
         IllegalStateException failure = assertThrows(IllegalStateException.class, () ->
                 NodeAgent.ensureEnrolled(credentials, "agent-under-test", "localhost", 1,
                         ControlPlaneProto.NodeCapabilities.getDefaultInstance(), "test"));

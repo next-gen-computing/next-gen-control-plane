@@ -55,6 +55,17 @@ public final class JobRecord {
                 Set.of(), nowMillis, nowMillis, supersedesJobId);
     }
 
+    /** Stage HH: full-fidelity reconstruction of every field, for {@code RegistrySnapshotStore}
+     * restoring real state from a persisted snapshot after a restart — unlike {@link #running}'s
+     * "start fresh" shape, every field is explicit here, including which sub-tasks had already used
+     * their one reactive retry. */
+    public static JobRecord restore(String jobId, TaskKindDomain kind, List<String> taskIds, JobStateDomain state,
+                                    String combinedResultJson, Set<String> retriedTaskIds, long createdAtMillis,
+                                    long updatedAtMillis, String supersedesJobId) {
+        return new JobRecord(jobId, kind, List.copyOf(taskIds), state, combinedResultJson,
+                Set.copyOf(retriedTaskIds), createdAtMillis, updatedAtMillis, supersedesJobId);
+    }
+
     public String getJobId()                  { return jobId; }
     public TaskKindDomain getKind()            { return kind; }
     public List<String> getTaskIds()           { return taskIds; }
@@ -68,6 +79,12 @@ public final class JobRecord {
 
     public boolean hasBeenRetried(String taskId) {
         return retriedTaskIds.contains(taskId);
+    }
+
+    /** Stage HH: exposed for {@code RegistrySnapshotStore} to persist — every other caller should keep
+     * using {@link #hasBeenRetried} rather than inspecting this set directly. */
+    public Set<String> getRetriedTaskIds() {
+        return retriedTaskIds;
     }
 
     public JobRecord withTaskRetried(String taskId) {

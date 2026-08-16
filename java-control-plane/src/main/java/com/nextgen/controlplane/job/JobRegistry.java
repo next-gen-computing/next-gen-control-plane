@@ -29,20 +29,22 @@ public final class JobRegistry {
         this.clock = clock;
     }
 
-    /** Creates a new job record in the {@code RUNNING} state, owning the given sub-task ids. */
+    /** Creates a new job record in the {@code RUNNING} state, owning the given sub-task ids. Stage Y:
+     * idempotent on an existing id — mirrors {@code TaskRegistry.createAndQueue}'s identical fix; an
+     * unconditional {@code put} here let a retried {@code SubmitJob} call silently reset an already-
+     * reduced (COMPLETED/FAILED/PARTIAL_FAILURE) job's record back to a fresh RUNNING one, discarding
+     * its real combined result. Returns the EXISTING record unchanged if {@code jobId} already exists. */
     public JobRecord createJob(String jobId, TaskKindDomain kind, List<String> taskIds) {
-        JobRecord record = JobRecord.running(jobId, kind, taskIds, clock.getAsLong());
-        jobs.put(jobId, record);
-        return record;
+        JobRecord fresh = JobRecord.running(jobId, kind, taskIds, clock.getAsLong());
+        return jobs.computeIfAbsent(jobId, key -> fresh);
     }
 
     /** Stage PP: same as {@link #createJob} but records which job this one's rolling update replaced —
-     * see {@link JobRecord#getSupersedesJobId()}. */
+     * see {@link JobRecord#getSupersedesJobId()}. Same Stage Y idempotency guard as {@link #createJob}. */
     public JobRecord createUpdateJob(String jobId, TaskKindDomain kind, List<String> taskIds,
                                      String supersedesJobId) {
-        JobRecord record = JobRecord.runningUpdate(jobId, kind, taskIds, supersedesJobId, clock.getAsLong());
-        jobs.put(jobId, record);
-        return record;
+        JobRecord fresh = JobRecord.runningUpdate(jobId, kind, taskIds, supersedesJobId, clock.getAsLong());
+        return jobs.computeIfAbsent(jobId, key -> fresh);
     }
 
     /** Records that {@code taskId}'s one reactive retry has now been used. */

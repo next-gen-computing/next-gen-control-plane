@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -77,6 +78,31 @@ class DockerComposeServiceExecutorTest {
                 result.get("container_name").asText());
     }
 
+    /** Stage V: a migrated task keeps the SAME taskId when redispatched (ProactiveMigrator reassigns,
+     * never mints a new id) — two real, separate {@code execute()} calls for the exact same taskId
+     * (simulating "migrated away and back") must never collide on container name, and both must
+     * actually run to completion rather than one failing with "name already in use". */
+    @Test
+    void twoExecuteCallsForTheSameTaskIdNeverCollideOnContainerName() throws Exception {
+        DockerComposeServiceExecutor executor = new DockerComposeServiceExecutor();
+        String taskId = UUID.randomUUID().toString();
+        String payload = MAPPER.createObjectNode()
+                .put("project_name", "nxtest")
+                .put("service_name", "migrated")
+                .put("image", "hello-world")
+                .toString();
+
+        String firstResult = executor.execute(taskId, payload, NO_OP_SINK);
+        String secondResult = executor.execute(taskId, payload, NO_OP_SINK);
+
+        JsonNode first = MAPPER.readTree(firstResult);
+        JsonNode second = MAPPER.readTree(secondResult);
+        assertEquals(0, first.get("exit_code").asInt());
+        assertEquals(0, second.get("exit_code").asInt());
+        assertNotEquals(first.get("container_name").asText(), second.get("container_name").asText(),
+                "two separate execute() calls for the same taskId must never derive the same container name");
+    }
+
     @Test
     void cancelStopsARunningServiceCleanlyAndCompletesRatherThanFails() throws Exception {
         DockerComposeServiceExecutor executor = new DockerComposeServiceExecutor();
@@ -130,8 +156,12 @@ class DockerComposeServiceExecutorTest {
             Future<String> future = pool.submit(() -> executor.execute(taskId, payload, NO_OP_SINK));
             Thread.sleep(2000);
 
+            // Stage V appends a per-execute() random attemptId suffix to the real container name, so the
+            // exact name can no longer be predicted ahead of time — discover it via `docker ps` instead
+            // of assuming equality with the prefix this test itself constructed.
+            String realContainerName = discoverContainerName(containerNamePrefix);
             Process inspect = new ProcessBuilder("docker", "inspect", "--format",
-                    "{{.HostConfig.NanoCpus}} {{.HostConfig.Memory}}", containerNamePrefix)
+                    "{{.HostConfig.NanoCpus}} {{.HostConfig.Memory}}", realContainerName)
                     .redirectErrorStream(true).start();
             String inspectOutput;
             try (var reader = inspect.inputReader()) {
@@ -392,6 +422,22 @@ class DockerComposeServiceExecutorTest {
             }
         }
         return HexFormat.of().formatHex(digest.digest());
+    }
+
+    /** Stage V appends a per-{@code execute()} random {@code attemptId} suffix to every real container
+     * name, so a test can no longer predict the exact name ahead of time — this discovers the real,
+     * currently-running name via a live {@code docker ps} filter on the still-stable prefix instead. */
+    private static String discoverContainerName(String namePrefix) throws Exception {
+        Process ps = new ProcessBuilder("docker", "ps", "--filter", "name=" + namePrefix,
+                "--format", "{{.Names}}").redirectErrorStream(true).start();
+        String name;
+        try (var reader = ps.inputReader()) {
+            name = reader.readLine();
+        }
+        assertTrue(ps.waitFor(10, TimeUnit.SECONDS), "docker ps timed out");
+        assertTrue(name != null && !name.isBlank(),
+                "no running container found with name prefix '" + namePrefix + "'");
+        return name;
     }
 
     private static void pullImage(String image) {

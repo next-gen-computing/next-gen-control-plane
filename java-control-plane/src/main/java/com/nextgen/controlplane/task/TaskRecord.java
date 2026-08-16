@@ -58,6 +58,18 @@ public final class TaskRecord {
                 nowMillis, 0L, 0L, 0);
     }
 
+    /** Stage HH: full-fidelity reconstruction of every field, for {@code RegistrySnapshotStore}
+     * restoring real state from a persisted snapshot after a restart — unlike {@link #queued}'s
+     * "start fresh" shape, every field is explicit here, including whatever terminal state the task
+     * had actually reached. */
+    public static TaskRecord restore(String taskId, String jobId, TaskKindDomain kind, String payloadJson,
+                                     String assignedNodeId, TaskStateDomain state, String resultJson, String error,
+                                     long createdAtMillis, long dispatchedAtMillis, long completedAtMillis,
+                                     int attempt) {
+        return new TaskRecord(taskId, jobId, kind, payloadJson, assignedNodeId, state, resultJson, error,
+                createdAtMillis, dispatchedAtMillis, completedAtMillis, attempt);
+    }
+
     // ── Getters ──────────────────────────────────────────────────────────────
 
     public String getTaskId()             { return taskId; }

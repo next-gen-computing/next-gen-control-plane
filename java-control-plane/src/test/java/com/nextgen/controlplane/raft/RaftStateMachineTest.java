@@ -44,7 +44,7 @@ class RaftStateMachineTest {
         final TaskRegistry taskRegistry = new TaskRegistry(new java.util.concurrent.ConcurrentHashMap<>(), applyClock);
         final JobRegistry jobRegistry = new JobRegistry(new java.util.concurrent.ConcurrentHashMap<>(), applyClock);
         final RaftStateMachine stateMachine =
-                new RaftStateMachine(nodeRegistry, taskRegistry, jobRegistry, applyClock);
+                new RaftStateMachine(nodeRegistry, taskRegistry, jobRegistry, applyClock, null);
 
         void apply(long index, StateCommand.Builder command) {
             stateMachine.apply(index, command.build().toByteString());

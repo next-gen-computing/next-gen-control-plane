@@ -225,6 +225,58 @@ class PortRelayManagerTest {
         assertTrue(rebound, "the relay port must be fully released once the last backend detaches");
     }
 
+    /** Stage X: a reservation that never gets a first attach (the provider task never dispatched,
+     * started, or opened TunnelPort) must be evicted once it's older than the TTL — otherwise the
+     * default ~1000-port range could be exhausted permanently by repeated failed peer-networked jobs. */
+    @Test
+    void sweepExpiredEvictsAReservationThatNeverGotAFirstAttach() throws Exception {
+        long[] now = {1_000_000L};
+        PortRelayManager manager = new PortRelayManager(RANGE_START, RANGE_END, 10_000L, 5_000L, () -> now[0]);
+        int port = manager.reservePort("proj", "never-attached");
+
+        now[0] += 5_000; // still within the 10s TTL
+        manager.sweepExpired();
+        try (var stillBound = new java.net.ServerSocket()) {
+            assertTrue(assertThrowsBindConflict(stillBound, port), "must not be evicted before its TTL");
+        }
+
+        now[0] += 6_000; // now past the 10s TTL
+        manager.sweepExpired();
+        long deadline = System.currentTimeMillis() + 5_000;
+        boolean rebound = false;
+        while (!rebound && System.currentTimeMillis() < deadline) {
+            try (var freshSocket = new java.net.ServerSocket()) {
+                freshSocket.bind(new java.net.InetSocketAddress("localhost", port));
+                rebound = true;
+            } catch (IOException notYetFree) {
+                Thread.sleep(50);
+            }
+        }
+        assertTrue(rebound, "an unattached reservation past its TTL must be evicted and the port released");
+    }
+
+    /** Stage X: the TTL sweep must never touch an entry that DID attach, even long after every backend
+     * has since detached — that lifecycle is governed entirely by detachStream/release, not the sweep. */
+    @Test
+    void sweepExpiredNeverEvictsAReservationThatDidAttach() throws Exception {
+        long[] now = {1_000_000L};
+        PortRelayManager manager = new PortRelayManager(RANGE_START, RANGE_END, 10_000L, 5_000L, () -> now[0]);
+        try {
+            int port = manager.reservePort("proj", "attached-then-old");
+            manager.attachStream("proj", "attached-then-old", fakeNodeStream(new LinkedBlockingQueue<>()));
+
+            now[0] += 60_000; // WAY past the TTL
+            manager.sweepExpired();
+
+            try (var conflicting = new java.net.ServerSocket()) {
+                assertTrue(assertThrowsBindConflict(conflicting, port),
+                        "an entry that attached at least once must never be evicted by the TTL sweep");
+            }
+        } finally {
+            manager.release("proj", "attached-then-old");
+        }
+    }
+
     private static StreamObserver<TunnelFrame> fakeNodeStream(LinkedBlockingQueue<TunnelFrame> sink) {
         return new StreamObserver<>() {
             @Override public void onNext(TunnelFrame value) { sink.add(value); }

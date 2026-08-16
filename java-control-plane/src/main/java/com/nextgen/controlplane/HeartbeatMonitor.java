@@ -1,5 +1,6 @@
 package com.nextgen.controlplane;
 
+import com.nextgen.controlplane.alert.AlertNotifier;
 import com.nextgen.controlplane.training.RiskOutcomeLogger;
 import io.prometheus.client.Counter;
 import org.slf4j.Logger;
@@ -42,6 +43,7 @@ public class HeartbeatMonitor implements Runnable {
     private final NodeHistory history;
     private final RiskOutcomeLogger outcomeLogger;
     private final BooleanSupplier shouldSweep;
+    private final AlertNotifier alertNotifier;
 
     /** Legacy constructor: wraps an externally-held map and uses the default timings. */
     public HeartbeatMonitor(ConcurrentHashMap<String, NodeRecord> registry) {
@@ -82,12 +84,24 @@ public class HeartbeatMonitor implements Runnable {
      */
     public HeartbeatMonitor(NodeRegistry registry, long timeoutMs, long checkIntervalMs,
                             NodeHistory history, RiskOutcomeLogger outcomeLogger, BooleanSupplier shouldSweep) {
+        this(registry, timeoutMs, checkIntervalMs, history, outcomeLogger, shouldSweep, null);
+    }
+
+    /**
+     * @param alertNotifier Stage GG: opt-in real external alert on every {@code ALIVE ->
+     *                       SUSPECTED_DEAD} transition — {@code null} (every constructor above)
+     *                       disables alerting entirely, preserving this class's existing behavior.
+     */
+    public HeartbeatMonitor(NodeRegistry registry, long timeoutMs, long checkIntervalMs,
+                            NodeHistory history, RiskOutcomeLogger outcomeLogger, BooleanSupplier shouldSweep,
+                            AlertNotifier alertNotifier) {
         this.registry = registry;
         this.timeoutMs = timeoutMs;
         this.checkIntervalMs = checkIntervalMs;
         this.history = history;
         this.outcomeLogger = outcomeLogger;
         this.shouldSweep = shouldSweep;
+        this.alertNotifier = alertNotifier;
     }
 
     @Override
@@ -128,6 +142,10 @@ public class HeartbeatMonitor implements Runnable {
                 LOG.warn("⚠ Node '{}' marked SUSPECTED_DEAD (no heartbeat for >{}ms)",
                         transition.nodeId(), timeoutMs);
                 logOutcomeIfEnabled(transition);
+                if (alertNotifier != null) {
+                    alertNotifier.notifyNodeDown(transition.nodeId(),
+                            "no heartbeat for over " + timeoutMs + "ms");
+                }
             } else if (transition.to() == NodeStatus.ALIVE) {
                 LOG.info("✅ Node '{}' recovered — heartbeat received", transition.nodeId());
             }

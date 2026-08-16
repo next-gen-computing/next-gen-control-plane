@@ -224,6 +224,45 @@ class SubmitJobIntegrationTest {
         assertTrue(list.getJobsList().stream().anyMatch(j -> j.getJobId().equals("job-1000")));
     }
 
+    /** Stage FF: {@code follow=false} (the CLI's {@code nx logs} default, no {@code --follow}) must
+     * replay this job's real history over the wire and then close the stream on its own — not hang
+     * waiting for further live events, since none were requested. */
+    @Test
+    void streamJobEventsWithFollowFalseReplaysRealHistoryThenClosesTheStream() throws Exception {
+        registerAliveNode("node1");
+        registerAliveNode("node2");
+        registerAliveNode("node3");
+
+        blockingStub.submitJob(JobRequest.newBuilder()
+                .setJobId("job-history")
+                .setKind(TaskKind.TASK_KIND_PRIME_COUNT_RANGE)
+                .setPayloadJson("{\"range_start\":0,\"range_end\":1000}")
+                .setSubTaskCount(3)
+                .build());
+        executeAllPendingDispatches();
+        awaitJobState("job-history", JobState.JOB_STATE_COMPLETED);
+
+        java.util.List<com.nextgen.proto.ControlPlaneProto.TaskEvent> received =
+                new java.util.concurrent.CopyOnWriteArrayList<>();
+        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        asyncStub.streamJobEvents(
+                com.nextgen.proto.ControlPlaneProto.JobEventsRequest.newBuilder()
+                        .setJobId("job-history").setFollow(false).build(),
+                new StreamObserver<>() {
+                    @Override public void onNext(com.nextgen.proto.ControlPlaneProto.TaskEvent value) {
+                        received.add(value);
+                    }
+                    @Override public void onError(Throwable t) { done.countDown(); }
+                    @Override public void onCompleted() { done.countDown(); }
+                });
+
+        assertTrue(done.await(5, TimeUnit.SECONDS),
+                "a follow=false stream must close on its own once history is replayed, not hang");
+        assertFalse(received.isEmpty(), "real result events from the completed job must have been replayed");
+        assertTrue(received.stream().anyMatch(com.nextgen.proto.ControlPlaneProto.TaskEvent::hasResult),
+                "the job's three real sub-task results must be among the replayed history");
+    }
+
     @Test
     void aJobWithMoreSubTasksThanNodesStillConvergesCorrectly() throws Exception {
         registerAliveNode("node1");

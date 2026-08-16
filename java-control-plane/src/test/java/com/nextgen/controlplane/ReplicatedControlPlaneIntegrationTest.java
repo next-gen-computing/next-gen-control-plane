@@ -95,7 +95,8 @@ class ReplicatedControlPlaneIntegrationTest {
 
     private record ReplicaHandle(String id, RaftNode raftNode, ControlPlaneServiceImpl serviceImpl,
                                  Server raftGrpcServer, GrpcRaftTransport transport,
-                                 Server serviceServer, ManagedChannel serviceChannel) {
+                                 Server serviceServer, ManagedChannel serviceChannel,
+                                 com.nextgen.security.EnrollmentTokenStore tokenStore) {
         ControlPlaneServiceGrpc.ControlPlaneServiceBlockingStub blockingStub() {
             return ControlPlaneServiceGrpc.newBlockingStub(serviceChannel);
         }
@@ -132,11 +133,17 @@ class ReplicatedControlPlaneIntegrationTest {
         TaskRegistry taskRegistry = new TaskRegistry(new ConcurrentHashMap<>(), applyClock);
         JobRegistry jobRegistry = new JobRegistry(new ConcurrentHashMap<>(), applyClock);
 
+        com.nextgen.security.EnrollmentTokenStore tokenStore = new com.nextgen.security.EnrollmentTokenStore(
+                java.time.Clock.systemUTC(), java.time.Duration.ofMinutes(60));
+
         RaftLog log = new RaftLog(raftLogDir);
-        RaftStateMachine stateMachine = new RaftStateMachine(nodeRegistry, taskRegistry, jobRegistry, applyClock);
+        RaftStateMachine stateMachine =
+                new RaftStateMachine(nodeRegistry, taskRegistry, jobRegistry, applyClock, tokenStore);
         GrpcRaftTransport transport = new GrpcRaftTransport();
         RaftNode raftNode = new RaftNode(id, "localhost:" + raftPort, members, log, stateMachine, transport,
                 TIMINGS);
+        tokenStore.setReplicationSink(
+                new com.nextgen.controlplane.raft.RaftEnrollmentTokenReplicator(raftNode, TIMINGS.proposeTimeoutMs()));
 
         Server raftGrpcServer = NettyServerBuilder.forPort(raftPort)
                 .addService(new RaftConsensusServiceImpl(raftNode))
@@ -156,7 +163,8 @@ class ReplicatedControlPlaneIntegrationTest {
 
         raftNode.start();
 
-        return new ReplicaHandle(id, raftNode, serviceImpl, raftGrpcServer, transport, serviceServer, serviceChannel);
+        return new ReplicaHandle(id, raftNode, serviceImpl, raftGrpcServer, transport, serviceServer, serviceChannel,
+                tokenStore);
     }
 
     /**
@@ -231,6 +239,55 @@ class ReplicatedControlPlaneIntegrationTest {
             }
         }
         throw new IllegalStateException("registerNode never succeeded against a stable leader", lastError);
+    }
+
+    /** Stage II: the project plan's own stated verification for this stage — mint an enrollment token
+     * on the leader, kill that leader BEFORE the token is ever used, and confirm the newly-elected
+     * leader still recognizes it as valid. Before this stage, EnrollmentTokenStore was leader-local
+     * only — a token minted by a since-superseded leader was simply unknown to the next one. */
+    @Test
+    void aTokenMintedByAKilledLeaderIsStillValidOnTheNewlyElectedLeader(@TempDir Path baseDir) throws Exception {
+        int portA = freePort();
+        int portB = freePort();
+        int portC = freePort();
+        List<RaftPeer> members = List.of(
+                new RaftPeer("r1", "localhost", portA),
+                new RaftPeer("r2", "localhost", portB),
+                new RaftPeer("r3", "localhost", portC));
+
+        ReplicaHandle r1 = buildReplica("r1", portA, members, baseDir.resolve("r1"));
+        ReplicaHandle r2 = buildReplica("r2", portB, members, baseDir.resolve("r2"));
+        ReplicaHandle r3 = buildReplica("r3", portC, members, baseDir.resolve("r3"));
+        replicas.add(r1);
+        replicas.add(r2);
+        replicas.add(r3);
+
+        ReplicaHandle oldLeader = awaitStableLeader(replicas, Duration.ofSeconds(10));
+        String plaintextToken = oldLeader.tokenStore().mint("new-physical-node");
+
+        // mint() blocked until Raft committed+applied it on the LEADER's own replica (see
+        // EnrollmentTokenStore.mint / RaftEnrollmentTokenReplicator.onMinted) — true immediately. A
+        // FOLLOWER's own apply is a separate, genuinely async step (it learns the leader's advanced
+        // commitIndex on a later AppendEntries/heartbeat, matching this file's own established
+        // await()-polling pattern for every other post-commit cross-replica check below), so give that
+        // real, expected, benign replication lag room to settle before asserting on every replica.
+        assertTrue(oldLeader.tokenStore().peek(plaintextToken).isPresent(),
+                "the leader's own store must have the token the instant mint() returns");
+        await().atMost(Duration.ofSeconds(3)).pollInterval(Duration.ofMillis(20)).until(() ->
+                replicas.stream().allMatch(r -> r.tokenStore().peek(plaintextToken).isPresent()));
+
+        replicas.remove(oldLeader);
+        oldLeader.kill();
+
+        ReplicaHandle newLeader = awaitStableLeader(replicas, Duration.ofSeconds(10));
+        assertTrue(newLeader.id() != null && !newLeader.id().equals(oldLeader.id()),
+                "a genuinely different replica must have taken over");
+
+        var consumption = newLeader.tokenStore().consume(plaintextToken);
+
+        assertTrue(consumption.accepted(),
+                "the newly-elected leader must still recognize a token minted by its predecessor");
+        assertEquals("new-physical-node", consumption.nodeId());
     }
 
     @Test

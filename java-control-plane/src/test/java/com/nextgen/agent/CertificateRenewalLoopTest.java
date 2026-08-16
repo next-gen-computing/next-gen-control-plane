@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>This was previously untested entirely: {@code CERT_RENEW_WINDOW_MINUTES} was only ever checked
  * once, at {@code ensureEnrolled} time, and nothing ever re-checked it — see README.md/
- * docs/ARCHITECTURE.md's own "named limitation" callout that this class fixes.
+ * ARCHITECTURE.md's own "named limitation" callout that this class fixes.
  */
 class CertificateRenewalLoopTest {
 

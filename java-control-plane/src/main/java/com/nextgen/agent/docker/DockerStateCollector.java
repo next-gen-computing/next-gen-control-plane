@@ -153,6 +153,38 @@ public final class DockerStateCollector {
         return runControlCommand("docker", "rm", "-f", containerId);
     }
 
+    // ── Stage FF: image/volume/network write actions ──────────────────────
+    // Extends the above container-only start/stop/restart/rm coverage to the three resource types
+    // Stage T shipped list-only. Same real-CLI-invocation, honest-result discipline throughout.
+
+    public ControlResult pullImage(String reference) {
+        return runControlCommand("docker", "pull", reference);
+    }
+
+    public ControlResult tagImage(String sourceReference, String targetReference) {
+        return runControlCommand("docker", "tag", sourceReference, targetReference);
+    }
+
+    public ControlResult removeImage(String reference) {
+        return runControlCommand("docker", "rmi", "-f", reference);
+    }
+
+    public ControlResult createVolume(String name) {
+        return runControlCommand("docker", "volume", "create", name);
+    }
+
+    public ControlResult removeVolume(String name) {
+        return runControlCommand("docker", "volume", "rm", "-f", name);
+    }
+
+    public ControlResult createNetwork(String name) {
+        return runControlCommand("docker", "network", "create", name);
+    }
+
+    public ControlResult removeNetwork(String name) {
+        return runControlCommand("docker", "network", "rm", name);
+    }
+
     private ControlResult runControlCommand(String... command) {
         Process process;
         try {

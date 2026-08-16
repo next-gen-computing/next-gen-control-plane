@@ -22,7 +22,7 @@ import java.util.function.LongSupplier;
  * {@code UploadBuildContext} — one assembled {@code .tar.gz} per {@code context_id}, on local disk
  * under {@code <dataDir>/build-contexts/}, evicted by TTL rather than kept forever.
  *
- * <p>Deliberately NOT Raft-replicated (see docs/ARCHITECTURE.md's "Consensus & replication" section):
+ * <p>Deliberately NOT Raft-replicated (see ARCHITECTURE.md's "Consensus & replication" section):
  * a multi-hundred-MB blob has no business going through the write-ahead log. A leader failover mid-
  * upload means the operator re-uploads — an accepted, named limitation for v1.
  *
@@ -95,12 +95,24 @@ public final class BuildContextStore implements Runnable {
             out.close();
             Path finalPath = storageDir.resolve(contextId + ".tar.gz");
             try {
-                Files.move(tempPath, finalPath, StandardCopyOption.ATOMIC_MOVE);
+                try {
+                    Files.move(tempPath, finalPath, StandardCopyOption.ATOMIC_MOVE);
+                } catch (IOException e) {
+                    // Cross-filesystem temp/final dirs (unusual here — both are under the same
+                    // storageDir) would reject an atomic move; falling back keeps this working rather
+                    // than failing an otherwise-successful upload over a non-issue.
+                    Files.move(tempPath, finalPath, StandardCopyOption.REPLACE_EXISTING);
+                }
             } catch (IOException e) {
-                // Cross-filesystem temp/final dirs (unusual here — both are under the same storageDir)
-                // would reject an atomic move; falling back keeps this working rather than failing an
-                // otherwise-successful upload over a non-issue.
-                Files.move(tempPath, finalPath, StandardCopyOption.REPLACE_EXISTING);
+                // Stage AA: both the atomic move AND its fallback failed (e.g. disk full) — the temp
+                // file is still sitting on disk under tempPath either way, but was never added to
+                // `contexts`, so sweepExpired() (which only ever iterates that map) could never find and
+                // evict it — a permanent leak of a partial upload's bytes. Track it under its original
+                // tempPath so the TTL sweep still reaches it, then propagate the real failure to the
+                // caller exactly as before.
+                contexts.put(contextId,
+                        new StoredContext(contextId, tempPath, bytesWritten, "", clock.getAsLong()));
+                throw e;
             }
             String sha256Hex = HexFormat.of().formatHex(digest.digest());
             StoredContext stored = new StoredContext(contextId, finalPath, bytesWritten, sha256Hex, clock.getAsLong());

@@ -46,6 +46,58 @@ class RiskMonitorTest {
         }
     }
 
+    /** Records exactly what it was called with — a real object, not a mock. */
+    private static final class RecordingAlertNotifier implements com.nextgen.controlplane.alert.AlertNotifier {
+        final List<String> atRiskCalls = new ArrayList<>();
+
+        @Override public void notifyNodeDown(String nodeId, String reason) { }
+        @Override public void notifyNodeAtRisk(String nodeId, double riskScore, String reason) {
+            atRiskCalls.add(nodeId + ":" + riskScore);
+        }
+    }
+
+    // ── Stage GG: alert-notifier wiring ──────────────────────────────────────
+
+    @Test
+    void alertNotifierFiresExactlyOnceOnTheRisingEdge() {
+        NodeRegistry registry = registryWithAliveNode("node1");
+        RecordingMigrationTrigger trigger = new RecordingMigrationTrigger();
+        RecordingAlertNotifier notifier = new RecordingAlertNotifier();
+        RiskMonitor monitor = new RiskMonitor(registry, new NodeHistory(),
+                fixedScorer(true, 0.8, "test reason"), trigger, 1000L, null, () -> true, notifier);
+
+        monitor.checkRisk();
+        monitor.checkRisk();
+        monitor.checkRisk();
+
+        assertEquals(1, notifier.atRiskCalls.size(),
+                "only the false->true edge should fire an alert, not every sweep");
+        assertEquals("node1:0.8", notifier.atRiskCalls.get(0));
+    }
+
+    @Test
+    void alertNotifierDoesNotFireWhenNeverAtRisk() {
+        NodeRegistry registry = registryWithAliveNode("node1");
+        RecordingMigrationTrigger trigger = new RecordingMigrationTrigger();
+        RecordingAlertNotifier notifier = new RecordingAlertNotifier();
+        RiskMonitor monitor = new RiskMonitor(registry, new NodeHistory(),
+                fixedScorer(false, 0.1), trigger, 1000L, null, () -> true, notifier);
+
+        monitor.checkRisk();
+
+        assertTrue(notifier.atRiskCalls.isEmpty());
+    }
+
+    @Test
+    void aNullAlertNotifierIsSafeAndMatchesEveryOtherConstructorsBehavior() {
+        NodeRegistry registry = registryWithAliveNode("node1");
+        RecordingMigrationTrigger trigger = new RecordingMigrationTrigger();
+        RiskMonitor monitor = new RiskMonitor(registry, new NodeHistory(),
+                fixedScorer(true, 0.8, "reason"), trigger, 1000L, null, () -> true, null);
+
+        assertDoesNotThrow(monitor::checkRisk);
+    }
+
     @Test
     void aNodeCrossingIntoAtRiskTriggersExactlyOneMigration() {
         NodeRegistry registry = registryWithAliveNode("node1");

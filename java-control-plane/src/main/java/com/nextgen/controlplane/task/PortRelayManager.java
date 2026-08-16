@@ -16,6 +16,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.LongSupplier;
 
 /**
  * Server side of Stage O's cross-node service networking relay — see {@code TunnelFrame}'s own proto
@@ -45,17 +46,43 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <p>Each accepted TCP connection gets its own {@code tunnel_id} and its own pair of forwarding
  * threads — one node-side stream serves arbitrarily many concurrent consumers, multiplexed.
+ *
+ * <p><b>Stage X — TTL sweep for a reservation that never gets attached.</b> {@link #reservePort} binds a
+ * real socket immediately, but the matching {@link #attachStream} only ever happens if the provider
+ * task's node actually dispatches, starts, and opens {@code TunnelPort} — any of which can fail to
+ * happen at all (the task never gets scheduled, the node never comes up, the agent errors before
+ * opening the stream). Unlike a backend detaching (handled by {@link #detachStream}), NOTHING calls
+ * {@link #release} for a reservation that was never attached in the first place, so with the default
+ * ~1000-port range, repeated failed peer-networked jobs could exhaust it permanently. {@link #run()}
+ * (started as its own daemon thread, matching {@code BuildContextStore}'s identical "one Runnable per
+ * concern" idiom) periodically evicts any entry that is STILL unattached after
+ * {@code unattachedTtlMillis} — an entry that DID attach is never touched here; its lifecycle is
+ * governed entirely by {@link #detachStream}/{@link #release} instead.
  */
-public final class PortRelayManager {
+public final class PortRelayManager implements Runnable {
     private static final Logger LOG = LoggerFactory.getLogger(PortRelayManager.class);
 
     private final int rangeStart;
     private final int rangeEnd;
+    private final long unattachedTtlMillis;
+    private final long sweepIntervalMillis;
+    private final LongSupplier clock;
     private final Map<String, RelayEntry> entries = new ConcurrentHashMap<>();
 
     public PortRelayManager(int rangeStart, int rangeEnd) {
+        // 10 minutes is generous relative to how quickly a real dispatch either succeeds or fails
+        // honestly (seconds), while still tolerant of a slow node pull/build before its TunnelPort
+        // stream opens.
+        this(rangeStart, rangeEnd, 10 * 60_000L, 60_000L, System::currentTimeMillis);
+    }
+
+    public PortRelayManager(int rangeStart, int rangeEnd, long unattachedTtlMillis, long sweepIntervalMillis,
+                            LongSupplier clock) {
         this.rangeStart = rangeStart;
         this.rangeEnd = rangeEnd;
+        this.unattachedTtlMillis = unattachedTtlMillis;
+        this.sweepIntervalMillis = sweepIntervalMillis;
+        this.clock = clock;
     }
 
     public static String key(String projectName, String serviceName) {
@@ -70,7 +97,7 @@ public final class PortRelayManager {
         for (int port = rangeStart; port <= rangeEnd; port++) {
             try {
                 ServerSocket socket = new ServerSocket(port);
-                RelayEntry entry = new RelayEntry(key, socket);
+                RelayEntry entry = new RelayEntry(key, socket, clock.getAsLong());
                 entries.put(key, entry);
                 LOG.info("🔀 Reserved relay port {} for '{}'", port, key);
                 return port;
@@ -133,22 +160,72 @@ public final class PortRelayManager {
         }
     }
 
+    /** Stage X: evicts every entry that is STILL unattached after {@code unattachedTtlMillis} — an
+     * entry that ever attached at least once is never touched here, even if it later fully detaches
+     * (that path already fully closes and removes itself via {@link #detachStream}). Called on a fixed
+     * interval by {@link #run()}; also callable directly from a test with an injected clock. */
+    public void sweepExpired() {
+        long now = clock.getAsLong();
+        entries.entrySet().removeIf(e -> {
+            RelayEntry entry = e.getValue();
+            boolean expired = !entry.everAttached() && (now - entry.reservedAtMillis() > unattachedTtlMillis);
+            if (expired) {
+                LOG.info("🧹 Evicted never-attached relay reservation '{}' after {}ms unattached",
+                        e.getKey(), now - entry.reservedAtMillis());
+                entry.close();
+            }
+            return expired;
+        });
+    }
+
+    @Override
+    public void run() {
+        while (!Thread.currentThread().isInterrupted()) {
+            try {
+                Thread.sleep(sweepIntervalMillis);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            try {
+                sweepExpired();
+            } catch (RuntimeException e) {
+                LOG.warn("Relay reservation sweep failed: {}", e.getMessage(), e);
+            }
+        }
+    }
+
     private static final class RelayEntry {
         private final String key;
         private final ServerSocket serverSocket;
+        private final long reservedAtMillis;
         private final Map<String, Socket> socketsByTunnelId = new ConcurrentHashMap<>();
         private final Map<String, StreamObserver<TunnelFrame>> tunnelToBackend = new ConcurrentHashMap<>();
         private final CopyOnWriteArrayList<StreamObserver<TunnelFrame>> backends = new CopyOnWriteArrayList<>();
         private final AtomicInteger cursor = new AtomicInteger(0);
+        private volatile boolean everAttached = false;
         private volatile boolean closed = false;
 
-        RelayEntry(String key, ServerSocket serverSocket) {
+        RelayEntry(String key, ServerSocket serverSocket, long reservedAtMillis) {
             this.key = key;
             this.serverSocket = serverSocket;
+            this.reservedAtMillis = reservedAtMillis;
+        }
+
+        long reservedAtMillis() {
+            return reservedAtMillis;
+        }
+
+        /** Once true, stays true forever — the TTL sweep must never evict an entry that was genuinely in
+         * use at some point, even if every backend has since detached (that path closes and removes
+         * itself directly, without going through the sweep at all). */
+        boolean everAttached() {
+            return everAttached;
         }
 
         void attach(StreamObserver<TunnelFrame> nodeStream) {
             boolean first = backends.isEmpty();
+            everAttached = true;
             backends.add(nodeStream);
             if (first) {
                 Thread acceptThread = new Thread(this::acceptLoop, "relay-accept-" + key);

@@ -42,11 +42,15 @@ public final class TaskRegistry {
 
     // ── Mutation ─────────────────────────────────────────────────────────────
 
-    /** Creates a new task record in the {@code QUEUED} state. {@code jobId} is empty for a standalone task. */
+    /** Creates a new task record in the {@code QUEUED} state. {@code jobId} is empty for a standalone
+     * task. Stage Y: idempotent on an existing id — a client retrying {@code SubmitTask}/{@code
+     * SubmitJob} after an RPC timeout whose original call actually succeeded previously reset an
+     * already-{@code COMPLETED}/{@code FAILED} record straight back to {@code QUEUED} via an
+     * unconditional {@code put}, permanently discarding its real result. Now simply delegates to
+     * {@link #createIfAbsent}'s already-correct discipline (used on the Raft path for the exact same
+     * reason) instead of duplicating it. */
     public TaskRecord createAndQueue(String taskId, String jobId, TaskKindDomain kind, String payloadJson) {
-        TaskRecord record = TaskRecord.queued(taskId, jobId, kind, payloadJson, clock.getAsLong());
-        tasks.put(taskId, record);
-        return record;
+        return createIfAbsent(taskId, jobId, kind, payloadJson);
     }
 
     /**
@@ -62,12 +66,23 @@ public final class TaskRegistry {
         return tasks.computeIfAbsent(taskId, key -> fresh);
     }
 
-    /** Assigns a queued (or previously-dispatched) task to a node. */
+    /** Assigns a queued (or previously-dispatched) task to a node. Stage Y: refuses to move a task OUT
+     * of {@code COMPLETED} — without this guard, a task that already reported success could be pushed
+     * straight back to {@code DISPATCHED} (e.g. by a stale/duplicate dispatch call racing a real
+     * terminal report) and genuinely re-executed on a node, duplicating real work and destroying the
+     * original result. Returns empty (a no-op) in that case. Deliberately NOT extended to
+     * {@code FAILED}: {@code JobCoordinator}'s own established one-retry-on-failure mechanism
+     * legitimately redispatches a just-failed task to a different node — that is the intended,
+     * existing behavior this guard must not break, not the bug it exists to fix. */
     public Optional<TaskRecord> markDispatched(String taskId, String nodeId) {
         long now = clock.getAsLong();
         TaskRecord[] updated = new TaskRecord[1];
-        tasks.computeIfPresent(taskId, (key, existing) ->
-                updated[0] = existing.withDispatched(nodeId, now));
+        tasks.computeIfPresent(taskId, (key, existing) -> {
+            if (existing.getState() == TaskStateDomain.COMPLETED) {
+                return existing;
+            }
+            return updated[0] = existing.withDispatched(nodeId, now);
+        });
         return Optional.ofNullable(updated[0]);
     }
 

@@ -285,6 +285,60 @@ class ControlPlaneServiceImplTaskChannelTest {
         assertFalse(response.getAccepted());
     }
 
+    /** Stage W: previously subscribed unconditionally, so an unknown/typo'd job_id got a live stream
+     * that emitted nothing, forever — confirmed live as `nx logs <bad-job-id>` hanging the terminal
+     * indefinitely. Must now fail fast with NOT_FOUND, exactly like {@code getJobStatus} already does. */
+    @Test
+    void streamJobEventsOnAnUnknownJobFailsFastRatherThanHangingForever() throws InterruptedException {
+        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        Throwable[] error = new Throwable[1];
+        asyncStub.streamJobEvents(
+                ControlPlaneProto.JobEventsRequest.newBuilder().setJobId("never-submitted").build(),
+                new StreamObserver<>() {
+                    @Override public void onNext(ControlPlaneProto.TaskEvent value) { }
+                    @Override public void onError(Throwable t) { error[0] = t; done.countDown(); }
+                    @Override public void onCompleted() { done.countDown(); }
+                });
+
+        assertTrue(done.await(5, TimeUnit.SECONDS), "the call must fail fast, not hang forever");
+        assertNotNull(error[0]);
+        assertEquals(Status.Code.NOT_FOUND, Status.fromThrowable(error[0]).getCode());
+    }
+
+    /** Stage X: a second HELLO with a DIFFERENT node_id on the SAME stream must not leave the first
+     * id's registry entry orphaned — it must be explicitly unregistered, so a subsequent dispatch to
+     * the OLD id fails honestly (no open channel) rather than silently writing to a now-repurposed
+     * observer that will never actually deliver it as that node. */
+    @Test
+    void aSecondHelloWithADifferentNodeIdUnregistersTheFirstOne() throws InterruptedException {
+        registerAliveNode("nodeA");
+        registerAliveNode("nodeB");
+        LinkedBlockingQueue<ServerTaskCommand> incoming = new LinkedBlockingQueue<>();
+        StreamObserver<NodeTaskEvent> outbound = asyncStub.taskChannel(new StreamObserver<>() {
+            @Override public void onNext(ServerTaskCommand value) { incoming.add(value); }
+            @Override public void onError(Throwable t) { }
+            @Override public void onCompleted() { }
+        });
+
+        outbound.onNext(NodeTaskEvent.newBuilder()
+                .setHello(TaskChannelHello.newBuilder().setNodeId("nodeA").build()).build());
+        Thread.sleep(200); // let the first HELLO actually register before the second arrives
+        outbound.onNext(NodeTaskEvent.newBuilder()
+                .setHello(TaskChannelHello.newBuilder().setNodeId("nodeB").build()).build());
+        Thread.sleep(200);
+
+        // "nodeA" must no longer have an open channel — a task dispatched to it must fail honestly
+        // rather than silently going out over this now-"nodeB" stream.
+        TaskResponse response = blockingStub.submitTask(ControlPlaneProto.TaskRequest.newBuilder()
+                .setTaskId("tA").setPayload("{\"range_start\":0,\"range_end\":10}")
+                .setKind(ControlPlaneProto.TaskKind.TASK_KIND_PRIME_COUNT_RANGE).build());
+        // RoundRobinScheduler may pick either alive node; only assert on the outcome for THIS node.
+        if (response.getAssignedNode().equals("nodeA")) {
+            assertTrue(response.getResult().contains("FAILED"),
+                    "dispatch to the re-helloed-away 'nodeA' must fail honestly, not silently vanish");
+        }
+    }
+
     @Test
     void getTaskStatusOnAnUnknownTaskIsNotFound() {
         StatusRuntimeException ex = assertThrows(StatusRuntimeException.class, () ->

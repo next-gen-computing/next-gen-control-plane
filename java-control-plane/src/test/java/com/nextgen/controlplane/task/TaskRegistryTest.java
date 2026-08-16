@@ -55,6 +55,57 @@ class TaskRegistryTest {
         assertEquals("node-a", result.getAssignedNodeId());
     }
 
+    /** Stage Y: the real bug found by the audit — {@code createAndQueue} used to be an unconditional
+     * {@code put}, so a client retrying {@code SubmitTask} after an RPC timeout whose original call
+     * actually succeeded silently reset an already-COMPLETED task back to QUEUED, permanently
+     * discarding its real result. */
+    @Test
+    void createAndQueueDoesNotResetAnAlreadyCompletedTask() {
+        registry.createAndQueue("t1", "", TaskKindDomain.PRIME_COUNT_RANGE, "{}");
+        registry.markDispatched("t1", "node-a");
+        registry.markCompleted("t1", "node-a", "{\"prime_count\":42}");
+
+        TaskRecord result = registry.createAndQueue("t1", "", TaskKindDomain.PRIME_COUNT_RANGE, "{}");
+
+        assertEquals(TaskStateDomain.COMPLETED, result.getState(),
+                "a retried SubmitTask must not wipe an already-COMPLETED task's real result");
+        assertEquals("{\"prime_count\":42}", result.getResultJson());
+    }
+
+    /** Stage Y: the more critical half — even with creation correctly guarded, markDispatched itself
+     * had no current-state check, so a COMPLETED task could be pushed straight back to DISPATCHED and
+     * genuinely re-executed, duplicating real work and destroying the original result. */
+    @Test
+    void markDispatchedRefusesToMoveACompletedTaskBackToDispatched() {
+        registry.createAndQueue("t1", "", TaskKindDomain.PRIME_COUNT_RANGE, "{}");
+        registry.markDispatched("t1", "node-a");
+        registry.markCompleted("t1", "node-a", "{\"prime_count\":42}");
+
+        Optional<TaskRecord> result = registry.markDispatched("t1", "node-b");
+
+        assertTrue(result.isEmpty(), "markDispatched on a terminal task must be a no-op, not a real transition");
+        TaskRecord stillCompleted = registry.get("t1").orElseThrow();
+        assertEquals(TaskStateDomain.COMPLETED, stillCompleted.getState());
+        assertEquals("node-a", stillCompleted.getAssignedNodeId(), "must not have been reassigned to node-b");
+        assertEquals("{\"prime_count\":42}", stillCompleted.getResultJson(), "the original result must survive");
+    }
+
+    /** The deliberate NON-extension of the Stage Y guard: {@code JobCoordinator}'s own established
+     * one-retry-on-failure mechanism must still be able to redispatch a just-failed task — this is
+     * intended, existing behavior the guard must not break. */
+    @Test
+    void markDispatchedStillAllowsRedispatchingAFailedTaskForARetry() {
+        registry.createAndQueue("t1", "", TaskKindDomain.PRIME_COUNT_RANGE, "{}");
+        registry.markDispatched("t1", "node-a");
+        registry.markFailed("t1", "node-a", "boom");
+
+        Optional<TaskRecord> result = registry.markDispatched("t1", "node-b");
+
+        assertTrue(result.isPresent(), "a FAILED task must still be legitimately redispatchable for a retry");
+        assertEquals(TaskStateDomain.DISPATCHED, result.get().getState());
+        assertEquals("node-b", result.get().getAssignedNodeId());
+    }
+
     @Test
     void markDispatchedAssignsNodeAndBumpsAttempt() {
         registry.createAndQueue("t1", "", TaskKindDomain.PRIME_COUNT_RANGE, "{}");

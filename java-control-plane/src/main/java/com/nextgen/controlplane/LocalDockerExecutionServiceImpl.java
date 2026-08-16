@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -68,6 +69,10 @@ public final class LocalDockerExecutionServiceImpl extends LocalDockerExecutionG
         private final AtomicLong logSequence = new AtomicLong(0);
         private volatile Path composeFile;
         private volatile String projectName = "";
+        /** Stage X: set for the duration of a real, currently-running compose project — null once it
+         * finishes naturally OR was never started. Lets {@link #onError}/{@link #onCompleted} know
+         * there's something real to tear down on a dropped client stream. */
+        private volatile DockerComposeRunner activeRunner;
 
         Session(StreamObserver<ComposeEvent> outbound) {
             this.outbound = outbound;
@@ -85,11 +90,44 @@ public final class LocalDockerExecutionServiceImpl extends LocalDockerExecutionG
         @Override
         public void onError(Throwable t) {
             LOG.warn("⚠ RunCompose stream for '{}' closed with error: {}", projectName, t.getMessage());
+            cleanUpOnDisconnect();
         }
 
         @Override
         public void onCompleted() {
             LOG.info("☁ RunCompose stream closed for '{}'", projectName);
+            cleanUpOnDisconnect();
+        }
+
+        /** Stage X: a dropped client stream (Ctrl-C, laptop sleep, a network blip) previously left the
+         * ENTIRE running compose project — and every container it started, plus its generated compose
+         * YAML file — orphaned forever, since nothing on this path ever called anything but the happy,
+         * explicit-{@code down}-command cleanup in {@link #handleDown}. Runs a REAL
+         * {@code docker compose down} (not just killing the local blocked {@code up} process, which
+         * doesn't reliably stop the containers it started) on a background pool thread so this callback
+         * itself never blocks the gRPC event loop. */
+        private void cleanUpOnDisconnect() {
+            DockerComposeRunner runner = activeRunner;
+            Path file = composeFile;
+            if (runner == null || file == null) {
+                return; // no compose project was ever actually started on this stream
+            }
+            String targetProject = projectName;
+            executorPool.submit(() -> {
+                runner.stop(); // unblocks handleUp's own blocking runCommand() call
+                try {
+                    Process down = new ProcessBuilder(
+                            "docker", "compose", "-f", file.toString(), "-p", targetProject, "down")
+                            .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                            .redirectError(ProcessBuilder.Redirect.DISCARD)
+                            .start();
+                    down.waitFor(30, TimeUnit.SECONDS);
+                } catch (Exception e) {
+                    LOG.warn("⚠ Could not run 'docker compose down' for orphaned project '{}' after "
+                            + "disconnect: {}", targetProject, e.getMessage());
+                }
+                deleteQuietly(file);
+            });
         }
 
         private void handleUp(ComposeUpRequest request) {
@@ -111,6 +149,7 @@ public final class LocalDockerExecutionServiceImpl extends LocalDockerExecutionG
 
             LOG.info("☁ Starting compose project '{}' (build={})", projectName, request.getBuild());
             DockerComposeRunner runner = new DockerComposeRunner("nx-cloud-" + projectName);
+            activeRunner = runner;
             try {
                 int exitCode = runner.runCommand(command, this::sendLog);
                 sendFinished(exitCode == 0,
@@ -120,6 +159,8 @@ public final class LocalDockerExecutionServiceImpl extends LocalDockerExecutionG
                     Thread.currentThread().interrupt();
                 }
                 sendFinished(false, "compose up failed: " + e.getMessage());
+            } finally {
+                activeRunner = null;
             }
         }
 

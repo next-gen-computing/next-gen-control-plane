@@ -162,17 +162,48 @@ public final class DockerStateChannelClient {
             return; // COMMAND_NOT_SET
         }
         DockerControlCommand control = command.getControl();
-        DockerStateCollector.ControlResult result = switch (control.getAction()) {
-            case DOCKER_CONTROL_ACTION_START -> collector.start(control.getContainerId());
-            case DOCKER_CONTROL_ACTION_STOP -> collector.stop(control.getContainerId());
-            case DOCKER_CONTROL_ACTION_RESTART -> collector.restart(control.getContainerId());
-            case DOCKER_CONTROL_ACTION_REMOVE -> collector.remove(control.getContainerId());
-            default -> new DockerStateCollector.ControlResult(false, "Unrecognised action");
-        };
+        DockerStateCollector.ControlResult result = dispatch(control);
         sendResult(control.getCommandId(), result);
-        // The control action just changed real container state — report a fresh snapshot immediately
+        // The control action just changed real Docker state — report a fresh snapshot immediately
         // rather than waiting up to reportIntervalMillis for the UI/CLI to see the effect.
         reportNow();
+    }
+
+    /** Stage FF: dispatches by {@code resource_kind} first, then {@code action} — {@code
+     * DOCKER_RESOURCE_KIND_CONTAINER} is proto3's enum-zero default, so an unset/absent {@code
+     * resource_kind} (every command built before Stage FF existed) falls through to exactly the same
+     * container start/stop/restart/rm behavior as before, unchanged. */
+    private DockerStateCollector.ControlResult dispatch(DockerControlCommand control) {
+        return switch (control.getResourceKind()) {
+            case DOCKER_RESOURCE_KIND_IMAGE -> switch (control.getAction()) {
+                case DOCKER_CONTROL_ACTION_PULL -> collector.pullImage(control.getResourceId());
+                case DOCKER_CONTROL_ACTION_TAG -> collector.tagImage(control.getResourceId(), control.getTagTarget());
+                case DOCKER_CONTROL_ACTION_REMOVE -> collector.removeImage(control.getResourceId());
+                default -> unsupported(control);
+            };
+            case DOCKER_RESOURCE_KIND_VOLUME -> switch (control.getAction()) {
+                case DOCKER_CONTROL_ACTION_CREATE -> collector.createVolume(control.getResourceId());
+                case DOCKER_CONTROL_ACTION_REMOVE -> collector.removeVolume(control.getResourceId());
+                default -> unsupported(control);
+            };
+            case DOCKER_RESOURCE_KIND_NETWORK -> switch (control.getAction()) {
+                case DOCKER_CONTROL_ACTION_CREATE -> collector.createNetwork(control.getResourceId());
+                case DOCKER_CONTROL_ACTION_REMOVE -> collector.removeNetwork(control.getResourceId());
+                default -> unsupported(control);
+            };
+            default -> switch (control.getAction()) {
+                case DOCKER_CONTROL_ACTION_START -> collector.start(control.getContainerId());
+                case DOCKER_CONTROL_ACTION_STOP -> collector.stop(control.getContainerId());
+                case DOCKER_CONTROL_ACTION_RESTART -> collector.restart(control.getContainerId());
+                case DOCKER_CONTROL_ACTION_REMOVE -> collector.remove(control.getContainerId());
+                default -> unsupported(control);
+            };
+        };
+    }
+
+    private static DockerStateCollector.ControlResult unsupported(DockerControlCommand control) {
+        return new DockerStateCollector.ControlResult(false,
+                "Unsupported action " + control.getAction() + " for resource kind " + control.getResourceKind());
     }
 
     private void reportNow() {

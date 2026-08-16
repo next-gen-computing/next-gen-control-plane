@@ -151,6 +151,86 @@ class DockerStateCollectorTest {
         assertFalse(result.ok(), "docker has no such container — must be reported as a real failure");
     }
 
+    // ── Stage FF: image/volume/network write actions ──────────────────
+
+    @Test
+    void tagImageReallyCreatesANewRealTagForTheSameImage() {
+        String targetTag = "nx-test-tag-" + UUID.randomUUID().toString().substring(0, 8) + ":latest";
+
+        DockerStateCollector.ControlResult result = collector.tagImage("busybox", targetTag);
+
+        assertTrue(result.ok(), result.message());
+        try {
+            boolean found = collector.listImages().stream()
+                    .anyMatch(i -> targetTag.startsWith(i.getRepository() + ":" + i.getTag()));
+            assertTrue(found, "the newly-tagged image must actually appear in a real docker images listing");
+        } finally {
+            runQuietly("docker", "rmi", "-f", targetTag);
+        }
+    }
+
+    @Test
+    void createVolumeReallyCreatesARealDockerVolume() {
+        String name = "nx-test-volume-" + UUID.randomUUID().toString().substring(0, 8);
+        try {
+            DockerStateCollector.ControlResult result = collector.createVolume(name);
+
+            assertTrue(result.ok(), result.message());
+            assertTrue(collector.listVolumes().stream().anyMatch(v -> v.getName().equals(name)),
+                    "the newly-created volume must actually appear in a real docker volume ls listing");
+        } finally {
+            runQuietly("docker", "volume", "rm", "-f", name);
+        }
+    }
+
+    @Test
+    void removeVolumeReallyDeletesARealDockerVolume() {
+        String name = "nx-test-volume-rm-" + UUID.randomUUID().toString().substring(0, 8);
+        collector.createVolume(name);
+
+        DockerStateCollector.ControlResult result = collector.removeVolume(name);
+
+        assertTrue(result.ok(), result.message());
+        assertTrue(collector.listVolumes().stream().noneMatch(v -> v.getName().equals(name)),
+                "the volume must actually be gone from a real docker volume ls listing");
+    }
+
+    @Test
+    void createNetworkReallyCreatesARealDockerNetwork() {
+        String name = "nx-test-network-" + UUID.randomUUID().toString().substring(0, 8);
+        try {
+            DockerStateCollector.ControlResult result = collector.createNetwork(name);
+
+            assertTrue(result.ok(), result.message());
+            assertTrue(collector.listNetworks().stream().anyMatch(n -> n.getName().equals(name)),
+                    "the newly-created network must actually appear in a real docker network ls listing");
+        } finally {
+            runQuietly("docker", "network", "rm", name);
+        }
+    }
+
+    @Test
+    void removeNetworkReallyDeletesARealDockerNetwork() {
+        String name = "nx-test-network-rm-" + UUID.randomUUID().toString().substring(0, 8);
+        collector.createNetwork(name);
+
+        DockerStateCollector.ControlResult result = collector.removeNetwork(name);
+
+        assertTrue(result.ok(), result.message());
+        assertTrue(collector.listNetworks().stream().noneMatch(n -> n.getName().equals(name)),
+                "the network must actually be gone from a real docker network ls listing");
+    }
+
+    /** Empirically confirmed against this environment's real Docker CLI: {@code docker rmi -f} on a
+     * reference that doesn't exist still exits 0 — {@code -f} makes removal idempotent, mirroring
+     * {@code rm -f}'s own "ensure this is gone" semantics, not a "must already exist" requirement. */
+    @Test
+    void removeImageAgainstANonexistentReferenceIsAnIdempotentSuccessMatchingRealDockerBehavior() {
+        DockerStateCollector.ControlResult result =
+                collector.removeImage("nx-test-does-not-exist-" + UUID.randomUUID() + ":latest");
+        assertTrue(result.ok(), result.message());
+    }
+
     // ── helpers ──────────────────────────────────────────────────────
 
     private String runDetached() {
