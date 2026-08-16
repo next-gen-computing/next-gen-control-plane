@@ -5,7 +5,7 @@
 # Real nodes are physical machines running the desktop app in "node" mode,
 # anywhere in the world, connecting to whatever address this control plane is
 # published at. They are not simulated containers, and this file does not
-# start any. See docs/ARCHITECTURE.md for the connectivity model and
+# start any. See ARCHITECTURE.md for the connectivity model and
 # README.md's "Running across the internet" section for how a node actually
 # joins.
 #
@@ -30,7 +30,7 @@ services:
       #   TLS_SAN_HOSTS=control.example.com,<public-ip>
       #   ENROLLMENT_TOKENS=node1,node2,node3
       # then point each node at CONTROL_PLANE_HOST=control.example.com.
-      # See docs/ARCHITECTURE.md for the full connectivity and trust model.
+      # See ARCHITECTURE.md for the full connectivity and trust model.
       - TLS_ENABLED=false
       - TLS_SAN_HOSTS=localhost,127.0.0.1,control-plane
       # Stage G: MLRiskScorer stays off (rule-based scoring only) until an operator turns this on —

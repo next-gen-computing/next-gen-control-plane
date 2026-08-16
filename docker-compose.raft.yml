@@ -11,7 +11,7 @@
 # fault tolerance instead, and it's a complete, standalone stack (predictor + prometheus included) —
 # it does not need docker-compose.yml at all.
 #
-# See docs/ARCHITECTURE.md's "Consensus & replication" section for what's replicated vs. leader-local,
+# See ARCHITECTURE.md's "Consensus & replication" section for what's replicated vs. leader-local,
 # and the README's Raft subsection for the algorithm itself.
 
 services:

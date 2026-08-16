@@ -8,7 +8,7 @@
 # Prometheus scraping is pull-based: it needs a route TO the target. Nodes in
 # this system are real physical machines anywhere in the world, deliberately
 # designed to need no inbound port open at all (they always dial OUT to the
-# control plane — see docs/ARCHITECTURE.md). A node behind home or office NAT
+# control plane — see ARCHITECTURE.md). A node behind home or office NAT
 # is therefore fundamentally unreachable for a Prometheus scrape targeting it
 # directly, no matter what address is configured here. An earlier version of
 # this file listed static targets like "node1:9090" that only worked because
