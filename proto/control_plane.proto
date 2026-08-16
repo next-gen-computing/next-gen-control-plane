@@ -85,7 +85,7 @@ enum JobState {
 // transport; the token is consumed and cannot be reused.
 //
 // This is the only service reachable without a client certificate. Everything else requires mutual
-// TLS — see docs/ARCHITECTURE.md.
+// TLS — see ARCHITECTURE.md.
 // ────────────────────────────────────────────────
 service NodeEnrollment {
   rpc Enroll           (EnrollRequest) returns (EnrollResponse);
@@ -322,14 +322,33 @@ enum DockerControlAction {
   DOCKER_CONTROL_ACTION_START       = 1;
   DOCKER_CONTROL_ACTION_STOP        = 2;
   DOCKER_CONTROL_ACTION_RESTART     = 3;
-  DOCKER_CONTROL_ACTION_REMOVE      = 4;
+  DOCKER_CONTROL_ACTION_REMOVE      = 4;  // any resource_kind: container/image/volume/network
+  // Stage FF: image/volume/network write actions, extending Stage T's list-only coverage of those
+  // three resource types (containers already had full start/stop/restart/rm).
+  DOCKER_CONTROL_ACTION_PULL        = 5;  // images only — resource_id is the image reference to pull
+  DOCKER_CONTROL_ACTION_TAG         = 6;  // images only — resource_id=source ref, tag_target=new tag
+  DOCKER_CONTROL_ACTION_CREATE      = 7;  // volumes/networks only — resource_id is the name to create
+}
+
+// Stage FF: which real Docker resource a DockerControlCommand targets — defaults to CONTAINER so every
+// pre-Stage-FF caller (container_id + START/STOP/RESTART/REMOVE) is byte-identical and unaffected.
+enum DockerResourceKind {
+  DOCKER_RESOURCE_KIND_CONTAINER = 0;
+  DOCKER_RESOURCE_KIND_IMAGE     = 1;
+  DOCKER_RESOURCE_KIND_VOLUME    = 2;
+  DOCKER_RESOURCE_KIND_NETWORK   = 3;
 }
 
 message DockerControlCommand {
   string command_id          = 1;
   string node_id             = 2;
-  string container_id        = 3;
+  string container_id        = 3;  // CONTAINER kind only — see resource_id for image/volume/network
   DockerControlAction action = 4;
+  // Stage FF, additive: resource_kind defaults to CONTAINER (proto3 enum-zero default), so this field
+  // is simply absent/zero on every existing container-control call site — zero behavior change.
+  DockerResourceKind resource_kind = 5;
+  string resource_id               = 6;  // image ref / volume name / network name for non-container kinds
+  string tag_target                = 7;  // TAG only: the new tag applied to resource_id
 }
 
 message DockerControlResult {
@@ -714,6 +733,12 @@ message TunnelFrame {
 // Stage L: see ControlPlaneService.StreamJobEvents.
 message JobEventsRequest {
   string job_id = 1;
+  // Stage FF: false (the default) replays whatever this job's bounded server-side history buffer
+  // currently holds (see JobEventBroadcaster) and closes the stream immediately — matching docker/
+  // kubectl's own `logs` default of "show what's there and exit," not an indefinite tail. true keeps
+  // the stream open indefinitely afterward, following live events exactly like today's pre-Stage-FF
+  // behavior (`nx up`/`nx update`'s attached mode always sets this).
+  bool follow = 2;
 }
 
 // One event relayed live from a node's TaskChannel out to an external StreamJobEvents caller.
@@ -926,7 +951,7 @@ message CommandRequest {
 // replica is a pure, deterministic replay: each command maps to one thin call into
 // NodeRegistry/TaskRegistry/JobRegistry, unchanged. Heartbeats, risk/capacity scoring, and the
 // round-robin cursor are deliberately NOT commands — they stay leader-local (see
-// docs/ARCHITECTURE.md's "Consensus & replication" section).
+// ARCHITECTURE.md's "Consensus & replication" section).
 // ────────────────────────────────────────────────
 
 message StateCommand {
@@ -947,7 +972,7 @@ message StateCommand {
     MarkTaskMigratingCommand mark_task_migrating = 10;
     MarkTaskRetriedCommand mark_task_retried = 11;
     CompleteJobCommand complete_job = 12;
-    // Hash only — never the plaintext token (see docs/ARCHITECTURE.md's mTLS trust model). Single-use
+    // Hash only — never the plaintext token (see ARCHITECTURE.md's mTLS trust model). Single-use
     // enforcement is a linearizable compare-and-delete, which only Raft (not a shared filesystem
     // volume) can provide across replicas. Wired in Stage J's PKI work, not this proto's first users.
     MintEnrollmentTokenCommand mint_enrollment_token = 13;
