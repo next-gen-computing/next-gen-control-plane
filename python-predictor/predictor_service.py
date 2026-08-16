@@ -17,6 +17,7 @@ Prometheus metrics on port 9091.
 """
 
 import logging
+import math
 import os
 import time
 from concurrent import futures
@@ -142,7 +143,11 @@ class PredictorServiceServicer(pb2_grpc.PredictorServiceServicer):
 
         # predicted_load is the LSTM's real forecast once trained; falls back to the original
         # instantaneous-cpu stub (never a crash, never a fabricated forecast) when it isn't.
-        predicted_load = (predicted_cpu / 100.0) if load_model_trained else (request.cpu / 100.0 if request.cpu else 0.0)
+        # Stage BB: `request.cpu else 0.0` used Python truthiness, and bool(nan) is True (NaN != 0) —
+        # a NaN request.cpu passed the truthy check and was divided straight into a NaN predicted_load
+        # in an otherwise "valid" (model_trained-independent) response field. math.isfinite rejects it.
+        predicted_load = (predicted_cpu / 100.0) if load_model_trained else (
+            request.cpu / 100.0 if (request.cpu and math.isfinite(request.cpu)) else 0.0)
 
         response = pb2.PredictionResponse(
             predicted_load=predicted_load,

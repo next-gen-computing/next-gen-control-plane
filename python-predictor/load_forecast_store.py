@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import pickle
 import threading
 import time
 
@@ -76,7 +77,16 @@ class LoadForecastStore:
                 "training_example_count": int(meta["trainingExampleCount"]),
                 "horizon_seconds": float(meta["horizonSeconds"]),
             }
-        except (OSError, ValueError, KeyError, RuntimeError) as e:
+        except (OSError, ValueError, KeyError, RuntimeError, EOFError, IndexError,
+                pickle.UnpicklingError) as e:
+            # Stage Z: an EMPTY .pt file raises EOFError, and GARBAGE bytes raise
+            # pickle.UnpicklingError from torch's own weights_only unpickler (empirically confirmed
+            # against this project's actual pinned torch version — IndexError/RuntimeError are kept too
+            # as real possibilities for other corruption shapes, e.g. a truncated-but-zip-structured
+            # file) — all previously uncaught here, escaping through predict() into GetPrediction and
+            # breaking EVERY subsequent prediction call (not falling back to the already-loaded good
+            # in-memory model) until the file was manually fixed. Same "log and keep serving the
+            # last-good model" behavior already correct for every other corruption mode.
             LOG.warning("Could not load load-forecast model %s: %s", self._metadata_path, e)
             return
 

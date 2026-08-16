@@ -12,11 +12,12 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from features import FEATURE_NAMES, extract_features  # noqa: E402
+from features import FEATURE_NAMES  # noqa: E402
 from train_risk_model import (  # noqa: E402
     accuracy,
     build_examples,
     main,
+    read_jsonl,
     train_logistic_regression,
     train_xgboost,
     xgboost_accuracy,
@@ -41,6 +42,33 @@ def risky_history():
         "onAcPower": False, "onAcPowerKnown": True,
         "previousRttSeconds": 2.0, "previousRttAvailable": True,
     }]
+
+
+# ── Stage EE: read_jsonl must not crash the whole read on one bad byte ────
+
+def test_read_jsonl_skips_a_line_with_invalid_utf8_bytes_but_keeps_the_rest(tmp_path):
+    path = tmp_path / "outcomes.jsonl"
+    good_line_1 = json.dumps({"label": 1}).encode("utf-8")
+    bad_line = b"\xff\xfe not valid utf-8"
+    good_line_2 = json.dumps({"label": 0}).encode("utf-8")
+    path.write_bytes(good_line_1 + b"\n" + bad_line + b"\n" + good_line_2 + b"\n")
+
+    rows = read_jsonl(str(path))
+
+    assert rows == [{"label": 1}, {"label": 0}]
+
+
+def test_read_jsonl_skips_malformed_json_lines_but_keeps_the_rest(tmp_path):
+    path = tmp_path / "outcomes.jsonl"
+    path.write_text(json.dumps({"label": 1}) + "\nnot json at all\n" + json.dumps({"label": 0}) + "\n")
+
+    rows = read_jsonl(str(path))
+
+    assert rows == [{"label": 1}, {"label": 0}]
+
+
+def test_read_jsonl_on_a_missing_path_returns_an_empty_list_not_a_crash():
+    assert read_jsonl("/does/not/exist.jsonl") == []
 
 
 def test_gradient_descent_converges_on_a_trivially_separable_dataset():

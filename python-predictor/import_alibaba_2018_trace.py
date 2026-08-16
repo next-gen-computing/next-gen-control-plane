@@ -50,7 +50,6 @@ import argparse
 import bisect
 import json
 import logging
-import os
 import random
 import sys
 

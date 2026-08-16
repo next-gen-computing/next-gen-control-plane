@@ -65,6 +65,12 @@ class ModelStore:
         try:
             with open(self._model_path, "r", encoding="utf-8") as f:
                 raw = json.load(f)
+            # Stage Z: valid JSON that isn't an object (e.g. a real possibility from a non-atomic
+            # partial overwrite mid-write) previously reached raw.get(...) below and raised an uncaught
+            # AttributeError — not in the except clause's type list — breaking every subsequent
+            # prediction call until the file was manually fixed.
+            if not isinstance(raw, dict):
+                raise ValueError(f"model file did not contain a JSON object (got {type(raw).__name__})")
             model_type = raw.get("modelType", "logistic_regression")
             model = {
                 "type": model_type,
@@ -98,7 +104,14 @@ class ModelStore:
         if model is None:
             return 0.0, False, 0
 
-        x = extract_features(recent_samples)
+        try:
+            x = extract_features(recent_samples)
+        except ValueError as e:
+            # Stage BB: a NaN/Inf anywhere in the request's trend samples must not silently flow through
+            # to a confidently-wrong verdict — see extract_features' own Javadoc-style note above it.
+            # Same tuple shape as "no model loaded" at all: an honest untrained response, not a crash.
+            LOG.warning("Rejecting prediction request with non-finite features: %s", e)
+            return 0.0, False, 0
         std_safe = np.where(model["std"] == 0, 1.0, model["std"])
         z = (x - model["mean"]) / std_safe
 

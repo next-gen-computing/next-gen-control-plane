@@ -11,7 +11,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from load_forecast_model import (  # noqa: E402
     INPUT_SIZE,
-    LoadForecastLSTM,
     compute_feature_stats,
     sample_to_vector,
     sequence_to_tensor,

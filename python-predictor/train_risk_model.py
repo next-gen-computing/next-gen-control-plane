@@ -68,12 +68,21 @@ MIN_TRAINING_EXAMPLES = 20
 
 
 def read_jsonl(path: str) -> list[dict]:
+    """Stage EE: reads in BINARY mode and decodes each line individually, deliberately not text mode
+    with encoding="utf-8" — a text-mode file iterator decodes greedily as part of reading each line,
+    so a single invalid UTF-8 byte ANYWHERE in the file previously raised UnicodeDecodeError before
+    the per-line try/except below ever got a chance to run, aborting the whole read instead of skipping
+    just the one bad line the same way a malformed-JSON line already was."""
     if not path or not os.path.exists(path):
         return []
     rows = []
-    with open(path, "r", encoding="utf-8") as f:
-        for line_num, line in enumerate(f, start=1):
-            line = line.strip()
+    with open(path, "rb") as f:
+        for line_num, raw_line in enumerate(f, start=1):
+            try:
+                line = raw_line.decode("utf-8").strip()
+            except UnicodeDecodeError as e:
+                LOG.warning("Skipping line %d in %s with invalid UTF-8: %s", line_num, path, e)
+                continue
             if not line:
                 continue
             try:

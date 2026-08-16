@@ -99,6 +99,32 @@ def test_a_real_model_file_produces_a_trained_response(tmp_path):
     assert response.recommendation in ("HEALTHY", "AT_RISK")
 
 
+def test_a_nan_cpu_in_the_request_falls_back_to_untrained_rather_than_a_confident_verdict(tmp_path):
+    """Stage BB: a NaN request.cpu (a proto float field gRPC never range-checks) previously flowed
+    through, unguarded, to a NaN failure_probability that `NaN >= 0.5` evaluates False for — a
+    confidently-wrong "HEALTHY" instead of an honest untrained response. Also exercises the
+    predicted_load truthiness fix: bool(nan) is True in Python, so the old `request.cpu else 0.0`
+    fallback would still have leaked NaN into predicted_load even with model_trained now correct."""
+    model_path = tmp_path / "risk_model.json"
+    model_path.write_text(json.dumps({
+        "modelType": "logistic_regression",
+        "weights": [0.1] * N_FEATURES,
+        "bias": -0.5,
+        "featureMean": [10.0] * N_FEATURES,
+        "featureStd": [5.0] * N_FEATURES,
+        "trainingExampleCount": 42,
+        "trainedAtEpochMillis": 1_700_000_000_000,
+    }))
+    store = ModelStore(model_path=str(model_path))
+    servicer = PredictorServiceServicer(store)
+
+    response = servicer.GetPrediction(make_request(cpu=float("nan"), sequence_length=1), None)
+
+    assert response.model_trained is False
+    assert response.recommendation.startswith("UNTRAINED")
+    assert response.predicted_load == 0.0
+
+
 def test_a_model_file_with_no_modelType_defaults_to_logistic_regression(tmp_path):
     """Backward compatibility: a model file written before Stage H has no modelType field at all."""
     model_path = tmp_path / "risk_model.json"
@@ -177,6 +203,40 @@ def test_an_xgboost_model_with_a_missing_sidecar_keeps_serving_the_previous_mode
     assert trained is True
     assert n == 5, "a missing sidecar must not silently switch to an untrained/different model"
     assert store.model_type() == "logistic_regression"
+
+
+def test_a_model_file_that_is_valid_json_but_not_an_object_reverts_to_untrained(tmp_path):
+    """Stage Z: valid JSON that isn't an object (e.g. from a non-atomic partial overwrite) previously
+    reached raw.get(...) and raised an uncaught AttributeError, breaking every subsequent prediction
+    call. Must degrade to honestly untrained instead."""
+    model_path = tmp_path / "risk_model.json"
+    model_path.write_text(json.dumps([1, 2, 3]))  # a JSON array, not an object
+
+    store = ModelStore(model_path=str(model_path))
+
+    probability, trained, n = store.predict([])
+    assert trained is False
+    assert n == 0
+
+
+def test_a_model_file_that_becomes_non_dict_keeps_serving_the_previous_model(tmp_path):
+    model_path = tmp_path / "risk_model.json"
+    model_path.write_text(json.dumps({
+        "weights": [0.1] * N_FEATURES, "bias": 0.0,
+        "featureMean": [0.0] * N_FEATURES, "featureStd": [1.0] * N_FEATURES,
+        "trainingExampleCount": 7, "trainedAtEpochMillis": 1,
+    }))
+    store = ModelStore(model_path=str(model_path))
+    assert store.predict([])[2] == 7
+
+    store._last_checked = 0  # noqa: SLF001 — test-only bypass of the cheap-polling throttle
+    model_path.write_text(json.dumps("just a string, not an object"))
+    new_time = os.path.getmtime(model_path) + 1
+    os.utime(model_path, (new_time, new_time))
+
+    _, trained, n = store.predict([])
+    assert trained is True
+    assert n == 7, "a non-dict overwrite must not crash or silently switch away from the last-good model"
 
 
 def test_model_hot_reloads_when_the_file_changes(tmp_path):
@@ -262,6 +322,46 @@ def test_a_sequence_shorter_than_the_models_required_length_reports_untrained(tm
 
     assert response.load_model_trained is False
     assert response.predicted_memory_percent == 0.0
+
+
+def test_an_empty_load_forecast_weights_file_keeps_serving_the_previous_model(tmp_path):
+    """Stage Z: an EMPTY .pt file raises EOFError from torch.load — previously uncaught, breaking
+    every subsequent prediction call until the file was manually fixed."""
+    metadata_path, weights_path = write_load_forecast_model(tmp_path, sequence_length=5, training_example_count=42)
+    load_store = LoadForecastStore(metadata_path=metadata_path, weights_path=weights_path)
+    assert load_store.predict([{"cpu_percent": 1, "memory_percent": 1, "battery_percent": 1,
+                                 "on_ac_power": 1, "previous_rtt_seconds": 0.0}] * 5)[3] == 42
+
+    load_store._last_checked = 0  # noqa: SLF001 — test-only bypass of the cheap-polling throttle
+    with open(weights_path, "wb"):
+        pass  # truncate to zero bytes
+    new_time = os.path.getmtime(metadata_path) + 1
+    os.utime(metadata_path, (new_time, new_time))
+
+    result = load_store.predict([{"cpu_percent": 1, "memory_percent": 1, "battery_percent": 1,
+                                   "on_ac_power": 1, "previous_rtt_seconds": 0.0}] * 5)
+    assert result[2] is True, "an empty weights file must not silently degrade the last-good model"
+    assert result[3] == 42
+
+
+def test_a_load_forecast_weights_file_with_garbage_bytes_keeps_serving_the_previous_model(tmp_path):
+    """Stage Z: GARBAGE (non-empty, non-pickle) bytes raise IndexError from torch.load — same
+    previously-uncaught crash class as the empty-file case above."""
+    metadata_path, weights_path = write_load_forecast_model(tmp_path, sequence_length=5, training_example_count=13)
+    load_store = LoadForecastStore(metadata_path=metadata_path, weights_path=weights_path)
+    sample = [{"cpu_percent": 1, "memory_percent": 1, "battery_percent": 1,
+               "on_ac_power": 1, "previous_rtt_seconds": 0.0}] * 5
+    assert load_store.predict(sample)[3] == 13
+
+    load_store._last_checked = 0  # noqa: SLF001 — test-only bypass of the cheap-polling throttle
+    with open(weights_path, "wb") as f:
+        f.write(b"\x00\x01\x02not-a-real-pytorch-checkpoint\xff\xfe")
+    new_time = os.path.getmtime(metadata_path) + 1
+    os.utime(metadata_path, (new_time, new_time))
+
+    result = load_store.predict(sample)
+    assert result[2] is True, "garbage weight bytes must not silently degrade the last-good model"
+    assert result[3] == 13
 
 
 def test_load_forecast_model_hot_reloads_when_the_file_changes(tmp_path):

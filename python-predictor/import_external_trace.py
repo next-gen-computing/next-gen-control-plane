@@ -77,7 +77,11 @@ SCHEMA_MAP = {
 def find_input_files(input_path: str) -> list[str]:
     if os.path.isdir(input_path):
         return sorted(glob.glob(os.path.join(input_path, "*.csv")))
-    return [input_path]
+    # Stage EE: previously returned [input_path] unconditionally for the non-directory case, so a
+    # typo'd or otherwise-missing plain-file path skipped the caller's "no CSV files found" branch
+    # entirely (that only fires on an EMPTY list) and reached open() further down uncaught, raising a
+    # raw FileNotFoundError traceback instead of the same clean error every other missing-input case gets.
+    return [input_path] if os.path.isfile(input_path) else []
 
 
 def convert_row(row: dict, schema: dict) -> dict | None:
@@ -153,6 +157,13 @@ def main(argv: list[str] | None = None) -> int:
     if skipped > 0:
         LOG.warning("A non-zero skip count often means the column names in SCHEMA_MAP['%s'] don't match "
                     "your actual file's header row — check it and update SCHEMA_MAP.", args.source)
+    if written == 0:
+        # Stage BB: previously exited 0 even when every row was skipped — train_risk_model.py's own
+        # MIN_TRAINING_EXAMPLES floor independently refuses to train on this, so the real risk was low,
+        # but cron/automation checking this script's exit code alone had no way to notice a silent
+        # zero-usable-rows run (e.g. every column name mismatched SCHEMA_MAP).
+        LOG.error("Zero usable rows were written — treating this as a failure")
+        return 1
     return 0
 
 

@@ -7,6 +7,8 @@ docstring on why the two must be kept in sync by hand.
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from features import (  # noqa: E402
@@ -128,6 +130,26 @@ def test_extract_features_reflects_a_genuinely_risky_node():
     assert vector[1] == 1.0  # on_battery
     assert vector[4] == 1.0  # memory_pressure
     assert vector[5] == 95.0  # memory_percent
+
+
+# ── Stage BB: NaN/Inf rejection ───────────────────────────
+
+def test_extract_features_rejects_a_nan_cpu_percent():
+    window = [sample(cpuPercent=float("nan"))]
+    with pytest.raises(ValueError):
+        extract_features(window)
+
+
+def test_extract_features_rejects_a_nan_memory_percent():
+    window = [sample(memoryPercent=float("nan"))]
+    with pytest.raises(ValueError):
+        extract_features(window)
+
+
+def test_extract_features_rejects_an_infinite_rtt():
+    window = [sample(previousRttSeconds=v) for v in [1.0, 2.0, float("inf"), 4.0, 5.0]]
+    with pytest.raises(ValueError):
+        extract_features(window)
 
 
 # ── Stage H: rolling mean/max, rtt_trend_slope, staleness_millis ─────────

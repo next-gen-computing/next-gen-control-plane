@@ -44,7 +44,6 @@ import argparse
 import bisect
 import json
 import logging
-import os
 import random
 import sys
 
@@ -126,7 +125,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     rng = random.Random(args.seed)
-    cpu_series = load_machine_cpu_series(args.machine_metric)
+    # Stage EE: pd.read_csv was previously unguarded here — a missing/typo'd --machine-metric path
+    # raised a raw FileNotFoundError, and a file missing one of the hard-coded `usecols` raised pandas'
+    # own raw ValueError, both as an uncaught full-traceback crash instead of a clean, actionable message.
+    try:
+        cpu_series = load_machine_cpu_series(args.machine_metric)
+    except OSError as e:
+        LOG.error("Could not read --machine-metric file %s: %s", args.machine_metric, e)
+        return 1
+    except (ValueError, KeyError) as e:
+        LOG.error("--machine-metric file %s is missing an expected column: %s", args.machine_metric, e)
+        return 1
 
     # Alibaba's trace timestamps are seconds relative to an arbitrary trace start, not wall-clock epoch
     # time — anchoring them at a real epoch millis base keeps every recordedAtMillis internally
@@ -145,7 +154,19 @@ def main(argv: list[str] | None = None) -> int:
     skipped_thin_window = 0
 
     with open(args.output, "w", encoding="utf-8") as out:
-        for chunk in pd.read_csv(args.instance_table, usecols=usecols, chunksize=CHUNK_ROWS):
+        # pandas opens the file and validates `usecols` against the header eagerly, right here — a
+        # missing/typo'd path or a missing expected column both raise immediately, not deferred to the
+        # loop's first iteration, so this try/except genuinely catches both (same reasoning already
+        # applied to load_machine_cpu_series above).
+        try:
+            instance_chunks = pd.read_csv(args.instance_table, usecols=usecols, chunksize=CHUNK_ROWS)
+        except OSError as e:
+            LOG.error("Could not read --instance-table file %s: %s", args.instance_table, e)
+            return 1
+        except (ValueError, KeyError) as e:
+            LOG.error("--instance-table file %s is missing an expected column: %s", args.instance_table, e)
+            return 1
+        for chunk in instance_chunks:
             rows_seen += len(chunk)
             chunk = chunk[chunk["status"].isin(["Failed", "Interrupted", "Terminated"])]
             chunk = chunk.dropna(subset=["machine", "end_time"])
@@ -200,6 +221,11 @@ def main(argv: list[str] | None = None) -> int:
               positives_written + negatives_written, positives_written, negatives_written, args.output)
     LOG.info("Skipped: %d (machine had no CPU-metric series), %d (fewer than %d real samples in window)",
               skipped_no_series, skipped_thin_window, MIN_SAMPLES_REQUIRED)
+    if positives_written + negatives_written == 0:
+        # Stage BB: same exit-code-hygiene fix as import_external_trace.py's own — previously exited 0
+        # even when every row was skipped (e.g. every machine id failed to match cpu_series).
+        LOG.error("Zero usable rows were written — treating this as a failure")
+        return 1
     return 0
 
 
