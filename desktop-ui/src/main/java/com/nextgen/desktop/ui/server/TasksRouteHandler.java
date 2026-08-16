@@ -38,6 +38,9 @@ public class TasksRouteHandler implements HttpHandler {
         TaskSubmitRequestDto request;
         try {
             request = JsonSupport.MAPPER.readValue(exchange.getRequestBody(), TaskSubmitRequestDto.class);
+            if (request.rangeStart() == null || request.rangeEnd() == null) {
+                throw new IllegalArgumentException("rangeStart and rangeEnd are required");
+            }
             if (request.rangeEnd() < request.rangeStart()) {
                 throw new IllegalArgumentException("rangeEnd must be >= rangeStart");
             }

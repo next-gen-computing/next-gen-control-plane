@@ -42,26 +42,30 @@ public class AccountRouteHandler implements HttpHandler {
         String path = exchange.getRequestURI().getPath();
         String method = exchange.getRequestMethod();
         try {
-            if (path.endsWith("/current") && "GET".equals(method)) {
-                handleCurrent(exchange);
-            } else if (path.endsWith("/list") && "GET".equals(method)) {
-                handleList(exchange);
-            } else if (path.endsWith("/signup") && "POST".equals(method)) {
-                handleSignUp(exchange);
-            } else if (path.endsWith("/login") && "POST".equals(method)) {
-                handleLogin(exchange);
-            } else if (path.endsWith("/logout") && "POST".equals(method)) {
-                handleLogout(exchange);
-            } else if (path.endsWith("/switch") && "POST".equals(method)) {
-                handleSwitch(exchange);
-            } else if (path.endsWith("/reset-password") && "POST".equals(method)) {
-                handleResetPassword(exchange);
-            } else if (path.endsWith("/github/available") && "GET".equals(method)) {
-                handleGitHubAvailable(exchange);
-            } else if (path.endsWith("/github/start") && "POST".equals(method)) {
-                handleGitHubStart(exchange);
-            } else if (path.endsWith("/github/poll") && "GET".equals(method)) {
-                handleGitHubPoll(exchange);
+            // Stage DD: path-match-but-wrong-method previously fell through to the same bare 404 as an
+            // unknown path entirely — indistinguishable from "this route doesn't exist" to a caller.
+            // requireMethod resolves the path to its one real route FIRST, then checks the method,
+            // so a wrong method on a real path gets 405 + Allow instead.
+            if (path.endsWith("/current")) {
+                requireMethod(exchange, method, "GET", () -> handleCurrent(exchange));
+            } else if (path.endsWith("/list")) {
+                requireMethod(exchange, method, "GET", () -> handleList(exchange));
+            } else if (path.endsWith("/signup")) {
+                requireMethod(exchange, method, "POST", () -> handleSignUp(exchange));
+            } else if (path.endsWith("/login")) {
+                requireMethod(exchange, method, "POST", () -> handleLogin(exchange));
+            } else if (path.endsWith("/logout")) {
+                requireMethod(exchange, method, "POST", () -> handleLogout(exchange));
+            } else if (path.endsWith("/switch")) {
+                requireMethod(exchange, method, "POST", () -> handleSwitch(exchange));
+            } else if (path.endsWith("/reset-password")) {
+                requireMethod(exchange, method, "POST", () -> handleResetPassword(exchange));
+            } else if (path.endsWith("/github/available")) {
+                requireMethod(exchange, method, "GET", () -> handleGitHubAvailable(exchange));
+            } else if (path.endsWith("/github/start")) {
+                requireMethod(exchange, method, "POST", () -> handleGitHubStart(exchange));
+            } else if (path.endsWith("/github/poll")) {
+                requireMethod(exchange, method, "GET", () -> handleGitHubPoll(exchange));
             } else {
                 exchange.sendResponseHeaders(404, -1);
                 exchange.close();
@@ -69,6 +73,22 @@ public class AccountRouteHandler implements HttpHandler {
         } catch (RuntimeException e) {
             LOG.error("Unhandled failure in account route {}", path, e);
             JsonSupport.sendJson(exchange, 500, AccountResultDto.error("Internal error"));
+        }
+    }
+
+    @FunctionalInterface
+    private interface Action {
+        void run() throws IOException;
+    }
+
+    private static void requireMethod(HttpExchange exchange, String actualMethod, String allowedMethod,
+            Action action) throws IOException {
+        if (allowedMethod.equals(actualMethod)) {
+            action.run();
+        } else {
+            exchange.getResponseHeaders().set("Allow", allowedMethod);
+            exchange.sendResponseHeaders(405, -1);
+            exchange.close();
         }
     }
 
@@ -81,8 +101,21 @@ public class AccountRouteHandler implements HttpHandler {
         JsonSupport.sendJson(exchange, 200, AccountListDto.from(accountService.listAccounts()));
     }
 
+    // Stage CC: the class-level `catch (RuntimeException e)` in handle() does NOT cover a
+    // malformed-JSON-syntax body — readValue throws a CHECKED JsonProcessingException/
+    // MismatchedInputException in that case, which escapes handle() entirely (it only declares
+    // `throws IOException`) and gets silently swallowed by the JDK's HttpServer internals (socket
+    // closed, no response, no status line). Each of the four JSON-body routes below needs its own
+    // local try/catch, matching RoleRouteHandler.handleServerLaunch's already-correct pattern.
+
     private void handleSignUp(HttpExchange exchange) throws IOException {
-        SignUpRequestDto request = JsonSupport.MAPPER.readValue(exchange.getRequestBody(), SignUpRequestDto.class);
+        SignUpRequestDto request;
+        try {
+            request = JsonSupport.MAPPER.readValue(exchange.getRequestBody(), SignUpRequestDto.class);
+        } catch (Exception e) {
+            JsonSupport.sendJson(exchange, 400, AccountResultDto.error("Malformed request body"));
+            return;
+        }
         char[] password = request.password() == null ? new char[0] : request.password().toCharArray();
         char[] confirmPassword = request.confirmPassword() == null ? new char[0] : request.confirmPassword().toCharArray();
         AccountService.RecoveryCodeResult result =
@@ -91,8 +124,13 @@ public class AccountRouteHandler implements HttpHandler {
     }
 
     private void handleResetPassword(HttpExchange exchange) throws IOException {
-        ResetPasswordRequestDto request =
-                JsonSupport.MAPPER.readValue(exchange.getRequestBody(), ResetPasswordRequestDto.class);
+        ResetPasswordRequestDto request;
+        try {
+            request = JsonSupport.MAPPER.readValue(exchange.getRequestBody(), ResetPasswordRequestDto.class);
+        } catch (Exception e) {
+            JsonSupport.sendJson(exchange, 400, AccountResultDto.error("Malformed request body"));
+            return;
+        }
         char[] newPassword = request.newPassword() == null ? new char[0] : request.newPassword().toCharArray();
         char[] confirmPassword = request.confirmPassword() == null ? new char[0] : request.confirmPassword().toCharArray();
         AccountService.RecoveryCodeResult result = accountService.resetPassword(
@@ -106,7 +144,13 @@ public class AccountRouteHandler implements HttpHandler {
     }
 
     private void handleLogin(HttpExchange exchange) throws IOException {
-        LoginRequestDto request = JsonSupport.MAPPER.readValue(exchange.getRequestBody(), LoginRequestDto.class);
+        LoginRequestDto request;
+        try {
+            request = JsonSupport.MAPPER.readValue(exchange.getRequestBody(), LoginRequestDto.class);
+        } catch (Exception e) {
+            JsonSupport.sendJson(exchange, 400, AccountResultDto.error("Malformed request body"));
+            return;
+        }
         char[] password = request.password() == null ? new char[0] : request.password().toCharArray();
         AccountService.Result result = accountService.login(request.email(), password);
         writeResult(exchange, result);
@@ -118,8 +162,13 @@ public class AccountRouteHandler implements HttpHandler {
     }
 
     private void handleSwitch(HttpExchange exchange) throws IOException {
-        SwitchAccountRequestDto request =
-                JsonSupport.MAPPER.readValue(exchange.getRequestBody(), SwitchAccountRequestDto.class);
+        SwitchAccountRequestDto request;
+        try {
+            request = JsonSupport.MAPPER.readValue(exchange.getRequestBody(), SwitchAccountRequestDto.class);
+        } catch (Exception e) {
+            JsonSupport.sendJson(exchange, 400, AccountResultDto.error("Malformed request body"));
+            return;
+        }
         var target = accountService.listAccounts().stream()
                 .filter(a -> a.id().equals(request.accountId()))
                 .findFirst();

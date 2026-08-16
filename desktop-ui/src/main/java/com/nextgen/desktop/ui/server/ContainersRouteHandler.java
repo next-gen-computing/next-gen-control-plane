@@ -36,6 +36,14 @@ public class ContainersRouteHandler implements HttpHandler {
             JsonSupport.sendJson(exchange, 400, ErrorDto.of(ErrorCategory.UNKNOWN, "Invalid request body"));
             return;
         }
+        // Stage CC: a literal JSON `null` body (or an empty body Jackson treats as one) parses
+        // successfully to a null `request` without throwing — the try/catch above never fires, so the
+        // dereference below would otherwise be an uncaught NPE that escapes handle() entirely and gets
+        // silently swallowed by the JDK's HttpServer internals (socket closed, no response at all).
+        if (request == null) {
+            JsonSupport.sendJson(exchange, 400, ErrorDto.of(ErrorCategory.UNKNOWN, "Invalid request body"));
+            return;
+        }
 
         ControlPlaneProto.DockerControlAction action = request.toProtoAction();
         if (request.nodeId() == null || request.nodeId().isBlank()

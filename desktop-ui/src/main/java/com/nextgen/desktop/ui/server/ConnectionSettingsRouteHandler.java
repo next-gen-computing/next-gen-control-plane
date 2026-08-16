@@ -40,8 +40,22 @@ public class ConnectionSettingsRouteHandler implements HttpHandler {
     }
 
     private void handleApply(HttpExchange exchange) throws IOException {
-        ConnectionApplyRequestDto request =
-                JsonSupport.MAPPER.readValue(exchange.getRequestBody(), ConnectionApplyRequestDto.class);
+        // Stage CC: previously unguarded — a malformed body throws a checked JsonProcessingException
+        // (not caught by anything, since neither this method nor handle() wraps it), and a literal
+        // JSON `null` body parses successfully to a null request without throwing at all, so
+        // request.host() below would NPE. Either way, both escaped handle() entirely and were silently
+        // swallowed by the JDK's HttpServer internals (socket closed, no response, no status line).
+        ConnectionApplyRequestDto request;
+        try {
+            request = JsonSupport.MAPPER.readValue(exchange.getRequestBody(), ConnectionApplyRequestDto.class);
+        } catch (Exception e) {
+            JsonSupport.sendJson(exchange, 400, ErrorDto.of(ErrorCategory.UNKNOWN, "Invalid request body"));
+            return;
+        }
+        if (request == null) {
+            JsonSupport.sendJson(exchange, 400, ErrorDto.of(ErrorCategory.UNKNOWN, "Invalid request body"));
+            return;
+        }
 
         String host = request.host() == null ? "" : request.host().trim();
         if (host.isEmpty()) {
@@ -66,7 +80,17 @@ public class ConnectionSettingsRouteHandler implements HttpHandler {
     }
 
     private void handleRefreshInterval(HttpExchange exchange) throws IOException {
-        var body = JsonSupport.MAPPER.readTree(exchange.getRequestBody());
+        com.fasterxml.jackson.databind.JsonNode body;
+        try {
+            body = JsonSupport.MAPPER.readTree(exchange.getRequestBody());
+        } catch (Exception e) {
+            JsonSupport.sendJson(exchange, 400, ErrorDto.of(ErrorCategory.UNKNOWN, "Invalid request body"));
+            return;
+        }
+        if (body == null) {
+            JsonSupport.sendJson(exchange, 400, ErrorDto.of(ErrorCategory.UNKNOWN, "Invalid request body"));
+            return;
+        }
         long intervalMs = body.path("intervalMs").asLong(-1);
         if (intervalMs < 1000 || intervalMs > 10000) {
             JsonSupport.sendJson(exchange, 400,

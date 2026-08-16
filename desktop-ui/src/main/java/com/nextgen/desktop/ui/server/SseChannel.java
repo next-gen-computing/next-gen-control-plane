@@ -11,6 +11,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 /**
@@ -33,8 +34,15 @@ import java.util.function.Supplier;
 public class SseChannel {
     private static final Logger LOG = LoggerFactory.getLogger(SseChannel.class);
 
+    /** Stage DD: after this many consecutive poll failures, already-connected clients are force-closed
+     * so their browser's {@code EventSource} sees a real connection error and uses its own built-in
+     * reconnect/backoff — a persistently failing poll otherwise left clients silently stale forever
+     * (no error frame, no close; "no new data" is indistinguishable from "channel still healthy"). */
+    private static final int MAX_CONSECUTIVE_POLL_FAILURES = 5;
+
     private final CopyOnWriteArrayList<HttpExchange> clients = new CopyOnWriteArrayList<>();
     private final ScheduledExecutorService scheduler;
+    private final AtomicInteger consecutivePollFailures = new AtomicInteger(0);
     private volatile String lastPayload;
 
     public SseChannel(String name) {
@@ -64,12 +72,20 @@ public class SseChannel {
         scheduler.scheduleAtFixedRate(() -> {
             try {
                 String payload = payloadSupplier.get();
+                consecutivePollFailures.set(0);
                 if (!payload.equals(lastPayload)) {
                     lastPayload = payload;
                     broadcast(payload);
                 }
             } catch (RuntimeException e) {
                 LOG.warn("SSE payload supplier failed", e);
+                if (consecutivePollFailures.incrementAndGet() >= MAX_CONSECUTIVE_POLL_FAILURES
+                        && !clients.isEmpty()) {
+                    LOG.warn("SSE payload supplier failed {} times in a row — closing {} client(s) so "
+                            + "their EventSource reconnects", consecutivePollFailures.get(), clients.size());
+                    disconnectAll();
+                    consecutivePollFailures.set(0);
+                }
             }
         }, 0, intervalMs, TimeUnit.MILLISECONDS);
     }
@@ -93,6 +109,12 @@ public class SseChannel {
     private void disconnect(HttpExchange exchange) {
         clients.remove(exchange);
         exchange.close();
+    }
+
+    private void disconnectAll() {
+        for (HttpExchange exchange : clients) {
+            disconnect(exchange);
+        }
     }
 
     /** Stops polling and closes every open client connection. Called from {@code LocalUiServer.stop()}. */

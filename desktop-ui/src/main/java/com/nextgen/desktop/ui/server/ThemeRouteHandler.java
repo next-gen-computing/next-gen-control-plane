@@ -48,11 +48,20 @@ public class ThemeRouteHandler implements HttpHandler {
             exchange.close();
             return;
         }
+        // Stage DD: a literal JSON `null` body parses successfully to a null request without throwing
+        // — previously this fell through to Platform.runLater(() -> ... request.dark()), which NPEs
+        // ASYNCHRONOUSLY on the JavaFX thread, invisible to this HTTP exchange, while the handler still
+        // returned 200 (JsonSupport.sendJson serializes a null value to the literal string "null"
+        // without throwing) — telling the caller the theme was set when it never was.
+        if (request == null) {
+            exchange.sendResponseHeaders(400, -1);
+            exchange.close();
+            return;
+        }
 
-        // ThemeService.setDarkMode fires a listener that mutates the JavaFX Scene's stylesheet list
-        // directly (see ThemeService.applyTheme) — a scene-graph mutation, which JavaFX requires to
-        // happen on its own application thread. This handler runs on a LocalUiServer worker thread,
-        // so it must hand off rather than call setDarkMode() directly.
+        // darkMode is a JavaFX BooleanProperty, which by convention must only be touched from the FX
+        // Application Thread. This handler runs on a LocalUiServer worker thread, so it hands off
+        // rather than calling setDarkMode() directly.
         Platform.runLater(() -> themeService.setDarkMode(request.dark()));
 
         JsonSupport.sendJson(exchange, 200, request);

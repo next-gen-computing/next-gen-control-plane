@@ -46,6 +46,15 @@ public class StateRouteHandler implements HttpHandler {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
+        // Stage DD: previously enforced no HTTP method at all — every other handler in this package
+        // correctly gates and 405s, but this one silently treated PUT/DELETE/PATCH exactly like GET.
+        if (!"GET".equals(exchange.getRequestMethod())) {
+            exchange.getResponseHeaders().set("Allow", "GET");
+            exchange.sendResponseHeaders(405, -1);
+            exchange.close();
+            return;
+        }
+
         List<NodeDto> nodes = NodesStreamHandler.snapshot(monitoringService);
         List<TaskDto> tasks = taskExecutionService.getTasks().stream().map(TaskDto::from).toList();
         List<JobDto> jobs = jobExecutionService.getJobs().stream().map(JobDto::from).toList();

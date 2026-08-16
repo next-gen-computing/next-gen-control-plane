@@ -24,6 +24,13 @@ public class MetricsHistoryRouteHandler implements HttpHandler {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
+        // Stage DD: same missing-method-check fix as StateRouteHandler's own.
+        if (!"GET".equals(exchange.getRequestMethod())) {
+            exchange.getResponseHeaders().set("Allow", "GET");
+            exchange.sendResponseHeaders(405, -1);
+            exchange.close();
+            return;
+        }
         JsonSupport.sendJson(exchange, 200, snapshot(monitoringService));
     }
 

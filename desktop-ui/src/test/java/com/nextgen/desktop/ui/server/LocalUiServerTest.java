@@ -207,6 +207,50 @@ class LocalUiServerTest {
         assertTrue(response.body().contains("\"serverId\":\"NGX-TEST-0001\""), response.body());
     }
 
+    // ── Stage DD: previously-unguarded HTTP methods must now 405 ─────────────
+
+    @Test
+    void stateRejectsNonGetMethodsWithA405() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> response = request(s, "PUT", "/api/state");
+
+        assertEquals(405, response.statusCode());
+        assertEquals("GET", response.headers().firstValue("Allow").orElse(""));
+    }
+
+    @Test
+    void metricsHistoryRejectsNonGetMethodsWithA405() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> response = request(s, "DELETE", "/api/metrics/history");
+
+        assertEquals(405, response.statusCode());
+        assertEquals("GET", response.headers().firstValue("Allow").orElse(""));
+    }
+
+    @Test
+    void accountLogoutViaGetIsA405WithAllowNotABare404() throws Exception {
+        LocalUiServer s = startedServer();
+
+        // /logout is a real sub-route (POST-only) — the wrong method on a real path must be
+        // distinguishable from a path that doesn't exist at all.
+        HttpResponse<String> response = get(s, "/api/account/logout");
+
+        assertEquals(405, response.statusCode());
+        assertEquals("POST", response.headers().firstValue("Allow").orElse(""));
+    }
+
+    @Test
+    void roleServerInfoViaPostIsA405WithAllowNotABare404() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> response = postJson(s, "/api/role/server-info", "{}");
+
+        assertEquals(405, response.statusCode());
+        assertEquals("GET", response.headers().firstValue("Allow").orElse(""));
+    }
+
     // ── SSE streams ─────────────────────────────────────────────────────────
 
     @Test
@@ -362,6 +406,54 @@ class LocalUiServerTest {
         // The mutation is handed off to the FX thread (see ThemeRouteHandler), so confirm it actually
         // applied rather than trusting the echoed request body.
         waitUntil(() -> get(s, "/api/theme").body().contains("\"dark\":false"));
+    }
+
+    @Test
+    void themePostWithANullBodyReturns400NotAFalse200() throws Exception {
+        LocalUiServer s = startedServer();
+        boolean darkBefore = get(s, "/api/theme").body().contains("\"dark\":true");
+
+        HttpResponse<String> response = postJson(s, "/api/theme", "null");
+
+        // Stage DD: previously returned 200 (JsonSupport serializes a null value to the literal string
+        // "null" without throwing) while the real mutation NPE'd asynchronously on the JavaFX thread,
+        // invisible to this HTTP exchange — telling the caller the theme was set when it never was.
+        assertEquals(400, response.statusCode());
+        assertEquals(darkBefore, get(s, "/api/theme").body().contains("\"dark\":true"),
+                "the theme must be unchanged after a rejected request");
+    }
+
+    // ── /api/tasks ──────────────────────────────────────────────────────────
+
+    @Test
+    void submittingATaskWithAMissingRangeIsRejectedNotSilentlySubmittedAsZeroZero() throws Exception {
+        LocalUiServer s = startedServer();
+
+        // Stage DD: TaskSubmitRequestDto previously used primitive long fields, so a body missing both
+        // fields deserialized to the valid-looking [0, 0) range and passed the only check in place —
+        // silently submitting a real, meaningless task instead of rejecting the missing input.
+        HttpResponse<String> response = postJson(s, "/api/tasks", "{}");
+
+        assertEquals(400, response.statusCode());
+    }
+
+    @Test
+    void submittingATaskWithAnInvertedRangeIsRejected() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> response = postJson(s, "/api/tasks", "{\"rangeStart\":100,\"rangeEnd\":0}");
+
+        assertEquals(400, response.statusCode());
+    }
+
+    @Test
+    void submittingARealTaskReturnsItImmediately() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> response = postJson(s, "/api/tasks", "{\"rangeStart\":0,\"rangeEnd\":1000}");
+
+        assertEquals(200, response.statusCode(), response.body());
+        assertTrue(response.body().contains("\"task\""), response.body());
     }
 
     // ── /api/role/* ─────────────────────────────────────────────────────────
@@ -634,6 +726,107 @@ class LocalUiServerTest {
         assertEquals(404, response.statusCode());
     }
 
+    // ── Stage CC: malformed-body handling must return a clean 400, never a dropped connection ──
+    // Before this fix, each of these previously either escaped a checked JsonProcessingException past
+    // a class-level `catch (RuntimeException e)` that doesn't cover it, or NPE'd on a literal JSON
+    // `null` body parsing successfully to a null request — both cases silently swallowed by the JDK's
+    // HttpServer internals with no status line and no body at all.
+
+    @Test
+    void containerActionWithANullBodyIsRejectedCleanly() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> response = postJson(s, "/api/containers/action", "null");
+
+        assertEquals(400, response.statusCode());
+        assertFalse(response.body().contains("<html"), "must be a JSON error, never an unhandled-exception page");
+    }
+
+    @Test
+    void connectionApplyWithAMalformedBodyIsRejectedCleanly() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> response = postJson(s, "/api/connection/apply", "not json at all");
+
+        assertEquals(400, response.statusCode());
+        assertFalse(response.body().contains("<html"), "must be a JSON error, never an unhandled-exception page");
+    }
+
+    @Test
+    void connectionRefreshIntervalWithAMalformedBodyIsRejectedCleanly() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> response = postJson(s, "/api/connection/refresh-interval", "not json at all");
+
+        assertEquals(400, response.statusCode());
+    }
+
+    @Test
+    void feedbackWithANullBodyIsRejectedCleanly() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> response = postJson(s, "/api/feedback", "null");
+
+        assertEquals(400, response.statusCode());
+        assertFalse(response.body().contains("<html"), "must be a JSON error, never an unhandled-exception page");
+    }
+
+    @Test
+    void signupWithAMalformedBodyIsRejectedCleanly() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> response = postJson(s, "/api/account/signup", "not json at all");
+
+        assertEquals(400, response.statusCode());
+        assertFalse(response.body().contains("<html"), "must be a JSON error, never an unhandled-exception page");
+    }
+
+    @Test
+    void loginWithAMalformedBodyIsRejectedCleanly() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> response = postJson(s, "/api/account/login", "not json at all");
+
+        assertEquals(400, response.statusCode());
+    }
+
+    @Test
+    void resetPasswordWithAMalformedBodyIsRejectedCleanly() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> response = postJson(s, "/api/account/reset-password", "not json at all");
+
+        assertEquals(400, response.statusCode());
+    }
+
+    @Test
+    void switchAccountWithAMalformedBodyIsRejectedCleanly() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> response = postJson(s, "/api/account/switch", "not json at all");
+
+        assertEquals(400, response.statusCode());
+    }
+
+    @Test
+    void nodeJoinWithAMalformedBodyIsRejectedCleanly() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> response = postJson(s, "/api/role/node/join", "not json at all");
+
+        assertEquals(400, response.statusCode());
+        assertFalse(response.body().contains("<html"), "must be a JSON error, never an unhandled-exception page");
+    }
+
+    @Test
+    void nodeJoinWithAMissingAddressIsRejectedCleanly() throws Exception {
+        LocalUiServer s = startedServer();
+
+        HttpResponse<String> response = postJson(s, "/api/role/node/join", "{}");
+
+        assertEquals(400, response.statusCode());
+    }
+
     private void waitUntil(ThrowingBooleanSupplier condition) throws Exception {
         long deadline = System.nanoTime() + Duration.ofSeconds(3).toNanos();
         while (System.nanoTime() < deadline) {
@@ -648,6 +841,13 @@ class LocalUiServerTest {
     @FunctionalInterface
     private interface ThrowingBooleanSupplier {
         boolean getAsBoolean() throws Exception;
+    }
+
+    private HttpResponse<String> request(LocalUiServer s, String method, String path) throws Exception {
+        HttpRequest req = HttpRequest.newBuilder(URI.create(s.getBaseUrl() + path.replaceFirst("^/", "")))
+                .method(method, HttpRequest.BodyPublishers.noBody())
+                .build();
+        return http.send(req, HttpResponse.BodyHandlers.ofString());
     }
 
     private HttpResponse<String> get(LocalUiServer s, String path) {

@@ -80,22 +80,27 @@ public class RoleRouteHandler implements HttpHandler {
         String path = exchange.getRequestURI().getPath();
         String method = exchange.getRequestMethod();
         try {
-            if (path.endsWith("/server-info") && "GET".equals(method)) {
-                handleServerInfo(exchange);
-            } else if (path.endsWith("/docker-info") && "GET".equals(method)) {
-                handleDockerInfo(exchange);
-            } else if (path.endsWith("/profile") && "GET".equals(method)) {
-                handleGetProfile(exchange);
-            } else if (path.endsWith("/profile/clear") && "POST".equals(method)) {
-                handleClearProfile(exchange);
-            } else if (path.endsWith("/auto-connect") && "POST".equals(method)) {
-                handleAutoConnect(exchange);
-            } else if (path.endsWith("/server/launch") && "POST".equals(method)) {
-                handleServerLaunch(exchange);
-            } else if (path.endsWith("/probe") && "GET".equals(method)) {
-                handleProbe(exchange);
-            } else if (path.endsWith("/node/join") && "POST".equals(method)) {
-                handleNodeJoin(exchange);
+            // Stage DD: path-match-but-wrong-method previously fell through to the same bare 404 as an
+            // unknown path entirely — indistinguishable from "this route doesn't exist" to a caller.
+            // requireMethod resolves the path to its one real route FIRST, then checks the method, so a
+            // wrong method on a real path gets 405 + Allow instead — mirrors AccountRouteHandler's
+            // identical fix.
+            if (path.endsWith("/server-info")) {
+                requireMethod(exchange, method, "GET", () -> handleServerInfo(exchange));
+            } else if (path.endsWith("/docker-info")) {
+                requireMethod(exchange, method, "GET", () -> handleDockerInfo(exchange));
+            } else if (path.endsWith("/profile/clear")) {
+                requireMethod(exchange, method, "POST", () -> handleClearProfile(exchange));
+            } else if (path.endsWith("/profile")) {
+                requireMethod(exchange, method, "GET", () -> handleGetProfile(exchange));
+            } else if (path.endsWith("/auto-connect")) {
+                requireMethod(exchange, method, "POST", () -> handleAutoConnect(exchange));
+            } else if (path.endsWith("/server/launch")) {
+                requireMethod(exchange, method, "POST", () -> handleServerLaunch(exchange));
+            } else if (path.endsWith("/probe")) {
+                requireMethod(exchange, method, "GET", () -> handleProbe(exchange));
+            } else if (path.endsWith("/node/join")) {
+                requireMethod(exchange, method, "POST", () -> handleNodeJoin(exchange));
             } else {
                 exchange.sendResponseHeaders(404, -1);
                 exchange.close();
@@ -103,6 +108,22 @@ public class RoleRouteHandler implements HttpHandler {
         } catch (RuntimeException e) {
             LOG.error("Unhandled failure in role route {}", path, e);
             JsonSupport.sendJson(exchange, 500, ErrorDto.of(ErrorCategory.UNKNOWN, "Internal error"));
+        }
+    }
+
+    @FunctionalInterface
+    private interface Action {
+        void run() throws IOException;
+    }
+
+    private static void requireMethod(HttpExchange exchange, String actualMethod, String allowedMethod,
+            Action action) throws IOException {
+        if (allowedMethod.equals(actualMethod)) {
+            action.run();
+        } else {
+            exchange.getResponseHeaders().set("Allow", allowedMethod);
+            exchange.sendResponseHeaders(405, -1);
+            exchange.close();
         }
     }
 
@@ -403,7 +424,24 @@ public class RoleRouteHandler implements HttpHandler {
      * {@code DesktopApp.connectAndRegisterNode} + {@code registerNodeAndShowDashboard}.
      */
     private void handleNodeJoin(HttpExchange exchange) throws IOException {
-        JoinRequestDto request = JsonSupport.MAPPER.readValue(exchange.getRequestBody(), JoinRequestDto.class);
+        // Stage CC: the class-level `catch (RuntimeException e)` in handle() does NOT cover a
+        // malformed-JSON-syntax body — readValue throws a CHECKED JsonProcessingException in that
+        // case, which escapes handle() entirely (it only declares `throws IOException`) and gets
+        // silently swallowed by the JDK's HttpServer internals. handleServerLaunch already gets this
+        // right with its own local try/catch; this mirrors that exact pattern, but — unlike
+        // handleServerLaunch's optional body — a missing/invalid address here is a real 400, not a
+        // silently-defaulted value.
+        JoinRequestDto request;
+        try {
+            request = JsonSupport.MAPPER.readValue(exchange.getRequestBody(), JoinRequestDto.class);
+        } catch (Exception e) {
+            JsonSupport.sendJson(exchange, 400, ErrorDto.of(ErrorCategory.UNKNOWN, "Malformed request body"));
+            return;
+        }
+        if (request == null || request.address() == null || request.address().isBlank()) {
+            JsonSupport.sendJson(exchange, 400, ErrorDto.of(ErrorCategory.UNKNOWN, "address is required"));
+            return;
+        }
         ConnectOutcome outcome = doNodeJoin(request.address(), request.enrollmentToken(), request.wantsEnrollment());
         if (outcome.ok()) {
             saveProfile("node", null, request.address(), request.wantsEnrollment(), outcome.label());

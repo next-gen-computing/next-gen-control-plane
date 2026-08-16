@@ -46,6 +46,13 @@ public class FeedbackRouteHandler implements HttpHandler {
             JsonSupport.sendJson(exchange, 400, ErrorDto.of(ErrorCategory.UNKNOWN, "Malformed feedback body"));
             return;
         }
+        // Stage CC: a literal JSON `null` body parses successfully to a null request without throwing
+        // JsonProcessingException — the catch above never fires, so request.message() below would
+        // otherwise be an uncaught NPE escaping handle() entirely.
+        if (request == null) {
+            JsonSupport.sendJson(exchange, 400, ErrorDto.of(ErrorCategory.UNKNOWN, "Malformed feedback body"));
+            return;
+        }
 
         if (request.message() == null || request.message().isBlank()) {
             JsonSupport.sendJson(exchange, 400, ErrorDto.of(ErrorCategory.UNKNOWN, "Feedback message is empty"));
