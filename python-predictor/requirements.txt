@@ -20,7 +20,12 @@ numpy==2.1.3
 # no Docker daemon available in this environment. If the wheel's bundled OpenMP runtime fails to import
 # on a truly minimal base image, `apt-get install -y libgomp1` is the standard fix — confirm before
 # relying on this in production.
-xgboost==3.4.0
+# Pinned to 3.2.0 rather than the newer 3.4.0/3.4.1 already on PyPI: CI's own pip resolver log
+# (build-python workflow, Python 3.11 runner) proved it could only see versions up to 3.2.0 at
+# install time — 3.3.0+ had not yet finished propagating through PyPI's index for that runner,
+# so pinning to a version CI's own resolver already confirmed as resolvable avoids a repeat of that
+# exact failure rather than gambling that propagation has finished by the next run.
+xgboost==3.2.0
 # Stage I: real LSTM load-forecasting model (torch.nn.LSTM). A materially larger dependency than
 # anything else in this project (~200MB+ install, longer Docker build) — CPU-only wheel, installed from
 # https://download.pytorch.org/whl/cpu (see Dockerfile). Verified locally (Python 3.14, real
