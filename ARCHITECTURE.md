@@ -362,12 +362,15 @@ fails what it can't (no alive node), rather than leaving the task orphaned forev
 
 ### Scope cuts, named rather than silently left inconsistent
 
-- **The enrollment TOKEN store is not Raft-replicated.** It stays leader-local, in-memory, exactly as
-  in a single-replica deployment — a token minted by a since-superseded leader is not known to a new
-  one. `ControlPlaneServer` re-mints configured tokens (`ENROLLMENT_TOKENS`) on every become-leader
-  edge specifically so this doesn't strand an unenrolled node indefinitely. Full replication (mint/
-  consume as a linearizable Raft command — a compare-and-delete an in-memory-per-process store
-  structurally cannot provide across replicas) is real future work.
+- **The enrollment TOKEN store *is* Raft-replicated** (`RaftEnrollmentTokenReplicator`, implementing
+  `TokenReplicationSink`) — a token minted by a leader that's then killed before the token is used is
+  still recognized by the newly-elected leader. Minting proposes `MintEnrollmentTokenCommand` and
+  blocks until it commits and applies, so the token's hash is durable *before* its plaintext is ever
+  handed to an operator; consumption proposes `ConsumeEnrollmentTokenCommand` fire-and-forget,
+  immediately after the already-atomic local accept/reject decision, since replicating that decision is
+  a best-effort close of the reuse-after-failover window rather than something the caller needs to wait
+  on. `ControlPlaneServer` still re-mints configured tokens (`ENROLLMENT_TOKENS`) on every become-leader
+  edge as a defense-in-depth fallback for any token that predates this replication path.
 - **Static membership.** `RAFT_PEERS` is a fixed, comma-separated `id=host:port` list read once at
   startup. Adding or removing a replica means restarting the cluster with a new list — no joint
   consensus / dynamic reconfiguration.
@@ -511,8 +514,11 @@ attached process rather than one container at a time).
 - Transparent same-name DNS resolution inside containers for cross-node peers (named above).
 - Incremental/resumable build-context transfer — every dispatch re-sends the full tarball; a dropped
   upload must be retried from scratch.
-- Historical log replay (`nx logs` without `--follow`) — no server-side log ring buffer exists; only
-  live fan-out via `StreamJobEvents`.
+- ~~Historical log replay~~ — **shipped.** `JobEventBroadcaster` keeps a bounded per-job history buffer
+  (`MAX_HISTORY_PER_JOB = 500` events, oldest trimmed first) and replays it to a new `StreamJobEvents`
+  subscriber before live fan-out continues, so `nx logs <job-id>` (without `--follow`) now shows real
+  recent history instead of nothing. Deliberately not unbounded persistence or pagination — a fixed
+  recent-history window per job, not a message queue.
 - Dynamic node provisioning/auto-scaling in cloud mode — `LocalDockerExecution` targets one
   operator-designated, already-running host; it never provisions new cloud VMs.
 - Arbitrary compose-file support — only a documented subset (`image`, `build.context`/`dockerfile`,
