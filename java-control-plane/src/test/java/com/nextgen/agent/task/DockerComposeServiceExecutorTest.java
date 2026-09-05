@@ -31,6 +31,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * this class follows identically. Covers the {@link TaskExecutor}-facing behavior on top of
  * {@link DockerComposeRunner}: spec parsing, the real {@code COMPLETED}-means-"stopped" redefinition,
  * and real cancellation routing.
+ *
+ * <p>Exit-code tests use the single-word busybox applets {@code true}/{@code false}, never
+ * {@code sh -c "exit N"} — {@link DockerComposeServiceExecutor#buildRunArgs}'s own documented v1
+ * limitation is a plain {@code commandText.split("\\s+")} with no shell-quoting support, so a quoted
+ * multi-word command string splits into broken tokens (a stray embedded {@code "} character) and the
+ * container's own {@code sh} then exits 2 on a genuine syntax error, not the intended code. This was a
+ * real, previously-latent bug: on Windows, {@code ProcessBuilder} reconstructs the argument array back
+ * into a single command line before invoking the native process, which happened to paper over the
+ * broken tokens; on Linux, argv is passed through literally, so `sh` sees the malformed script directly
+ * — confirmed live when this exact test failed on a real Ubuntu GitHub Actions runner (exit code 2)
+ * after passing locally on Windows. Two of the three affected tests didn't notice because they only
+ * assert the *restart count* in the thrown message, not the specific exit code value — only the test
+ * asserting {@code exit_code == 0} exactly actually caught it.
  */
 class DockerComposeServiceExecutorTest {
 
@@ -189,7 +202,7 @@ class DockerComposeServiceExecutorTest {
                 .put("project_name", "nxtest")
                 .put("service_name", "crasher")
                 .put("image", "busybox")
-                .put("command", "sh -c \"exit 1\"")
+                .put("command", "false")
                 .toString();
 
         Exception e = assertThrows(RuntimeException.class,
@@ -206,7 +219,7 @@ class DockerComposeServiceExecutorTest {
                 .put("project_name", "nxtest")
                 .put("service_name", "alwaysfails")
                 .put("image", "busybox")
-                .put("command", "sh -c \"exit 1\"")
+                .put("command", "false")
                 .set("restart", MAPPER.createObjectNode().put("policy", "on-failure").put("maxAttempts", 2))
                 .toString();
 
@@ -226,7 +239,7 @@ class DockerComposeServiceExecutorTest {
                 .put("project_name", "nxtest")
                 .put("service_name", "alwaysexits0")
                 .put("image", "busybox")
-                .put("command", "sh -c \"exit 0\"")
+                .put("command", "true")
                 .set("restart", MAPPER.createObjectNode().put("policy", "always").put("maxAttempts", 2))
                 .toString();
 
