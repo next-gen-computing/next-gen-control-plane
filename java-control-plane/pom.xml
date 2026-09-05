@@ -77,6 +77,12 @@
             <artifactId>oshi-core</artifactId>
         </dependency>
 
+        <!-- Angus Mail: real SMTP, used by EmailAlertNotifier -->
+        <dependency>
+            <groupId>org.eclipse.angus</groupId>
+            <artifactId>angus-mail</artifactId>
+        </dependency>
+
         <!-- Prometheus metrics -->
         <dependency>
             <groupId>io.prometheus</groupId>

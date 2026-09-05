@@ -720,6 +720,22 @@ than failing startup.
 | `HEARTBEAT_CHECK_INTERVAL_MS` | `3000` | How often the liveness sweep runs |
 | `PREDICTOR_HOST` / `PREDICTOR_PORT` | `predictor` / `50052` | Predictor service address |
 
+### Alerting (`ROLE=server`, each channel independently opt-in)
+
+Real node-failure alerting on both the reactive (`HeartbeatMonitor`) and predictive
+(`RiskMonitor`) detection paths — see `AlertNotifier` in `ALGORITHMS.md`. Any combination of zero,
+one, or all three channels below may be configured at once; all are off by default.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ALERT_WEBHOOK_URL` | *(unset)* | A generic HTTP POST target (Slack/PagerDuty/Discord/a custom receiver all consume the same JSON shape) |
+| `ALERT_EMAIL_SMTP_HOST` / `ALERT_EMAIL_TO` | *(unset)* | Setting both enables real SMTP email — comma-separated recipients |
+| `ALERT_EMAIL_SMTP_PORT` | `587` | SMTP port |
+| `ALERT_EMAIL_USERNAME` / `ALERT_EMAIL_PASSWORD` | *(unset)* | SMTP auth — omit both for an unauthenticated relay |
+| `ALERT_EMAIL_USE_TLS` | `true` | STARTTLS |
+| `ALERT_EMAIL_FROM` | `nextgen-control-plane@localhost` | `From:` address |
+| `ALERT_DESKTOP_NOTIFICATIONS_ENABLED` | `false` | A native OS notification balloon/toast via `java.awt.SystemTray` — only meaningful when the control plane process itself runs on a machine with a display someone is looking at (a real, common deployment for this project); an honest no-op on a headless host |
+
 ### Node agent (`ROLE=agent`)
 
 | Variable | Default | Purpose |

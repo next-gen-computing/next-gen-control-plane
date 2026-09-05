@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Two more real alert channels: email and desktop notifications
+
+Closes the last item on the alerting backlog named when `AlertNotifier`/`WebhookAlertNotifier` first
+shipped (Stage GG) — the notification channel was explicitly left open with email and desktop
+notification named as options, neither built at the time.
+
+- **`EmailAlertNotifier`** — real SMTP via Angus Mail (the Jakarta Mail reference implementation; no
+  email-sending capability existed anywhere in this project before this, which is exactly why the
+  account system's password reset uses an offline recovery code instead). Sends on a dedicated
+  single-thread executor so a slow/unreachable SMTP host can never block the calling monitor's sweep
+  thread, matching `WebhookAlertNotifier`'s identical fire-and-forget discipline. Configured via
+  `ALERT_EMAIL_SMTP_HOST`/`ALERT_EMAIL_TO` (both required to enable it) plus
+  `ALERT_EMAIL_SMTP_PORT`/`ALERT_EMAIL_USERNAME`/`ALERT_EMAIL_PASSWORD`/`ALERT_EMAIL_USE_TLS`/
+  `ALERT_EMAIL_FROM`.
+- **`DesktopNotificationAlertNotifier`** — a real native OS notification balloon/toast via
+  `java.awt.SystemTray`/`TrayIcon`, part of the JDK itself so this needed zero new dependency. Only
+  meaningful when the control-plane process is running on a machine with a display someone is looking
+  at (a real, common deployment for this project, which targets operator-owned physical machines
+  including the operator's own desktop) — checks `SystemTray.isSupported()` once at construction and
+  becomes an honest, logged no-op rather than crashing when unsupported (any headless server/container).
+  Opt-in via `ALERT_DESKTOP_NOTIFICATIONS_ENABLED=true` rather than auto-enabling whenever a display
+  happens to be present, since silently popping up a tray icon nobody asked for would be surprising.
+- **`CompositeAlertNotifier`** — fans a single event out to every configured channel, so any
+  combination of webhook/email/desktop-notification can run at once; `HeartbeatMonitor`/`RiskMonitor`
+  themselves still take exactly one `AlertNotifier` and stay unaware more than one channel exists.
+  Isolates each channel in its own try/catch so a defect in one can never block a different, working
+  channel or throw back into a monitor's sweep thread.
+
+Tested against real infrastructure, not mocks: `EmailAlertNotifierTest` runs a hand-rolled real SMTP
+server (`ServerSocket`, no mocked mail client — the same discipline `WebhookAlertNotifierTest` already
+established for the webhook channel); `DesktopNotificationAlertNotifierTest` exercises the real
+`SystemTray` registration-and-display path on a host that has one and self-skips (via `Assumptions`,
+not silently reporting false coverage) on a headless one.
+
 ### Fixed / Added - Bug fixes, hardening, and feature-completeness pass found via live end-to-end testing and three parallel deep-audit agents
 
 Everything below was found empirically (a real live multi-node run plus three read-only audits of the
@@ -639,7 +673,6 @@ the shipped code, and each now has a named regression test.
 - WebSocket support for dashboard
 - Multi-region deployment support — needs its own architecture/design pass (cross-region Raft latency,
   topology-aware scheduling); intentionally not attempted yet, see the Unreleased entry above
-- Additional alert channels (email, desktop notification) alongside the webhook one shipped above
 - Independent-host PKI for the 3-replica Raft cluster (today's replicas share one PKI filesystem)
 
 ## [3.0.0] - 2026-08-12

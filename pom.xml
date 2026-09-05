@@ -53,6 +53,17 @@
         <!-- OSHI: cross-platform battery/charging/AC-power signals (no such library existed before) -->
         <oshi.version>6.6.5</oshi.version>
 
+        <!-- Angus Mail (the Jakarta Mail reference implementation): real SMTP for EmailAlertNotifier.
+             No email-sending capability existed anywhere in this project before (the account system's
+             password reset uses an offline recovery code specifically because of that). Pinned to
+             2.0.5 — the latest true stable release (confirmed via repo1.maven.org's own
+             maven-metadata.xml; 2.1.0-M1 is a pre-release milestone, skipped deliberately) and
+             confirmed clean of known CVEs via api.osv.dev, matching this project's established
+             dependency-verification discipline. Transitively brings in a compatible jakarta.mail-api
+             and jakarta.activation-api — not pinned separately, so Maven always resolves whichever
+             API version this exact angus-mail release was actually built and tested against. -->
+        <angus.mail.version>2.0.5</angus.mail.version>
+
         <!-- Logging -->
         <slf4j.version>2.0.16</slf4j.version>
 
@@ -174,6 +185,14 @@
                 <groupId>com.github.oshi</groupId>
                 <artifactId>oshi-core</artifactId>
                 <version>${oshi.version}</version>
+            </dependency>
+
+            <!-- Angus Mail (Jakarta Mail reference impl) — see the angus.mail.version property comment
+                 above for why this version was chosen. -->
+            <dependency>
+                <groupId>org.eclipse.angus</groupId>
+                <artifactId>angus-mail</artifactId>
+                <version>${angus.mail.version}</version>
             </dependency>
 
             <!-- Testing -->

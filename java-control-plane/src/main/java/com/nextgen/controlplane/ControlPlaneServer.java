@@ -220,17 +220,45 @@ public class ControlPlaneServer {
 
         RiskOutcomeLogger riskOutcomeLogger = new RiskOutcomeLogger(dataDir.resolve("risk_outcomes.jsonl"));
 
-        // Stage GG: opt-in real external alerting on node-down/at-risk events — disabled (null) unless
-        // an operator configures a real webhook target, matching every other opt-in feature's default-
-        // off precedent (ML_RISK_SCORER_ENABLED, RISK_SNAPSHOT_LOGGING_ENABLED, ...). See AlertNotifier's
-        // Javadoc for why webhook is the concrete channel implemented (the notification channel itself
-        // was an open question in the project plan).
+        // Stage GG (+ follow-on): opt-in real external alerting on node-down/at-risk events. Each
+        // channel is independently opt-in, matching every other opt-in feature's default-off precedent
+        // (ML_RISK_SCORER_ENABLED, RISK_SNAPSHOT_LOGGING_ENABLED, ...) — any combination of zero, one, or
+        // all three may be configured at once; CompositeAlertNotifier fans out to whichever are real.
+        java.util.List<com.nextgen.controlplane.alert.AlertNotifier> configuredAlertChannels =
+                new java.util.ArrayList<>();
+
         String alertWebhookUrl = EnvConfig.stringValue("ALERT_WEBHOOK_URL", "");
-        com.nextgen.controlplane.alert.AlertNotifier alertNotifier = alertWebhookUrl.isBlank()
-                ? null : new com.nextgen.controlplane.alert.WebhookAlertNotifier(alertWebhookUrl);
-        if (alertNotifier != null) {
+        if (!alertWebhookUrl.isBlank()) {
+            configuredAlertChannels.add(new com.nextgen.controlplane.alert.WebhookAlertNotifier(alertWebhookUrl));
             LOG.info("🔔 Alert webhook configured: node-down/at-risk events will POST to {}", alertWebhookUrl);
         }
+
+        String alertSmtpHost = EnvConfig.stringValue("ALERT_EMAIL_SMTP_HOST", "");
+        String alertEmailTo = EnvConfig.stringValue("ALERT_EMAIL_TO", "");
+        if (!alertSmtpHost.isBlank() && !alertEmailTo.isBlank()) {
+            configuredAlertChannels.add(new com.nextgen.controlplane.alert.EmailAlertNotifier(
+                    alertSmtpHost,
+                    EnvConfig.intValue("ALERT_EMAIL_SMTP_PORT", 587),
+                    EnvConfig.stringValue("ALERT_EMAIL_USERNAME", ""),
+                    EnvConfig.stringValue("ALERT_EMAIL_PASSWORD", ""),
+                    EnvConfig.booleanValue("ALERT_EMAIL_USE_TLS", true),
+                    EnvConfig.stringValue("ALERT_EMAIL_FROM", "nextgen-control-plane@localhost"),
+                    java.util.Arrays.stream(alertEmailTo.split(","))
+                            .map(String::trim).filter(s -> !s.isBlank()).toList()));
+            LOG.info("🔔 Alert email configured: node-down/at-risk events will be sent via {} to {}",
+                    alertSmtpHost, alertEmailTo);
+        }
+
+        if (EnvConfig.booleanValue("ALERT_DESKTOP_NOTIFICATIONS_ENABLED", false)) {
+            configuredAlertChannels.add(new com.nextgen.controlplane.alert.DesktopNotificationAlertNotifier());
+            LOG.info("🔔 Alert desktop notifications enabled");
+        }
+
+        com.nextgen.controlplane.alert.AlertNotifier alertNotifier = switch (configuredAlertChannels.size()) {
+            case 0 -> null;
+            case 1 -> configuredAlertChannels.get(0);
+            default -> new com.nextgen.controlplane.alert.CompositeAlertNotifier(configuredAlertChannels);
+        };
 
         // Start build-context TTL sweep daemon (Stage N) — evicts uploaded tarballs older than
         // BUILD_CONTEXT_TTL_MINUTES so they don't accumulate forever on disk.
