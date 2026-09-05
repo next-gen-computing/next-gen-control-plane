@@ -174,6 +174,21 @@ public class NodeMonitoringService {
             node.setMemoryStale(info.getMemoryStale());
             node.setLastHeartbeat(formatHeartbeat(info.getLastHeartbeatEpochMillis()));
 
+            // Stage RR: richer per-node data GetNodes already returns (battery/AC power via
+            // ControlPlaneServiceImpl#withLatestPowerReading, predictive risk, RTT trend, declared
+            // hardware) but this service didn't previously map onto NodeModel.
+            node.setBatteryPercent(info.getBatteryPercent());
+            node.setBatteryAvailable(info.getBatteryAvailable());
+            node.setOnAcPower(info.getOnAcPower());
+            node.setOnAcPowerKnown(info.getOnAcPowerKnown());
+            node.setRiskScore(info.getRiskScore());
+            node.setAtRisk(info.getAtRisk());
+            node.setRiskReasons(info.getRiskReasonsList());
+            node.setPreviousRttSeconds(info.getPreviousRttSeconds());
+            node.setPreviousRttAvailable(info.getPreviousRttAvailable());
+            node.setCpuCores(info.getCapabilities().getCpuCores());
+            node.setTotalMemoryBytes(info.getCapabilities().getTotalMemoryBytes());
+
             // Feed the charts. A node the control plane reports as dead, or whose reading is stale,
             // records a GAP rather than a value — so the chart breaks the line instead of drawing
             // straight through the outage.

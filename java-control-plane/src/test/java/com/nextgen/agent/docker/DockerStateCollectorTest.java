@@ -231,6 +231,49 @@ class DockerStateCollectorTest {
         assertTrue(result.ok(), result.message());
     }
 
+    // ── Stage RR: live per-container CPU/memory/network stats ─────────
+
+    /** A real running container must report real, non-fabricated live stats — the direct proof this
+     * isn't just wired but actually reads {@code docker stats}, not zeros dressed up as "collected". */
+    @Test
+    void aRealRunningContainerReportsRealLiveCpuAndMemoryStats() {
+        String name = runDetached();
+        awaitContainer(name); // ensure it's actually up before asking docker stats about it
+
+        long deadline = System.currentTimeMillis() + 15_000;
+        ControlPlaneProto.DockerContainerInfo info = null;
+        while (System.currentTimeMillis() < deadline) {
+            Optional<ControlPlaneProto.DockerContainerInfo> found = collector.listContainers().stream()
+                    .filter(c -> c.getName().contains(name)).findFirst();
+            if (found.isPresent() && found.get().getMemoryLimitBytes() > 0) {
+                info = found.get();
+                break;
+            }
+            sleep(300);
+        }
+
+        assertTrue(info != null, "docker stats must eventually report real memory usage for a running container");
+        assertTrue(info.getMemoryUsageBytes() > 0, "a running container always uses some real memory");
+        assertTrue(info.getMemoryLimitBytes() > 0, "a real memory limit/total must be reported, never 0");
+        assertTrue(info.getCpuPercent() >= 0f, "CPU percent must be a real non-negative reading");
+    }
+
+    /** {@code docker stats} only reports running containers — an exited one must show the honest
+     * proto-default 0 for every live-stats field, never a stale number retained from before it stopped. */
+    @Test
+    void anExitedContainerReportsZeroLiveStatsNotAStaleReading() {
+        String name = runDetached();
+        String containerId = awaitContainer(name).orElseThrow().getContainerId();
+        collector.stop(containerId);
+        Optional<ControlPlaneProto.DockerContainerInfo> afterStop = awaitContainerWithStatus(name, "exited");
+        assertTrue(afterStop.isPresent());
+
+        ControlPlaneProto.DockerContainerInfo info = afterStop.get();
+        assertEquals(0f, info.getCpuPercent(), 0.001f);
+        assertEquals(0L, info.getMemoryUsageBytes());
+        assertEquals(0L, info.getMemoryLimitBytes());
+    }
+
     // ── helpers ──────────────────────────────────────────────────────
 
     private String runDetached() {

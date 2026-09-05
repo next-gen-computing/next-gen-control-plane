@@ -241,6 +241,14 @@ public class ControlPlaneClient {
         return call("getClusterStatus", s -> s.getClusterStatus(ControlPlaneProto.Empty.getDefaultInstance()));
     }
 
+    /** Stage RR: every task/sub-task on the whole cluster, from {@code TaskRegistry} directly —
+     * cluster-wide, unlike {@code TaskExecutionService}'s own list, which only ever tracks tasks this
+     * desktop-ui instance personally submitted. Deliberately never empty-on-failure, same reasoning as
+     * {@link #getNodes()}. */
+    public List<ControlPlaneProto.TaskStatusResponse> listAllTasks() {
+        return call("listAllTasks", s -> s.listTasks(ControlPlaneProto.Empty.getDefaultInstance()).getTasksList());
+    }
+
     /** Stage T: every currently-connected Docker-capable node's latest reported real container/image/
      * volume/network inventory. A node absent from the result has either never reported or isn't
      * Docker-capable — never presented as an empty-but-present entry. */

@@ -244,6 +244,7 @@ public final class NodeRecord {
                 .setRiskScore((float) riskScore)
                 .setAtRisk(atRisk)
                 .setRiskAssessedAtEpochMillis(riskAssessedAtMillis)
+                .addAllRiskReasons(riskReasons)
                 .build();
     }
 

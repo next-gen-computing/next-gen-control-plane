@@ -228,6 +228,68 @@ class NodeMonitoringServiceTest {
         assertEquals(80.0, service.getClusterSummary().getAvgCpuUsage(), 0.01);
     }
 
+    // ── Stage RR: richer per-node data (battery, risk, RTT, declared hardware) ─
+
+    @Test
+    void richerNodeFieldsAreMappedOntoTheModel() {
+        ControlPlaneProto.NodeInfo info = ControlPlaneProto.NodeInfo.newBuilder()
+                .setNodeId("node1")
+                .setHostname("node1-host")
+                .setIp("10.0.0.1")
+                .setPort(50051)
+                .setCpu(40f)
+                .setMemory(50f)
+                .setStatus(ControlPlaneProto.NodeStatus.NODE_STATUS_ALIVE)
+                .setBatteryPercent(72f)
+                .setBatteryAvailable(true)
+                .setOnAcPower(false)
+                .setOnAcPowerKnown(true)
+                .setRiskScore(0.75f)
+                .setAtRisk(true)
+                .addRiskReasons("memory non-decreasing and above 90% ceiling")
+                .setPreviousRttSeconds(0.042)
+                .setPreviousRttAvailable(true)
+                .setCapabilities(ControlPlaneProto.NodeCapabilities.newBuilder()
+                        .setCpuCores(8)
+                        .setTotalMemoryBytes(16_000_000_000L)
+                        .build())
+                .build();
+        when(client.getNodes()).thenReturn(List.of(info));
+
+        service.refresh();
+
+        NodeModel model = service.getNodes().get(0);
+        assertEquals(72f, model.getBatteryPercent(), 0.01);
+        assertTrue(model.isBatteryAvailable());
+        assertFalse(model.isOnAcPower());
+        assertEquals(0.75, model.getRiskScore(), 0.001);
+        assertTrue(model.isAtRisk());
+        assertEquals(List.of("memory non-decreasing and above 90% ceiling"), model.getRiskReasons());
+        assertEquals(0.042, model.getPreviousRttSeconds(), 0.0001);
+        assertTrue(model.isPreviousRttAvailable());
+        assertEquals(8, model.getCpuCores());
+        assertEquals(16_000_000_000L, model.getTotalMemoryBytes());
+    }
+
+    @Test
+    void unavailableBatteryAndRttReportAsUnavailableNotZero() {
+        // A desktop with no battery, or a node on its very first heartbeat before any RTT trend
+        // exists, must be distinguishable from "0% battery"/"0ms RTT" — both real, alarming values.
+        ControlPlaneProto.NodeInfo info = ControlPlaneProto.NodeInfo.newBuilder()
+                .setNodeId("node1")
+                .setStatus(ControlPlaneProto.NodeStatus.NODE_STATUS_ALIVE)
+                .setBatteryAvailable(false)
+                .setPreviousRttAvailable(false)
+                .build();
+        when(client.getNodes()).thenReturn(List.of(info));
+
+        service.refresh();
+
+        NodeModel model = service.getNodes().get(0);
+        assertFalse(model.isBatteryAvailable());
+        assertFalse(model.isPreviousRttAvailable());
+    }
+
     @Test
     void healthPercentReflectsTheRealHealthyRatio() {
         when(client.getNodes()).thenReturn(List.of(

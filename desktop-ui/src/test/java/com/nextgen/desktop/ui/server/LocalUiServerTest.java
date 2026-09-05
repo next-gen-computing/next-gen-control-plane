@@ -5,6 +5,7 @@ import com.nextgen.desktop.ui.account.AccountStore;
 import com.nextgen.desktop.ui.client.GrpcConnectionManager;
 import com.nextgen.desktop.ui.profile.DesktopHistoryStore;
 import com.nextgen.desktop.ui.profile.DesktopProfileStore;
+import com.nextgen.desktop.ui.service.ClusterTasksMonitoringService;
 import com.nextgen.desktop.ui.service.DockerResourcesMonitoringService;
 import com.nextgen.desktop.ui.service.JobExecutionService;
 import com.nextgen.desktop.ui.service.NodeMonitoringService;
@@ -77,6 +78,7 @@ class LocalUiServerTest {
                 new TaskExecutionService(connectionManager, historyStore),
                 new JobExecutionService(connectionManager, historyStore),
                 new DockerResourcesMonitoringService(connectionManager),
+                new ClusterTasksMonitoringService(connectionManager),
                 connectionManager,
                 new DesktopProfileStore(),
                 historyStore,
@@ -167,6 +169,7 @@ class LocalUiServerTest {
                 new TaskExecutionService(connectionManager, historyStore),
                 new JobExecutionService(connectionManager, historyStore),
                 new DockerResourcesMonitoringService(connectionManager),
+                new ClusterTasksMonitoringService(connectionManager),
                 connectionManager,
                 new DesktopProfileStore(),
                 historyStore,

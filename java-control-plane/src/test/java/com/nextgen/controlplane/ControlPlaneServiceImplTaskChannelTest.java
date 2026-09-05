@@ -180,7 +180,15 @@ class ControlPlaneServiceImplTaskChannelTest {
         assertEquals("", status.getError());
 
         ControlPlaneProto.TaskList list = blockingStub.listTasks(ControlPlaneProto.Empty.newBuilder().build());
-        assertTrue(list.getTasksList().stream().anyMatch(t -> t.getTaskId().equals("t1")));
+        ControlPlaneProto.TaskStatusResponse listed = list.getTasksList().stream()
+                .filter(t -> t.getTaskId().equals("t1")).findFirst().orElseThrow();
+        // Stage RR: ListTasks now carries the same real kind/jobId/attempt/timestamps TaskRecord has —
+        // a bare (non-job) task has an empty jobId and attempt 1, never a fabricated value.
+        assertEquals(ControlPlaneProto.TaskKind.TASK_KIND_PRIME_COUNT_RANGE, listed.getKind());
+        assertEquals("", listed.getJobId());
+        assertEquals(1, listed.getAttempt());
+        assertTrue(listed.getCreatedAtEpochMillis() > 0);
+        assertTrue(listed.getDispatchedAtEpochMillis() > 0);
     }
 
     @Test

@@ -6,6 +6,7 @@ import com.nextgen.desktop.ui.client.GrpcConnectionManager;
 import com.nextgen.desktop.ui.profile.DesktopHistoryStore;
 import com.nextgen.desktop.ui.profile.DesktopProfileStore;
 import com.nextgen.desktop.ui.server.LocalUiServer;
+import com.nextgen.desktop.ui.service.ClusterTasksMonitoringService;
 import com.nextgen.desktop.ui.service.DockerResourcesMonitoringService;
 import com.nextgen.desktop.ui.service.JobExecutionService;
 import com.nextgen.desktop.ui.service.NodeMonitoringService;
@@ -45,6 +46,7 @@ public class DesktopApp extends Application {
     private TaskExecutionService taskExecutionService;
     private JobExecutionService jobExecutionService;
     private DockerResourcesMonitoringService dockerResourcesMonitoringService;
+    private ClusterTasksMonitoringService clusterTasksMonitoringService;
     private LocalUiServer localUiServer;
 
     @Override
@@ -67,10 +69,11 @@ public class DesktopApp extends Application {
         taskExecutionService = new TaskExecutionService(connectionManager, historyStore);
         jobExecutionService = new JobExecutionService(connectionManager, historyStore);
         dockerResourcesMonitoringService = new DockerResourcesMonitoringService(connectionManager);
+        clusterTasksMonitoringService = new ClusterTasksMonitoringService(connectionManager);
 
         localUiServer = new LocalUiServer(themeService, monitoringService, taskExecutionService,
-                jobExecutionService, dockerResourcesMonitoringService, connectionManager, profileStore,
-                historyStore, accountService, this::onOnboardingComplete);
+                jobExecutionService, dockerResourcesMonitoringService, clusterTasksMonitoringService,
+                connectionManager, profileStore, historyStore, accountService, this::onOnboardingComplete);
         localUiServer.start();
 
         LOG.info("Desktop UI initialized");
@@ -111,6 +114,9 @@ public class DesktopApp extends Application {
                 }
                 if (dockerResourcesMonitoringService != null) {
                     dockerResourcesMonitoringService.shutdown();
+                }
+                if (clusterTasksMonitoringService != null) {
+                    clusterTasksMonitoringService.shutdown();
                 }
                 if (localUiServer != null) {
                     localUiServer.stop();
@@ -250,6 +256,7 @@ public class DesktopApp extends Application {
             LOG.info("Onboarding complete (role={}, serverId={})", role, connectedServerId);
             monitoringService.startMonitoring();
             dockerResourcesMonitoringService.startMonitoring();
+            clusterTasksMonitoringService.startMonitoring();
         });
     }
 
@@ -267,6 +274,9 @@ public class DesktopApp extends Application {
         }
         if (dockerResourcesMonitoringService != null) {
             dockerResourcesMonitoringService.shutdown();
+        }
+        if (clusterTasksMonitoringService != null) {
+            clusterTasksMonitoringService.shutdown();
         }
         if (localUiServer != null) {
             localUiServer.stop();

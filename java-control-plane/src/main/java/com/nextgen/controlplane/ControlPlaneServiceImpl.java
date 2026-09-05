@@ -984,6 +984,13 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
                 .setResultJson(record.getResultJson())
                 .setError(record.getError())
                 .setUpdatedAtEpochMillis(updatedAt)
+                // Stage RR: real fields TaskRecord already carries — exposed so a cluster-wide task
+                // view (desktop-ui) can show work type, job grouping, and retry/migration count.
+                .setKind(record.getKind().toProto())
+                .setJobId(record.getJobId())
+                .setAttempt(record.getAttempt())
+                .setCreatedAtEpochMillis(record.getCreatedAtMillis())
+                .setDispatchedAtEpochMillis(record.getDispatchedAtMillis())
                 .build();
     }
 
@@ -1231,6 +1238,8 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
                         .setChargingKnown(sample.chargingKnown())
                         .setOnAcPower(sample.onAcPower())
                         .setOnAcPowerKnown(sample.onAcPowerKnown())
+                        .setPreviousRttSeconds(sample.previousRttSeconds())
+                        .setPreviousRttAvailable(sample.previousRttAvailable())
                         .build())
                 .orElse(base);
     }

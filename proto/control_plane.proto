@@ -277,6 +277,16 @@ message DockerContainerInfo {
   // Stage MM: "healthy"/"unhealthy"/"starting", regex-extracted from docker's own Status string (see
   // DockerStateCollector) — empty when the container declares no HEALTHCHECK at all, never fabricated.
   string health_status            = 9;
+  // Stage RR: live per-container resource usage from `docker stats --no-stream`, collected as a
+  // separate call alongside `docker ps -a` (see DockerStateCollector). All default to 0 (proto3's own
+  // unset-numeric default) whenever that specific stats collection failed/timed out for this report —
+  // never fabricated, and never blocks the static fields above from still being reported honestly.
+  float  cpu_percent              = 10;
+  int64  memory_usage_bytes       = 11;
+  int64  memory_limit_bytes       = 12;
+  float  memory_percent           = 13;
+  int64  net_rx_bytes             = 14;
+  int64  net_tx_bytes             = 15;
 }
 
 message DockerImageInfo {
@@ -448,6 +458,16 @@ message NodeInfo {
   float            risk_score                  = 21;
   bool             at_risk                     = 22;
   int64            risk_assessed_at_epoch_millis = 23;
+  // Stage RR, additive: the reasons behind the risk score above (e.g. "memory non-decreasing and above
+  // 90% ceiling") — real strings from RuleBasedRiskScorer/MLRiskScorer, never fabricated; empty when
+  // risk_assessed_at_epoch_millis == 0 (no assessment has run yet). Mirrors NodeInfo's existing
+  // "advisory alongside status" precedent above, just surfacing the WHY, not only the score.
+  repeated string  risk_reasons                = 24;
+  // Stage RR, additive: the agent's own previously-measured heartbeat RTT, relayed one tick late — see
+  // HeartbeatRequest's identical fields below for why this is never a fabricated one-way measurement.
+  // Overlaid from NodeHistory's latest sample exactly like the battery/AC-power fields above.
+  double           previous_rtt_seconds        = 25;
+  bool             previous_rtt_available      = 26;
 }
 
 message RegisterResponse {
@@ -642,6 +662,14 @@ message TaskStatusResponse {
   string    result_json              = 4;
   string    error                    = 5;
   int64     updated_at_epoch_millis  = 6;
+  // Stage RR, additive: real fields TaskRecord already carries server-side, exposed here so a
+  // cluster-wide task view (desktop-ui) can show what kind of work is running and whether it's been
+  // retried/migrated, without adding a second RPC.
+  TaskKind  kind                      = 7;
+  string    job_id                    = 8;
+  int32     attempt                   = 9;
+  int64     created_at_epoch_millis   = 10;
+  int64     dispatched_at_epoch_millis = 11;
 }
 
 message TaskList {

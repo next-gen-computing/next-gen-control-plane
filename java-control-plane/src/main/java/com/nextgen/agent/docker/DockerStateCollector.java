@@ -11,7 +11,9 @@ import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -63,11 +65,13 @@ public final class DockerStateCollector {
     }
 
     public List<ControlPlaneProto.DockerContainerInfo> listContainers() {
+        Map<String, ContainerStats> stats = listContainerStats();
         List<ControlPlaneProto.DockerContainerInfo> result = new ArrayList<>();
         for (JsonNode row : runFormatJson("docker", "ps", "-a", "--format", "{{json .}}")) {
             String statusText = text(row, "Status");
-            result.add(ControlPlaneProto.DockerContainerInfo.newBuilder()
-                    .setContainerId(text(row, "ID"))
+            String containerId = text(row, "ID");
+            ControlPlaneProto.DockerContainerInfo.Builder builder = ControlPlaneProto.DockerContainerInfo.newBuilder()
+                    .setContainerId(containerId)
                     .setName(text(row, "Names"))
                     .setImage(text(row, "Image"))
                     .setStatus(text(row, "State"))
@@ -75,10 +79,75 @@ public final class DockerStateCollector {
                     .addAllPorts(splitPorts(text(row, "Ports")))
                     .setCreatedAtEpochMillis(parseDockerCreatedAt(text(row, "CreatedAt")))
                     .setCommand(text(row, "Command"))
-                    .setHealthStatus(extractHealthStatus(statusText))
-                    .build());
+                    .setHealthStatus(extractHealthStatus(statusText));
+            ContainerStats live = stats.get(containerId);
+            if (live != null) {
+                builder.setCpuPercent(live.cpuPercent())
+                        .setMemoryUsageBytes(live.memoryUsageBytes())
+                        .setMemoryLimitBytes(live.memoryLimitBytes())
+                        .setMemoryPercent(live.memoryPercent())
+                        .setNetRxBytes(live.netRxBytes())
+                        .setNetTxBytes(live.netTxBytes());
+            }
+            // else: stats collection failed/timed out for this report, or the container isn't running
+            // (docker stats only reports running containers) — the five numeric fields stay at their
+            // proto-default 0, an honest "unknown/not applicable," never a fabricated or stale number.
+            result.add(builder.build());
         }
         return result;
+    }
+
+    /** Real per-container CPU/memory/network usage from {@code docker stats --no-stream}, keyed by the
+     * same short container id {@code docker ps} uses. Stopped containers never appear here (Docker's
+     * own behavior — there is nothing to measure) and are simply absent from the returned map, not
+     * present with fabricated zero-usage numbers; {@link #listContainers()} distinguishes "no live
+     * stats available" from "confirmed zero usage" exactly this way. */
+    private Map<String, ContainerStats> listContainerStats() {
+        Map<String, ContainerStats> result = new HashMap<>();
+        for (JsonNode row : runFormatJson("docker", "stats", "--no-stream", "--format", "{{json .}}")) {
+            String id = text(row, "ID");
+            if (id.isBlank()) {
+                continue;
+            }
+            long[] mem = splitUsagePair(text(row, "MemUsage"));
+            long[] net = splitUsagePair(text(row, "NetIO"));
+            result.put(id, new ContainerStats(
+                    parsePercent(text(row, "CPUPerc")),
+                    mem[0], mem[1],
+                    parsePercent(text(row, "MemPerc")),
+                    net[0], net[1]));
+        }
+        return result;
+    }
+
+    private record ContainerStats(float cpuPercent, long memoryUsageBytes, long memoryLimitBytes,
+                                   float memoryPercent, long netRxBytes, long netTxBytes) {
+    }
+
+    /** Docker's {@code MemUsage}/{@code NetIO} columns are one "X / Y" string (e.g. "10MiB / 1.951GiB",
+     * "1.2kB / 656B"). @return {used, limit-or-second-value}, each parsed via {@link #parseDockerSize},
+     * or {0, 0} if the string didn't match the expected shape — an honest unknown, never fabricated. */
+    private static long[] splitUsagePair(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return new long[]{0L, 0L};
+        }
+        String[] parts = raw.split("/");
+        if (parts.length != 2) {
+            return new long[]{0L, 0L};
+        }
+        return new long[]{parseDockerSize(parts[0].trim()), parseDockerSize(parts[1].trim())};
+    }
+
+    /** @return real percent parsed from Docker's "0.00%" style string, or 0 if malformed. */
+    private static float parsePercent(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return 0f;
+        }
+        try {
+            return Float.parseFloat(raw.trim().replace("%", ""));
+        } catch (NumberFormatException e) {
+            return 0f;
+        }
     }
 
     /** @return "healthy"/"unhealthy"/"health: starting" extracted from Docker's own {@code Status}

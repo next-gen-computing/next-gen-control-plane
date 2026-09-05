@@ -4,6 +4,7 @@ import com.nextgen.desktop.ui.account.AccountService;
 import com.nextgen.desktop.ui.client.GrpcConnectionManager;
 import com.nextgen.desktop.ui.profile.DesktopHistoryStore;
 import com.nextgen.desktop.ui.profile.DesktopProfileStore;
+import com.nextgen.desktop.ui.service.ClusterTasksMonitoringService;
 import com.nextgen.desktop.ui.service.DockerResourcesMonitoringService;
 import com.nextgen.desktop.ui.service.JobExecutionService;
 import com.nextgen.desktop.ui.service.NodeMonitoringService;
@@ -52,6 +53,7 @@ public class LocalUiServer {
     private final TaskExecutionService taskExecutionService;
     private final JobExecutionService jobExecutionService;
     private final DockerResourcesMonitoringService dockerResourcesMonitoringService;
+    private final ClusterTasksMonitoringService clusterTasksMonitoringService;
     private final GrpcConnectionManager connectionManager;
     private final DesktopProfileStore profileStore;
     private final DesktopHistoryStore historyStore;
@@ -75,11 +77,13 @@ public class LocalUiServer {
     private ImagesStreamHandler imagesStream;
     private VolumesStreamHandler volumesStream;
     private NetworksStreamHandler networksStream;
+    private ClusterTasksStreamHandler clusterTasksStream;
 
     /** @param onConnected called with (role, serverId) once onboarding succeeds — see {@link RoleRouteHandler}. */
     public LocalUiServer(ThemeService themeService, NodeMonitoringService monitoringService,
                          TaskExecutionService taskExecutionService, JobExecutionService jobExecutionService,
                          DockerResourcesMonitoringService dockerResourcesMonitoringService,
+                         ClusterTasksMonitoringService clusterTasksMonitoringService,
                          GrpcConnectionManager connectionManager, DesktopProfileStore profileStore,
                          DesktopHistoryStore historyStore, AccountService accountService,
                          BiConsumer<String, String> onConnected) {
@@ -88,6 +92,7 @@ public class LocalUiServer {
         this.taskExecutionService = taskExecutionService;
         this.jobExecutionService = jobExecutionService;
         this.dockerResourcesMonitoringService = dockerResourcesMonitoringService;
+        this.clusterTasksMonitoringService = clusterTasksMonitoringService;
         this.connectionManager = connectionManager;
         this.profileStore = profileStore;
         this.historyStore = historyStore;
@@ -174,6 +179,9 @@ public class LocalUiServer {
         networksStream = new NetworksStreamHandler(dockerResourcesMonitoringService, POLL_INTERVAL_MS);
         server.createContext("/api/networks/stream", networksStream);
 
+        clusterTasksStream = new ClusterTasksStreamHandler(clusterTasksMonitoringService, POLL_INTERVAL_MS);
+        server.createContext("/api/cluster-tasks/stream", clusterTasksStream);
+
         server.createContext("/api/certificates", new CertificateRouteHandler());
 
         ConnectionSettingsRouteHandler connectionSettings =
@@ -221,6 +229,9 @@ public class LocalUiServer {
         }
         if (networksStream != null) {
             networksStream.stop();
+        }
+        if (clusterTasksStream != null) {
+            clusterTasksStream.stop();
         }
         if (server != null) {
             server.stop(1);
