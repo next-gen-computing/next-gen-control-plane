@@ -492,7 +492,12 @@ java -jar target/desktop-ui-1.0-SNAPSHOT.jar
   plane could not place is reported as failed.
 - **History** — every task/job this device has ever submitted, which cluster it ran against, and its
   outcome — persisted locally, so it survives closing the app (see "Remembers your setup" above).
-- **Live Monitoring** — rolling CPU/memory chart and application logs.
+- **Live Monitoring, Task-Manager style** — cluster-wide stat tiles, then one expandable card per node
+  showing real live CPU/memory/battery/predictive-risk/heartbeat-RTT, and — expanded — that node's real
+  running tasks (cluster-wide, not just what this device personally submitted: `ListTasks` reads
+  `TaskRegistry` directly) and real per-container CPU/memory (`docker stats`, merged into the existing
+  container inventory). An unavailable reading renders `n/a`, never a substituted number. Cluster-wide
+  CPU/memory history charts remain below, as their own "Performance" section.
 - **Settings** — grouped into Connection, Monitoring, Appearance, Saved setup and Certificates.
 - **Dark/Light Themes** — structure lives in a colour-free `base.css` written against design tokens;
   `dark.css` and `light.css` each supply the token values, and a test fails the build if the two
@@ -623,14 +628,23 @@ next-gen-control-plane/
 
 | Component | Technology |
 |-----------|-----------|
-| Control Plane & Agents | Java 21, gRPC 1.68, Protobuf 3.25.5, Prometheus 0.16.0 |
-| Phase-2 Desktop UI | JavaFX 21.0.2, gRPC client, Jackson 2.17.0 |
-| Predictor | Python 3.11, grpcio, prometheus-client |
+| Control Plane & Agents | Java 21, gRPC 1.83.1, Protobuf 3.25.8, Prometheus simpleclient 0.16.0 |
+| Consensus | Hand-rolled Raft (`com.nextgen.controlplane.raft`), durable WAL, no external library |
+| Security | BouncyCastle 1.85 (EC P-256 CA, CSR/X.509), mutual TLS |
+| Desktop UI | JavaFX 21.0.2 WebView hosting a real HTML/CSS/JS frontend, Jackson 2.22.1 |
+| CLI | `nx` (`cli/` module, `nextgen-cli`) — a fat jar needing only a JRE |
+| Predictor | Python 3.11, grpcio 1.68.0, XGBoost 3.2.0 (`xgboost.Booster`), PyTorch 2.13.0 (`torch.nn.LSTM`, CPU wheel), NumPy 2.1.3 |
+| Alerting | Angus Mail 2.0.5 (Jakarta Mail SMTP), `java.awt.SystemTray` (desktop notifications), plain HTTP (webhook) |
 | Communication | Protocol Buffers 3 (proto3) |
-| OS Metrics | `com.sun.management.OperatingSystemMXBean` (real readings) |
-| Deployment | Docker Compose |
-| Logging | SLF4J Simple (Java), `logging` module (Python) |
-| Testing | JUnit 5.10.2, Mockito 5.11.0, JaCoCo 0.8.12 |
+| OS Metrics | `com.sun.management.OperatingSystemMXBean` + OSHI 6.6.5 (battery/AC power) |
+| Deployment | Docker Compose (server side only; `docker-compose.raft.yml` for the opt-in 3-replica topology) |
+| Logging | SLF4J Simple 2.0.16 (Java), `logging` module (Python) |
+| Testing | JUnit 5.10.2, Mockito 5.11.0, Awaitility 4.2.2, JaCoCo 0.8.15 (Java); pytest (Python) |
+| CI | GitHub Actions — `build-java`, `build-desktop-and-cli`, `build-python`, `integration-test`, `code-quality` (`.github/workflows/ci.yml`) |
+
+Every version above is pinned in `pom.xml`/`requirements.txt` with a comment explaining why that
+specific version, not just the latest — see those files' own comments for the CVE fixes and
+compatibility checks behind each pin.
 
 ## Phase Roadmap
 
@@ -691,15 +705,20 @@ Measured on hand-written code, excluding the generated `com.nextgen.proto.*` cla
 otherwise inflate the denominator) and the JavaFX view classes (which need a running toolkit and a
 display):
 
-| Module | Instruction | Branch | Tests |
-|---|---|---|---|
-| `java-control-plane` | 63.9% | 52.5% | 293 |
-| `desktop-ui` | 61.0% | 45.3% | 86 |
-| **Total** | | | **379** |
+| Module | Tests | What it covers |
+|---|---|---|
+| `java-control-plane` | 555 | Control plane, node agent, Raft, security/mTLS, task/job dispatch, Docker orchestration, alerting |
+| `desktop-ui` | 207 | Local HTTP server, gRPC clients, monitoring services, account system |
+| `cli` | 34 | Compose-file parsing, argument handling |
+| `python-predictor` | 78 | Feature engineering, XGBoost/LSTM training and serving, import scripts |
+| **Total** | **874** | 0 mocked assertions on any mechanism under test |
 
-Both modules **enforce** a 60% instruction minimum via the JaCoCo `check` goal; the build fails below
-it. The previous gate was a bundle-wide 10% that *included* the generated protobuf classes — with
-machine-written code dominating the denominator, that number measured nothing.
+`java-control-plane` and `desktop-ui` both **enforce** a 60% instruction minimum via the JaCoCo `check`
+goal; the build fails below it. The previous gate was a bundle-wide 10% that *included* the generated
+protobuf classes — with machine-written code dominating the denominator, that number measured nothing.
+Exact current counts are always reproducible by running the suites directly (`mvn test` per module,
+`pytest tests/` in `python-predictor`) rather than trusted as a number that drifts the moment a test is
+added — CI (see `.github/workflows/ci.yml`) runs all four on every push and pull request.
 
 ---
 
@@ -939,11 +958,13 @@ views of the same real, per-node Docker state.
 
 > **What's built vs. still not, stated plainly**: `nx logs <job-id>` (without `--follow`) now replays
 > real recent history from a bounded per-job ring buffer instead of returning nothing; `--follow` keeps
-> the live-tail behavior. `nx images pull/rm/tag`, `nx volumes create/rm`, and `nx networks create/rm`
-> are real, working write actions, not list-only anymore. Interactive `exec` into a running container is
-> still not implemented — it needs a new bidirectional real-time relay primitive, named explicitly as
-> future work in [ALGORITHMS.md](ALGORITHMS.md). None of the above is silently half-working: each either
-> works for real or fails/is absent cleanly, never faked.
+> the live-tail behavior. `nx container ls`/`start`/`stop`/`restart`/`rm <id>` control a real container
+> on whichever node it's running on directly from the terminal — the same control the desktop app's
+> Containers page offers, without opening the app. `nx images pull/rm/tag`, `nx volumes create/rm`, and
+> `nx networks create/rm` are real, working write actions, not list-only anymore. Interactive `exec` into
+> a running container is still not implemented — it needs a new bidirectional real-time relay primitive,
+> named explicitly as future work in [ALGORITHMS.md](ALGORITHMS.md). None of the above is silently
+> half-working: each either works for real or fails/is absent cleanly, never faked.
 
 ---
 
@@ -1009,7 +1030,7 @@ MIT License — see [LICENSE](LICENSE) file for details.
 
 <div align="center">
 
-**[⬆ Back to Top](#-next-gen-control-plane-v020)**
+**[⬆ Back to Top](#-next-gen-control-plane)**
 
 Made with ❤️ by Team Next-Gen | 2026
 

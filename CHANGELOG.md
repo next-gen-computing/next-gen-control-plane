@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed - Documentation pass: stale numbers, a broken anchor, and gaps against recent work
+
+Every core doc (`README.md`, `ARCHITECTURE.md`, `ALGORITHMS.md`, `DEVELOPMENT.md`, `CONTRIBUTING.md`)
+checked against the actual current repository state, not assumed current.
+
+- **Stale test counts fixed.** README's Coverage table and `ALGORITHMS.md`'s "Full test evidence"
+  section both still quoted numbers from well before Raft/XGBoost/LSTM/the alert channels (293/86/379,
+  and a stale "877+") and never listed `cli`/`python-predictor` at all. Now: 555 + 207 + 34 + 78 = 874,
+  broken out by module.
+- **Stale Technology Stack table fixed** — was still listing pre-CVE-fix versions (`gRPC 1.68`,
+  `Jackson 2.17.0`, `JaCoCo 0.8.12`) that this repo's own `pom.xml` moved past months ago, and named
+  nothing about Raft, BouncyCastle, XGBoost/PyTorch, Angus Mail, or CI at all.
+- **A broken "Back to Top" anchor fixed** — pointed at `#-next-gen-control-plane-v020`, which doesn't
+  match this README's actual `<h1>` and never worked.
+- **Two real documentation-vs-practice gaps closed in `CONTRIBUTING.md`**: it documented Conventional
+  Commits (`feat:`/`fix:` prefixes) as this project's convention, which `git log` has never actually
+  followed — replaced with the real, established plain-descriptive-subject-plus-reasoning style, shown
+  with real commit messages from this repo's own history. It also promised contributors a listing in a
+  `CONTRIBUTORS.md` file that doesn't exist in this repository — fixed to state that plainly instead.
+- **CI documented for the first time** — `DEVELOPMENT.md` had no section describing what
+  `.github/workflows/ci.yml` actually checks; added, including how to reproduce each job locally before
+  assuming a CI failure is a real bug.
+- **The Task-Manager-style cluster monitor and the alert-channels subsystem** — both real, both
+  already shipped, neither previously described anywhere in `ARCHITECTURE.md` or fully in README's
+  feature list — now covered: a new "Alerting" architecture section, a `Data integrity` bullet on why
+  the cluster-wide task view is a deliberately separate code path from a device's own submission
+  history, and an expanded README description of the per-node expandable monitoring cards.
+- **`DEVELOPMENT.md`'s Testing section rewritten** to cover all four modules (previously only
+  `java-control-plane`) and the real, current `integration-test.py` behavior (a server-side smoke test
+  against zero auto-started nodes, not the Phase-1 three-fake-node script it used to be).
+
 ### Added - Two more real alert channels: email and desktop notifications
 
 Closes the last item on the alerting backlog named when `AlertNotifier`/`WebhookAlertNotifier` first

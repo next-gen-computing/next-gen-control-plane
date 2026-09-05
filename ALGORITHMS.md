@@ -554,8 +554,8 @@ rollback test re-applying the stored previous spec and confirming it matches the
 
 ## Full test evidence, as of this document
 
-877+ automated tests across four modules (`java-control-plane`, `desktop-ui`, `cli`, `python-predictor`),
-real Docker containers, real gRPC channels, real Raft fault-injection loops, zero mocked assertions on
-any mechanism under test. Exact current counts are always available by running the suites directly —
-see [DEVELOPMENT.md](DEVELOPMENT.md) — rather than restated here as a number that can silently drift out
-of date.
+874 automated tests across four modules (`java-control-plane` 555, `desktop-ui` 207, `cli` 34,
+`python-predictor` 78), real Docker containers, real gRPC channels, real Raft fault-injection loops,
+real SMTP/system-tray for the alert channels, zero mocked assertions on any mechanism under test. Exact
+current counts are always available by running the suites directly — see [DEVELOPMENT.md](DEVELOPMENT.md)
+— rather than trusted here as a number that can silently drift out of date the moment a test is added.

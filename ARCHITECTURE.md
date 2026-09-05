@@ -528,6 +528,33 @@ attached process rather than one container at a time).
 
 ---
 
+## Alerting
+
+`AlertNotifier` (`com.nextgen.controlplane.alert`) is the seam both `HeartbeatMonitor` (reactive:
+`ALIVE → SUSPECTED_DEAD`) and `RiskMonitor` (predictive: the rising edge of `atRisk`) call into — the
+same two detection paths described above, now with a real, external notification instead of only a
+dashboard update nobody may be looking at.
+
+Three concrete channels implement it, any combination of which may be configured at once:
+`WebhookAlertNotifier` (a generic HTTP POST — Slack/PagerDuty/Discord/a custom receiver all consume the
+same JSON), `EmailAlertNotifier` (real SMTP via Angus Mail, the Jakarta Mail reference implementation —
+the first email-sending capability anywhere in this project), and `DesktopNotificationAlertNotifier` (a
+native OS balloon/toast via `java.awt.SystemTray`, part of the JDK itself — zero new dependency, and
+only meaningful when the control-plane process runs on a machine with a display someone is watching,
+which is a real, common deployment for this project specifically). `CompositeAlertNotifier` fans a
+single event out to whichever channels are configured, isolating each in its own try/catch so a defect
+in one can never block a different, working channel — `HeartbeatMonitor`/`RiskMonitor` themselves still
+take exactly one `AlertNotifier` and stay unaware more than one channel might be behind it.
+
+Every channel is independently opt-in and best-effort: a slow or unreachable channel (an unreachable
+webhook, an unreachable SMTP host, a headless machine with no system tray) is logged and never allowed
+to block or fail the detection sweep that triggered it — the same discipline this document applies to
+every other cross-cutting concern (a logging failure must not take down detection, a metrics failure
+must not take down a request). See README's Configuration reference for the environment variables that
+enable each channel.
+
+---
+
 ## Data integrity
 
 The rule the whole system is built around: **a value that was not measured is never presented as
@@ -542,6 +569,13 @@ though it were.**
   / `n/a`, not `0.00`.
 - Charts break the line where a node stopped reporting. A line drawn straight across an outage
   asserts the node was fine throughout.
+- The desktop UI's cluster-wide task view (`ClusterTasksMonitoringService`, backed by `ListTasks`
+  reading `TaskRegistry` directly) is deliberately a separate code path from `TaskExecutionService`'s
+  own list, which only ever tracks tasks *this device personally submitted*. Conflating the two would
+  either under-report a busy cluster (as if only locally-submitted work existed) or silently claim
+  visibility into work this device never actually initiated — the same "don't fabricate scope" rule
+  applied to per-container CPU/memory (`docker stats`, merged into the existing container listing with
+  the same honest-zero-on-collection-failure discipline as every other field there).
 
 ---
 

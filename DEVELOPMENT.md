@@ -1,7 +1,8 @@
 # Development Setup — Next-Gen Control Plane
 
 **Version:** v3.0.0 | **Status:** Raft consensus, distributed Docker-Compose execution, the `nx` CLI,
-real ML risk/load models, and a local account system are all live — see CHANGELOG.md for the full list.
+real ML risk/load models, a local account system, real webhook/email/desktop-notification alerting, and
+a Task-Manager-style cluster monitor are all live — see CHANGELOG.md for the full list.
 This file covers day-to-day build/run/test commands; README.md is the up-to-date source of truth for
 what the project actually does and how each piece works.
 
@@ -259,38 +260,82 @@ Or open the Desktop UI on any machine and view the **Dashboard** — all connect
 
 ## 🧪 Testing
 
-### Unit Tests (Java)
+### Unit Tests — all four modules
+
+Each Java module is tested independently; `desktop-ui`/`cli` need `java-control-plane` installed to
+the local Maven repo first since both depend on its jar (`com.nextgen:control-plane`):
 
 ```bash
-cd java-control-plane
-mvn clean test
+# Parent POM + java-control-plane, once
+mvn install -N -q
+cd java-control-plane && mvn clean install -DskipTests -q && mvn test
 
-# View coverage report
+# desktop-ui (207 tests — needs no display; JavaFX view/Application classes are
+# deliberately untested here and excluded from coverage, since they need a running
+# toolkit and a display a headless CI runner doesn't have)
+cd ../desktop-ui && mvn clean test
+
+# cli (34 tests)
+cd ../cli && mvn clean test
+
+# python-predictor (78 tests)
+cd ../python-predictor && pip install -r requirements.txt pytest && pytest tests/ -v
+```
+
+```bash
+# View a Java module's coverage report
 # Windows:
-start target/site/jacoco/index.html
+start java-control-plane/target/site/jacoco/index.html
 # macOS:
-open target/site/jacoco/index.html
+open java-control-plane/target/site/jacoco/index.html
 ```
 
 **Coverage Requirements:**
-- Minimum 60% instruction coverage (enforced by JaCoCo)
-- Target: 80%+ for all components
+- `java-control-plane` and `desktop-ui` **enforce** a 60% instruction minimum via the JaCoCo `check`
+  goal — the build fails below it, not just a report that gets ignored.
+- Target: 80%+ for all components.
+
+### Continuous Integration
+
+`.github/workflows/ci.yml` runs on every push/PR to `main`/`develop`, five jobs:
+
+| Job | What it checks |
+|---|---|
+| `build-java` | `java-control-plane` — install, then `mvn test` |
+| `build-desktop-and-cli` | `desktop-ui` and `cli` — needs `build-java` first (dependency), then each module's own `mvn clean test` |
+| `build-python` | Installs `torch` from its CPU-only wheel index first (mirrors `python-predictor/Dockerfile` exactly — the default PyPI index resolves plain `torch` to a much larger, irrelevant CUDA build), generates gRPC stubs, then runs the real `pytest tests/` suite |
+| `integration-test` | Builds and starts the real server-side `docker compose` stack, then runs `scripts/integration-test.py` — a real smoke test against the actual containers (control plane reachable, `GetNodes` honestly reports zero nodes in a server-only deployment, `SubmitTask` fails cleanly via the real "no alive nodes" path, the predictor responds, the dashboard API returns valid JSON) |
+| `code-quality` | Placeholder — no formatter/linter configured yet |
+
+If you're chasing down a CI failure, reproduce the exact job locally first (the table above names each
+job's real commands) before assuming it's a real bug — a local Maven repo that's out of sync with the
+current `pom.xml` (e.g. after editing the root POM without reinstalling it) can produce confusing
+classpath errors that don't reflect anything actually wrong with the code.
 
 ### Integration Tests
 
 ```bash
-# Start cluster in background
+# Start the server-side stack in background (control plane, predictor, prometheus —
+# no simulated nodes; see docker-compose.yml's own header comment)
 docker compose up --build -d
 
 # Wait for services to start
 sleep 15
 
-# Run integration test
+# Run the real smoke test — see the CI table above for exactly what it checks
 python scripts/integration-test.py
 
 # Tear down
 docker compose down
 ```
+
+This is a **server-side smoke test**, not a full cluster test — `docker-compose.yml` deliberately
+starts no node containers (see "Architecture pivot: real nodes, not simulated ones" in
+`CHANGELOG.md`), so there's nothing here asserting task dispatch to a real node. That's covered instead
+by the JVM suite's real in-process integration tests (`KillAndReconnectIntegrationTest`,
+`SubmitJobIntegrationTest`, `ProactiveMigrationIntegrationTest`, `ReplicatedControlPlaneIntegrationTest`
+— all real gRPC, no mocks) and, for a genuinely multi-node run, the manual walkthrough in
+[README's Distributed Docker-Compose execution section](README.md#-executing-a-project-on-the-cluster-the-nx-cli).
 
 ### Manual Testing Checklist
 
@@ -522,4 +567,4 @@ duplicating a version summary here is exactly the kind of second copy that goes 
 
 ---
 
-**Last Updated:** August 2026 | **Maintainers:** Team Next-Gen
+**Last Updated:** September 2026 | **Maintainers:** Team Next-Gen

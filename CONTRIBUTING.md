@@ -86,15 +86,24 @@ cd java-control-plane && mvn clean package -DskipTests
 
 ### 3. Test Your Changes
 
+Run the module(s) your change actually touches — see
+[DEVELOPMENT.md's Testing section](DEVELOPMENT.md#-testing) for the exact commands for each of the four
+modules (`java-control-plane`, `desktop-ui`, `cli`, `python-predictor`) and what CI itself runs. In short:
+
 ```bash
-# Java tests
-cd java-control-plane
+# Whichever Java module(s) you touched
+cd java-control-plane   # or desktop-ui, or cli
 mvn clean test
 
-# Integration test
+# Python
+cd python-predictor
+pytest tests/ -v
+
+# Server-side smoke test (only meaningful for control-plane/predictor changes)
 docker compose up --build -d
 sleep 15
 python scripts/integration-test.py
+docker compose down
 ```
 
 ### 4. Commit and Push
@@ -173,55 +182,45 @@ def get_prediction(node_id: str, cpu: float) -> dict:
 
 ## Commit Messages
 
-We follow [Conventional Commits](https://www.conventionalcommits.org/):
+This project does **not** use Conventional Commits (`feat:`/`fix:`/`docs:` prefixes) — check `git log`
+and you won't find any. The real, established convention is a plain, descriptive, imperative-mood
+subject line that says what changed and, critically, **why** — the reasoning is what a future reader
+actually needs, since the diff itself already shows *what* changed:
 
 ```
-<type>(<scope>): <subject>
+Fix TaskExecutionService.shutdown() to actually wait for in-flight work
 
-<body>
+executor.shutdown() alone stops new submissions but doesn't block until an
+already-running background history write finishes. Caught by a real,
+reproducible test failure (a Windows DirectoryNotEmptyException from JUnit's
+@TempDir cleanup racing an in-flight write) while re-running the full
+desktop-ui suite — not a flaky test, a genuine shutdown-ordering bug.
 
-<footer>
+Now uses the same bounded awaitTermination(5s) + shutdownNow() fallback
+idiom DockerResourcesMonitoringService.stopMonitoring() already uses
+elsewhere in this codebase.
 ```
 
-### Types
-
-- **feat:** New feature
-- **fix:** Bug fix
-- **docs:** Documentation only
-- **style:** Code style (formatting, semicolons, etc.)
-- **refactor:** Code change that neither fixes a bug nor adds a feature
-- **perf:** Performance improvement
-- **test:** Adding or correcting tests
-- **chore:** Build process or auxiliary tool changes
+The subject line names the real thing that changed (a class, a behavior, a bug) — not a category label.
+The body explains the *why*: what was broken, how it was found (a real test failure, a live run, a
+CVE advisory — not "seemed like a good idea"), and what the fix actually does. Look through recent
+`git log` output before your first commit here; matching the existing tone matters more than any fixed
+template.
 
 ### Examples
 
 ```bash
-# Good commits
-feat: add health check endpoints
-fix: resolve heartbeat timeout edge case
-docs: update API documentation with examples
-refactor: simplify heartbeat monitor logic
-test: add NodeRecord unit tests for thread safety
-perf: optimize node registry lookups
+# Good — real, specific, explains why
+Fix a stale README callout claiming nx image/volume/network writes and bounded log replay aren't built
+Pin xgboost to a version CI's own resolver can actually see
+Fix TaskExecutionService.shutdown() to actually wait for in-flight work
 
-# Bad commits
-updated code                    # Too vague
-fix                           # No description
-added some stuff              # Unclear
-bugfix                       # Not conventional format
+# Bad — vague, no reasoning, or a category label standing in for a real description
+updated code
+fix
+added some stuff
+feat: add feature
 ```
-
-### Scope
-
-Optional but helpful:
-- `controlplane` — Control Plane server
-- `agent` — Node Agent
-- `predictor` — Python predictor service
-- `docs` — Documentation
-- `tests` — Test suite
-
-**Example:** `feat(controlplane): add node health status endpoint`
 
 ## Pull Request Process
 
@@ -308,14 +307,12 @@ void testNodeMarkedDeadAfterTimeout() {
 
 ## Recognition
 
-Contributors will be:
-- Listed in CONTRIBUTORS.md
-- Mentioned in release notes
-- Credited in commit history
+Contributors are credited in commit history and mentioned in release notes (`CHANGELOG.md`) — there is
+no separate `CONTRIBUTORS.md` file in this repository to be listed in.
 
 Thank you for contributing! 🎉
 
 ---
 
 **Maintainers:** Team Next-Gen  
-**Last Updated:** August 2026
+**Last Updated:** September 2026
