@@ -267,9 +267,14 @@ of what's left — not a re-derivation from old notes:
    first — cross-region Raft latency and topology-aware scheduling are real open design questions, not
    something with an obvious implementation to just go build. Don't start coding this without a design
    pass.
-3. **Additional alert channels** (email, desktop notification) alongside the webhook channel that already
-   shipped. The `AlertNotifier` interface already exists and is exactly the seam a new channel would
-   implement — this is a genuinely small, well-scoped addition once someone picks it up.
+3. ~~Additional alert channels~~ — **done.** `EmailAlertNotifier` (real SMTP via Angus Mail) and
+   `DesktopNotificationAlertNotifier` (`java.awt.SystemTray`, zero new dependency) both now implement
+   `AlertNotifier` alongside the existing webhook channel; `CompositeAlertNotifier` fans out to any
+   combination of the three. Real tests for both (a hand-rolled real SMTP test server for email; the
+   real `SystemTray` path actually exercised, not just skipped, on a host that has one). Full four-module
+   suite (874 tests) green, including a clean rebuild of `desktop-ui`/`cli` to rule out classpath issues
+   from the new transitive dependency. Committed. See README's new "Alerting" configuration table and
+   `CHANGELOG.md`'s `[Unreleased]` entry for the full writeup.
 4. **Independent-host PKI for the 3-replica Raft cluster.** Today's three replicas share one PKI
    filesystem (a named Docker volume) — correctness-safe, but ties all three to one host for certificate
    material. Distributing serial allocation, the issuance ledger, and `ca.key` itself across genuinely
@@ -341,8 +346,8 @@ against real `nx ps`/`docker stats` output) — needs a real running cluster thi
 Both stale `ARCHITECTURE.md` claims (log replay, enrollment-token replication) now describe what's
 actually shipped.
 
-### Phase 3 — Work the real backlog (Section 7), in this order
-1. **Additional alert channels** first — smallest, best-scoped, the interface seam already exists.
+### Phase 3 — Work the real backlog (Section 7)
+1. ~~Additional alert channels~~ — **done**, see §7 item 3.
 2. **Independent-host PKI** next — a real, bounded piece of consensus/security work with a clear finish
    line.
 3. **WebSocket dashboard support** — needs its own small design decision (what does it replace or
