@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Submits tasks to the control plane and tracks their real outcome.
@@ -184,7 +185,20 @@ public class TaskExecutionService {
         return tasks;
     }
 
+    // Bounded wait for in-flight work (a history write already in progress on a background thread)
+    // to actually finish before returning — plain executor.shutdown() only stops new submissions, so
+    // a caller that immediately deletes/relies on files this service just wrote (a test's @TempDir
+    // cleanup, or a real app-shutdown sequence) could otherwise race an unfinished write. Same
+    // bounded-wait/shutdownNow-fallback idiom as DockerResourcesMonitoringService.stopMonitoring().
     public void shutdown() {
         executor.shutdown();
+        try {
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 }
