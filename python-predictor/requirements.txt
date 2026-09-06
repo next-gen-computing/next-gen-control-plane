@@ -33,3 +33,15 @@ xgboost==3.2.0
 # against this Dockerfile's python:3.11-slim base image — no Docker daemon available in this environment.
 # Confirm the install and image size are acceptable before relying on this in production.
 torch==2.13.0
+# Used by every real cluster-trace import script (import_alibaba_pai_trace.py,
+# import_alibaba_2018_trace.py, import_google_cluster_trace.py, import_external_trace.py,
+# enrich_alibaba_memory.py) for CSV/columnar processing — not by predictor_service.py itself, but a
+# real, exercised runtime import, not a dev-only convenience. Missing from this file was a real,
+# previously-undetected gap: it happened to already be present in every local dev environment this
+# project was built in, so nothing caught its absence until a genuinely clean CI install
+# (build-python's pytest step) failed with ModuleNotFoundError collecting test_import_scripts.py.
+# Pinned to 3.0.5, the latest stable release, confirmed via pypi.org to require Python>=3.11 (matches
+# this project's python:3.11-slim Docker base and CI runner exactly) and confirmed via Snyk's
+# vulnerability database to have zero known CVEs affecting it (one historical advisory exists; it does
+# not affect this or any current release).
+pandas==3.0.5
