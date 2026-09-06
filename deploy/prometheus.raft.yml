@@ -1,0 +1,37 @@
+# Prometheus scrape configuration for the opt-in 3-replica Raft topology (docker-compose.raft.yml).
+# See deploy/prometheus.yml for the full rationale on why there is no per-node scrape target — that
+# reasoning is unchanged here. The only difference from that file is scraping three control-plane
+# replicas instead of one, each labeled with its own Raft node id so a dashboard/alert can tell them
+# apart (which replica is currently leader is visible via each replica's own controlplane_raft_* series,
+# not from a label here — the label only identifies WHICH container a series came from).
+
+global:
+  scrape_interval: 5s
+  scrape_timeout: 4s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: control-plane
+    static_configs:
+      - targets: ["control-plane-1:9090"]
+        labels:
+          component: control-plane
+          raft_node_id: control-plane-1
+      - targets: ["control-plane-2:9090"]
+        labels:
+          component: control-plane
+          raft_node_id: control-plane-2
+      - targets: ["control-plane-3:9090"]
+        labels:
+          component: control-plane
+          raft_node_id: control-plane-3
+
+  - job_name: predictor
+    static_configs:
+      - targets: ["predictor:9091"]
+        labels:
+          component: predictor
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

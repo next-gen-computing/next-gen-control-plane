@@ -1,0 +1,105 @@
+/* Shared motion. Every animated property here is transform/opacity/background-position — nothing
+   that forces layout — so these stay smooth even on modest hardware.
+
+   prefers-reduced-motion turns off everything decorative (gradient drift, spotlight, tilt) while
+   leaving state-change transitions (fades, colour changes) in place — those carry information, not
+   decoration, so removing them would make the UI harder to read, not easier. */
+
+@keyframes ng-gradient-drift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+@keyframes ng-orb-float {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33%      { transform: translate(2%, -3%) scale(1.05); }
+    66%      { transform: translate(-2%, 2%) scale(0.97); }
+}
+
+@keyframes ng-fade-in {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ng-fade-out {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+}
+
+@keyframes ng-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.45; }
+}
+
+.ng-onboarding-bg {
+    background: linear-gradient(120deg, var(--ng-bg) 0%, var(--ng-surface) 45%, var(--ng-bg) 100%);
+    background-size: 200% 200%;
+    animation: ng-gradient-drift 18s ease-in-out infinite;
+}
+
+.ng-glow-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(60px);
+    opacity: 0.35;
+    pointer-events: none;
+    animation: ng-orb-float 14s ease-in-out infinite;
+}
+
+.ng-enter {
+    animation: ng-fade-in var(--ng-motion-enter) cubic-bezier(0.25, 0.1, 0.25, 1) both;
+}
+
+.ng-exit {
+    animation: ng-fade-out var(--ng-motion-exit) ease both;
+}
+
+.ng-pulse {
+    animation: ng-pulse 1.6s ease-in-out infinite;
+}
+
+/* Cursor-tracking spotlight: a radial gradient positioned at the pointer via --ng-pointer-x/y,
+   updated from cursor-fx.js. Deliberately not a fixed decorative layer — it only appears where the
+   cursor actually is, which is the point of it. */
+.ng-cursor-spotlight {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(
+        480px circle at var(--ng-pointer-x, 50%) var(--ng-pointer-y, 50%),
+        var(--ng-accent-soft), transparent 70%
+    );
+    opacity: 0;
+    transition: opacity 300ms ease;
+}
+
+.ng-cursor-spotlight.is-active {
+    opacity: 1;
+}
+
+/* Magnetic tilt: a card that leans toward the cursor, driven by --ng-tilt-x/y set from
+   cursor-fx.js's pointermove handler. */
+.ng-magnetic-card {
+    transform: perspective(800px) rotateX(var(--ng-tilt-y, 0deg)) rotateY(var(--ng-tilt-x, 0deg));
+    transition: transform 120ms ease-out, box-shadow 200ms ease;
+}
+
+.ng-magnetic-card:hover {
+    box-shadow: 0 20px 60px -20px var(--ng-accent-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ng-onboarding-bg,
+    .ng-glow-orb,
+    .ng-pulse {
+        animation: none;
+    }
+    .ng-cursor-spotlight {
+        display: none;
+    }
+    .ng-magnetic-card {
+        transform: none;
+        transition: box-shadow 200ms ease;
+    }
+}
