@@ -228,12 +228,21 @@
                 <artifactId>maven-resources-plugin</artifactId>
             </plugin>
 
-            <!-- Maven Surefire plugin for running tests -->
+            <!-- Maven Surefire plugin for running tests.
+                 forkedProcessTimeoutInSeconds: a real safety net, added after desktop-ui's own full
+                 suite was confirmed hanging for HOURS in a real CI run instead of failing — GitHub
+                 Actions' own default job timeout is 6 hours, so nothing else would have stopped it.
+                 This module's own full suite (real Docker containers, Raft fault-injection loops)
+                 normally completes in well under 5 minutes locally, so 20 minutes is generous headroom
+                 for CI-specific slowness while still turning any future silent hang into a fast,
+                 diagnosable failure with a real thread dump instead of an open-ended stall. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <argLine>@{argLine} -XX:+EnableDynamicAgentLoading -Dnet.bytebuddy.experimental=true</argLine>
+                    <forkedProcessTimeoutInSeconds>1200</forkedProcessTimeoutInSeconds>
+                    <forkedProcessExitTimeoutInSeconds>30</forkedProcessExitTimeoutInSeconds>
                 </configuration>
             </plugin>
 

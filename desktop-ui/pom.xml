@@ -180,12 +180,23 @@
               Re-adding local generation would put two copies of every proto class on one classpath.
             -->
 
-            <!-- Surefire: matches the control-plane module so JaCoCo's argLine is honoured -->
+            <!-- Surefire: matches the control-plane module so JaCoCo's argLine is honoured.
+                 forkedProcessTimeoutInSeconds is a real, previously-missing safety net: this module's
+                 full suite runs in well under two minutes locally, so a real CI run (a JavaFX toolkit
+                 startup or a headless-environment quirk neither of which shows up on a machine with a
+                 real display) hanging for HOURS instead of failing was a genuine, confirmed problem —
+                 GitHub Actions' own default job timeout is 6 hours, so nothing would have stopped it
+                 otherwise. Bounded generously (well over 10x the normal local runtime) so this only
+                 ever fires on a genuine hang, never a slow-but-legitimate CI run, and Surefire dumps
+                 the forked JVM's thread state on timeout — turning a silent multi-hour stall into an
+                 immediate, diagnosable failure with a real stack trace. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <argLine>@{argLine} -XX:+EnableDynamicAgentLoading -Dnet.bytebuddy.experimental=true</argLine>
+                    <argLine>@{argLine} -XX:+EnableDynamicAgentLoading -Dnet.bytebuddy.experimental=true -Djava.awt.headless=true</argLine>
+                    <forkedProcessTimeoutInSeconds>600</forkedProcessTimeoutInSeconds>
+                    <forkedProcessExitTimeoutInSeconds>30</forkedProcessExitTimeoutInSeconds>
                 </configuration>
             </plugin>
 

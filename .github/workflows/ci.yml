@@ -12,6 +12,11 @@ jobs:
   # to the local Maven repo, not just `package`d, before either downstream module can resolve it.
   build-java:
     runs-on: ubuntu-latest
+    # Defense in depth alongside Surefire's own forkedProcessTimeoutInSeconds (java-control-plane/pom.xml):
+    # this catches a hang anywhere in the job, including before Surefire itself even starts (dependency
+    # resolution, image builds). GitHub Actions' own default is 360 minutes — a real, confirmed problem
+    # (see build-desktop-and-cli below) that let a hung job run silently for hours instead of failing fast.
+    timeout-minutes: 20
     steps:
     - uses: actions/checkout@v4
 
@@ -50,6 +55,10 @@ jobs:
   build-desktop-and-cli:
     runs-on: ubuntu-latest
     needs: build-java
+    # Confirmed live: this job's desktop-ui step hung for hours (repeatedly starting fresh LocalUiServer
+    # instances with no progress) against GitHub Actions' 360-minute default job timeout, before Surefire
+    # gained its own forkedProcessTimeoutInSeconds bound. Both bounds now stay in place together.
+    timeout-minutes: 20
     steps:
     - uses: actions/checkout@v4
 
@@ -85,6 +94,7 @@ jobs:
   # Build Python predictor
   build-python:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
     - uses: actions/checkout@v4
 
@@ -122,6 +132,7 @@ jobs:
   integration-test:
     runs-on: ubuntu-latest
     needs: [build-java, build-python]
+    timeout-minutes: 20
     steps:
     - uses: actions/checkout@v4
     
@@ -150,6 +161,7 @@ jobs:
   # Code quality checks
   code-quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
     - uses: actions/checkout@v4
     
