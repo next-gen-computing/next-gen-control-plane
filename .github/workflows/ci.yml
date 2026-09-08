@@ -83,7 +83,7 @@ jobs:
     - name: Build and test cli
       run: |
         cd cli
-        mvn clean test
+        mvn clean test -Djava.awt.headless=true
 
     - name: Upload coverage report
       uses: actions/upload-artifact@v4
