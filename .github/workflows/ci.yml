@@ -75,15 +75,20 @@ jobs:
         cd java-control-plane
         mvn clean install -DskipTests -q
 
+    - name: Install Virtual Framebuffer(Xvfb)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb libxtst6 libxi6 libgtk-3-0
+
     - name: Build and test desktop-ui
       run: |
         cd desktop-ui
-        mvn clean test
+        xvfb-run --server-args="-screen 0 1024x768x24" mvn clean test -Djava.awt.headless=false
 
     - name: Build and test cli
       run: |
         cd cli
-        mvn clean test -Djava.awt.headless=true
+        mvn clean test
 
     - name: Upload coverage report
       uses: actions/upload-artifact@v4
