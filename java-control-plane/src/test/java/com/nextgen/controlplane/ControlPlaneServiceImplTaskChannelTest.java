@@ -1,0 +1,357 @@
+package com.nextgen.controlplane;
+
+import com.nextgen.controlplane.task.NodeTaskChannelRegistry;
+import com.nextgen.controlplane.task.TaskDispatcher;
+import com.nextgen.controlplane.task.TaskRegistry;
+import com.nextgen.proto.ControlPlaneProto;
+import com.nextgen.proto.ControlPlaneProto.NodeTaskEvent;
+import com.nextgen.proto.ControlPlaneProto.ServerTaskCommand;
+import com.nextgen.proto.ControlPlaneProto.TaskChannelHello;
+import com.nextgen.proto.ControlPlaneProto.TaskProgressEvent;
+import com.nextgen.proto.ControlPlaneProto.TaskResponse;
+import com.nextgen.proto.ControlPlaneProto.TaskResultEvent;
+import com.nextgen.proto.ControlPlaneProto.TaskState;
+import com.nextgen.proto.ControlPlaneProto.TaskStatusResponse;
+import com.nextgen.proto.ControlPlaneServiceGrpc;
+import io.grpc.ManagedChannel;
+import io.grpc.Server;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.stub.StreamObserver;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Proves the real dispatch → execute → collect pipeline end to end over an actual (in-process) gRPC
+ * TaskChannel stream, using a fake node that plays both sides: opens the channel, receives a real
+ * TaskDispatch, and reports real progress/result back — the thing SubmitTask never did before Stage A.
+ *
+ * <p>Also proves the fencing guarantee TaskRegistryTest establishes at the unit level actually holds
+ * over the wire: a result reported by a node the task has since been reassigned away from must be
+ * dropped by the real {@code taskChannel} handler, not just by {@link TaskRegistry} in isolation.
+ */
+class ControlPlaneServiceImplTaskChannelTest {
+
+    private Server server;
+    private ManagedChannel channel;
+    private ControlPlaneServiceGrpc.ControlPlaneServiceBlockingStub blockingStub;
+    private ControlPlaneServiceGrpc.ControlPlaneServiceStub asyncStub;
+    private ControlPlaneServiceImpl service;
+
+    @BeforeEach
+    void setUp() throws IOException {
+        String serverName = InProcessServerBuilder.generateName();
+
+        NodeRegistry nodeRegistry = new NodeRegistry(new ConcurrentHashMap<>(), System::currentTimeMillis);
+        TaskRegistry taskRegistry = new TaskRegistry();
+        NodeTaskChannelRegistry channelRegistry = new NodeTaskChannelRegistry();
+        service = new ControlPlaneServiceImpl(nodeRegistry, new RoundRobinScheduler(), taskRegistry, channelRegistry);
+
+        server = InProcessServerBuilder
+                .forName(serverName)
+                .directExecutor()
+                .addService(service)
+                .build()
+                .start();
+
+        channel = InProcessChannelBuilder
+                .forName(serverName)
+                .directExecutor()
+                .build();
+
+        blockingStub = ControlPlaneServiceGrpc.newBlockingStub(channel);
+        asyncStub = ControlPlaneServiceGrpc.newStub(channel);
+    }
+
+    @AfterEach
+    void tearDown() throws Exception {
+        channel.shutdownNow();
+        channel.awaitTermination(5, TimeUnit.SECONDS);
+        server.shutdownNow();
+        server.awaitTermination(5, TimeUnit.SECONDS);
+    }
+
+    /** Registers and heartbeats a node so it is ALIVE and eligible for scheduling. */
+    private void registerAliveNode(String nodeId) {
+        blockingStub.registerNode(ControlPlaneProto.NodeInfo.newBuilder()
+                .setNodeId(nodeId).setIp("10.0.0.1").setPort(50051).setHostname(nodeId).build());
+        blockingStub.sendHeartbeat(ControlPlaneProto.HeartbeatRequest.newBuilder()
+                .setNodeId(nodeId).setCpu(10f).setCpuAvailable(true).setMemory(10f).setMemoryAvailable(true)
+                .build());
+    }
+
+    /** Opens a fake node's TaskChannel and returns the queue of commands the server pushes to it. */
+    private LinkedBlockingQueue<ServerTaskCommand> openTaskChannel(String nodeId) {
+        LinkedBlockingQueue<ServerTaskCommand> incoming = new LinkedBlockingQueue<>();
+        StreamObserver<NodeTaskEvent> outbound = asyncStub.taskChannel(new StreamObserver<>() {
+            @Override public void onNext(ServerTaskCommand value) { incoming.add(value); }
+            @Override public void onError(Throwable t) { }
+            @Override public void onCompleted() { }
+        });
+        outbound.onNext(NodeTaskEvent.newBuilder()
+                .setHello(TaskChannelHello.newBuilder().setNodeId(nodeId).build())
+                .build());
+        this.lastOpenedOutbound = outbound;
+        return incoming;
+    }
+
+    // Convenience for tests that only need to send events from the most recently opened channel.
+    private StreamObserver<NodeTaskEvent> lastOpenedOutbound;
+
+    /** Retries SubmitTask until real dispatch succeeds (the fake node's channel is registered async). */
+    private TaskResponse submitUntilDispatched(String taskId, String payload) {
+        long deadline = System.currentTimeMillis() + 5_000;
+        TaskResponse last = null;
+        while (System.currentTimeMillis() < deadline) {
+            last = blockingStub.submitTask(ControlPlaneProto.TaskRequest.newBuilder()
+                    .setTaskId(taskId)
+                    .setPayload(payload)
+                    .setKind(ControlPlaneProto.TaskKind.TASK_KIND_PRIME_COUNT_RANGE)
+                    .build());
+            if (last.getResult().startsWith("ACCEPTED")) {
+                return last;
+            }
+            sleep(20);
+        }
+        fail("Task was never successfully dispatched: " + (last == null ? "null" : last.getResult()));
+        return null;
+    }
+
+    private TaskStatusResponse awaitTaskState(String taskId, TaskState expected) {
+        long deadline = System.currentTimeMillis() + 5_000;
+        TaskStatusResponse last = null;
+        while (System.currentTimeMillis() < deadline) {
+            last = blockingStub.getTaskStatus(
+                    ControlPlaneProto.TaskStatusRequest.newBuilder().setTaskId(taskId).build());
+            if (last.getState() == expected) {
+                return last;
+            }
+            sleep(20);
+        }
+        fail("Task " + taskId + " never reached state " + expected + "; last seen: "
+                + (last == null ? "null" : last.getState()));
+        return null;
+    }
+
+    private static void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    @Test
+    void realDispatchExecutionAndResultCollectionRoundTrips() throws InterruptedException {
+        registerAliveNode("node1");
+        LinkedBlockingQueue<ServerTaskCommand> node1Commands = openTaskChannel("node1");
+
+        TaskResponse submitResponse = submitUntilDispatched("t1", "{\"range_start\":0,\"range_end\":101}");
+        assertEquals("node1", submitResponse.getAssignedNode());
+
+        ServerTaskCommand command = node1Commands.poll(5, TimeUnit.SECONDS);
+        assertNotNull(command, "the server must actually push a TaskDispatch down the real stream");
+        assertTrue(command.hasDispatch());
+        assertEquals("t1", command.getDispatch().getTaskId());
+        assertEquals(ControlPlaneProto.TaskKind.TASK_KIND_PRIME_COUNT_RANGE, command.getDispatch().getKind());
+
+        // The fake node "executes" and reports back over the real stream, exactly like TaskChannelClient.
+        lastOpenedOutbound.onNext(NodeTaskEvent.newBuilder()
+                .setProgress(TaskProgressEvent.newBuilder().setTaskId("t1").setState(TaskState.TASK_STATE_RUNNING))
+                .build());
+        lastOpenedOutbound.onNext(NodeTaskEvent.newBuilder()
+                .setResult(TaskResultEvent.newBuilder()
+                        .setTaskId("t1").setSuccess(true).setResultJson("{\"prime_count\":25}"))
+                .build());
+
+        TaskStatusResponse status = awaitTaskState("t1", TaskState.TASK_STATE_COMPLETED);
+        assertEquals("node1", status.getAssignedNode());
+        assertEquals("{\"prime_count\":25}", status.getResultJson());
+        assertEquals("", status.getError());
+
+        ControlPlaneProto.TaskList list = blockingStub.listTasks(ControlPlaneProto.Empty.newBuilder().build());
+        ControlPlaneProto.TaskStatusResponse listed = list.getTasksList().stream()
+                .filter(t -> t.getTaskId().equals("t1")).findFirst().orElseThrow();
+        // Stage RR: ListTasks now carries the same real kind/jobId/attempt/timestamps TaskRecord has —
+        // a bare (non-job) task has an empty jobId and attempt 1, never a fabricated value.
+        assertEquals(ControlPlaneProto.TaskKind.TASK_KIND_PRIME_COUNT_RANGE, listed.getKind());
+        assertEquals("", listed.getJobId());
+        assertEquals(1, listed.getAttempt());
+        assertTrue(listed.getCreatedAtEpochMillis() > 0);
+        assertTrue(listed.getDispatchedAtEpochMillis() > 0);
+    }
+
+    @Test
+    void aStaleResultFromANodeTheTaskWasMigratedAwayFromIsDropped() throws InterruptedException {
+        registerAliveNode("node1");
+        LinkedBlockingQueue<ServerTaskCommand> node1Commands = openTaskChannel("node1");
+
+        submitUntilDispatched("t1", "{\"range_start\":0,\"range_end\":101}");
+        ServerTaskCommand command = node1Commands.poll(5, TimeUnit.SECONDS);
+        assertNotNull(command);
+        StreamObserver<NodeTaskEvent> node1Outbound = lastOpenedOutbound;
+
+        // Simulate a proactive migration (Stage D territory) reassigning "t1" to node2 while node1's
+        // execution is still in flight — exactly what a real ProactiveMigrator will eventually do.
+        service.taskRegistry().markDispatched("t1", "node2");
+
+        // node1 has no idea it was migrated away from and reports its real result anyway.
+        node1Outbound.onNext(NodeTaskEvent.newBuilder()
+                .setResult(TaskResultEvent.newBuilder()
+                        .setTaskId("t1").setSuccess(true).setResultJson("{\"prime_count\":999}"))
+                .build());
+
+        // Give the stale message a moment to be processed (it must be dropped, not applied).
+        sleep(200);
+
+        TaskStatusResponse status = blockingStub.getTaskStatus(
+                ControlPlaneProto.TaskStatusRequest.newBuilder().setTaskId("t1").build());
+        assertEquals("node2", status.getAssignedNode(), "task must still belong to its new node");
+        assertEquals(TaskState.TASK_STATE_DISPATCHED, status.getState(),
+                "the stale COMPLETED report from the old node must not have been applied");
+        assertEquals("", status.getResultJson(), "the fake, stale result must never surface as real data");
+    }
+
+    /** Stage U: proves {@code CancelTask} is a real, CONFIRMED cancel — the RPC must not return success
+     * until the task has actually reached a terminal state, not merely once the cancel command was sent
+     * down the wire. */
+    @Test
+    void cancelTaskWaitsForRealConfirmationBeforeReturningSuccess() throws Exception {
+        registerAliveNode("node1");
+        LinkedBlockingQueue<ServerTaskCommand> node1Commands = openTaskChannel("node1");
+        submitUntilDispatched("t1", "{\"range_start\":0,\"range_end\":101}");
+        assertNotNull(node1Commands.poll(5, TimeUnit.SECONDS)); // the initial TaskDispatch
+        lastOpenedOutbound.onNext(NodeTaskEvent.newBuilder()
+                .setProgress(TaskProgressEvent.newBuilder().setTaskId("t1").setState(TaskState.TASK_STATE_RUNNING))
+                .build());
+        awaitTaskState("t1", TaskState.TASK_STATE_RUNNING);
+
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            var future = pool.submit(() -> blockingStub.cancelTask(
+                    ControlPlaneProto.TaskCancelRequest.newBuilder().setTaskId("t1").setReason("test").build()));
+
+            // The real TaskCancel command must actually arrive on the node's stream.
+            ServerTaskCommand cancelCommand = node1Commands.poll(5, TimeUnit.SECONDS);
+            assertNotNull(cancelCommand);
+            assertTrue(cancelCommand.hasCancel());
+            assertEquals("t1", cancelCommand.getCancel().getTaskId());
+
+            // The RPC must still be blocked — no confirmation has arrived yet.
+            sleep(300);
+            assertFalse(future.isDone(), "cancelTask must not return before the task actually stops");
+
+            // The fake node now does what a real DockerComposeServiceExecutor/TaskChannelClient would:
+            // report a real terminal result once the container actually stopped.
+            lastOpenedOutbound.onNext(NodeTaskEvent.newBuilder()
+                    .setResult(TaskResultEvent.newBuilder()
+                            .setTaskId("t1").setSuccess(true)
+                            .setResultJson("{\"stopped_by_request\":true}"))
+                    .build());
+
+            ControlPlaneProto.TaskCancelResponse response = future.get(5, TimeUnit.SECONDS);
+            assertTrue(response.getAccepted(), response.getMessage());
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void cancelTaskOnAnAlreadyTerminalTaskIsRejectedHonestly() throws InterruptedException {
+        registerAliveNode("node1");
+        openTaskChannel("node1");
+        submitUntilDispatched("t1", "{\"range_start\":0,\"range_end\":101}");
+        lastOpenedOutbound.onNext(NodeTaskEvent.newBuilder()
+                .setResult(TaskResultEvent.newBuilder()
+                        .setTaskId("t1").setSuccess(true).setResultJson("{\"prime_count\":25}"))
+                .build());
+        awaitTaskState("t1", TaskState.TASK_STATE_COMPLETED);
+
+        ControlPlaneProto.TaskCancelResponse response = blockingStub.cancelTask(
+                ControlPlaneProto.TaskCancelRequest.newBuilder().setTaskId("t1").build());
+
+        assertFalse(response.getAccepted());
+        assertTrue(response.getMessage().toLowerCase(java.util.Locale.ROOT).contains("already"),
+                response.getMessage());
+    }
+
+    @Test
+    void cancelTaskOnAnUnknownTaskIsRejectedHonestly() {
+        ControlPlaneProto.TaskCancelResponse response = blockingStub.cancelTask(
+                ControlPlaneProto.TaskCancelRequest.newBuilder().setTaskId("ghost").build());
+
+        assertFalse(response.getAccepted());
+    }
+
+    /** Stage W: previously subscribed unconditionally, so an unknown/typo'd job_id got a live stream
+     * that emitted nothing, forever — confirmed live as `nx logs <bad-job-id>` hanging the terminal
+     * indefinitely. Must now fail fast with NOT_FOUND, exactly like {@code getJobStatus} already does. */
+    @Test
+    void streamJobEventsOnAnUnknownJobFailsFastRatherThanHangingForever() throws InterruptedException {
+        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        Throwable[] error = new Throwable[1];
+        asyncStub.streamJobEvents(
+                ControlPlaneProto.JobEventsRequest.newBuilder().setJobId("never-submitted").build(),
+                new StreamObserver<>() {
+                    @Override public void onNext(ControlPlaneProto.TaskEvent value) { }
+                    @Override public void onError(Throwable t) { error[0] = t; done.countDown(); }
+                    @Override public void onCompleted() { done.countDown(); }
+                });
+
+        assertTrue(done.await(5, TimeUnit.SECONDS), "the call must fail fast, not hang forever");
+        assertNotNull(error[0]);
+        assertEquals(Status.Code.NOT_FOUND, Status.fromThrowable(error[0]).getCode());
+    }
+
+    /** Stage X: a second HELLO with a DIFFERENT node_id on the SAME stream must not leave the first
+     * id's registry entry orphaned — it must be explicitly unregistered, so a subsequent dispatch to
+     * the OLD id fails honestly (no open channel) rather than silently writing to a now-repurposed
+     * observer that will never actually deliver it as that node. */
+    @Test
+    void aSecondHelloWithADifferentNodeIdUnregistersTheFirstOne() throws InterruptedException {
+        registerAliveNode("nodeA");
+        registerAliveNode("nodeB");
+        LinkedBlockingQueue<ServerTaskCommand> incoming = new LinkedBlockingQueue<>();
+        StreamObserver<NodeTaskEvent> outbound = asyncStub.taskChannel(new StreamObserver<>() {
+            @Override public void onNext(ServerTaskCommand value) { incoming.add(value); }
+            @Override public void onError(Throwable t) { }
+            @Override public void onCompleted() { }
+        });
+
+        outbound.onNext(NodeTaskEvent.newBuilder()
+                .setHello(TaskChannelHello.newBuilder().setNodeId("nodeA").build()).build());
+        Thread.sleep(200); // let the first HELLO actually register before the second arrives
+        outbound.onNext(NodeTaskEvent.newBuilder()
+                .setHello(TaskChannelHello.newBuilder().setNodeId("nodeB").build()).build());
+        Thread.sleep(200);
+
+        // "nodeA" must no longer have an open channel — a task dispatched to it must fail honestly
+        // rather than silently going out over this now-"nodeB" stream.
+        TaskResponse response = blockingStub.submitTask(ControlPlaneProto.TaskRequest.newBuilder()
+                .setTaskId("tA").setPayload("{\"range_start\":0,\"range_end\":10}")
+                .setKind(ControlPlaneProto.TaskKind.TASK_KIND_PRIME_COUNT_RANGE).build());
+        // RoundRobinScheduler may pick either alive node; only assert on the outcome for THIS node.
+        if (response.getAssignedNode().equals("nodeA")) {
+            assertTrue(response.getResult().contains("FAILED"),
+                    "dispatch to the re-helloed-away 'nodeA' must fail honestly, not silently vanish");
+        }
+    }
+
+    @Test
+    void getTaskStatusOnAnUnknownTaskIsNotFound() {
+        StatusRuntimeException ex = assertThrows(StatusRuntimeException.class, () ->
+                blockingStub.getTaskStatus(
+                        ControlPlaneProto.TaskStatusRequest.newBuilder().setTaskId("ghost").build()));
+        assertEquals(Status.Code.NOT_FOUND, ex.getStatus().getCode());
+    }
+}

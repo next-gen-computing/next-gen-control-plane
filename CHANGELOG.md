@@ -7,15 +7,771 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed - Documentation pass: stale numbers, a broken anchor, and gaps against recent work
+
+Every core doc (`README.md`, `ARCHITECTURE.md`, `ALGORITHMS.md`, `DEVELOPMENT.md`, `CONTRIBUTING.md`)
+checked against the actual current repository state, not assumed current.
+
+- **Stale test counts fixed.** README's Coverage table and `ALGORITHMS.md`'s "Full test evidence"
+  section both still quoted numbers from well before Raft/XGBoost/LSTM/the alert channels (293/86/379,
+  and a stale "877+") and never listed `cli`/`python-predictor` at all. Now: 555 + 207 + 34 + 78 = 874,
+  broken out by module.
+- **Stale Technology Stack table fixed** — was still listing pre-CVE-fix versions (`gRPC 1.68`,
+  `Jackson 2.17.0`, `JaCoCo 0.8.12`) that this repo's own `pom.xml` moved past months ago, and named
+  nothing about Raft, BouncyCastle, XGBoost/PyTorch, Angus Mail, or CI at all.
+- **A broken "Back to Top" anchor fixed** — pointed at `#-next-gen-control-plane-v020`, which doesn't
+  match this README's actual `<h1>` and never worked.
+- **Two real documentation-vs-practice gaps closed in `CONTRIBUTING.md`**: it documented Conventional
+  Commits (`feat:`/`fix:` prefixes) as this project's convention, which `git log` has never actually
+  followed — replaced with the real, established plain-descriptive-subject-plus-reasoning style, shown
+  with real commit messages from this repo's own history. It also promised contributors a listing in a
+  `CONTRIBUTORS.md` file that doesn't exist in this repository — fixed to state that plainly instead.
+- **CI documented for the first time** — `DEVELOPMENT.md` had no section describing what
+  `.github/workflows/ci.yml` actually checks; added, including how to reproduce each job locally before
+  assuming a CI failure is a real bug.
+- **The Task-Manager-style cluster monitor and the alert-channels subsystem** — both real, both
+  already shipped, neither previously described anywhere in `ARCHITECTURE.md` or fully in README's
+  feature list — now covered: a new "Alerting" architecture section, a `Data integrity` bullet on why
+  the cluster-wide task view is a deliberately separate code path from a device's own submission
+  history, and an expanded README description of the per-node expandable monitoring cards.
+- **`DEVELOPMENT.md`'s Testing section rewritten** to cover all four modules (previously only
+  `java-control-plane`) and the real, current `integration-test.py` behavior (a server-side smoke test
+  against zero auto-started nodes, not the Phase-1 three-fake-node script it used to be).
+
+### Added - Two more real alert channels: email and desktop notifications
+
+Closes the last item on the alerting backlog named when `AlertNotifier`/`WebhookAlertNotifier` first
+shipped (Stage GG) — the notification channel was explicitly left open with email and desktop
+notification named as options, neither built at the time.
+
+- **`EmailAlertNotifier`** — real SMTP via Angus Mail (the Jakarta Mail reference implementation; no
+  email-sending capability existed anywhere in this project before this, which is exactly why the
+  account system's password reset uses an offline recovery code instead). Sends on a dedicated
+  single-thread executor so a slow/unreachable SMTP host can never block the calling monitor's sweep
+  thread, matching `WebhookAlertNotifier`'s identical fire-and-forget discipline. Configured via
+  `ALERT_EMAIL_SMTP_HOST`/`ALERT_EMAIL_TO` (both required to enable it) plus
+  `ALERT_EMAIL_SMTP_PORT`/`ALERT_EMAIL_USERNAME`/`ALERT_EMAIL_PASSWORD`/`ALERT_EMAIL_USE_TLS`/
+  `ALERT_EMAIL_FROM`.
+- **`DesktopNotificationAlertNotifier`** — a real native OS notification balloon/toast via
+  `java.awt.SystemTray`/`TrayIcon`, part of the JDK itself so this needed zero new dependency. Only
+  meaningful when the control-plane process is running on a machine with a display someone is looking
+  at (a real, common deployment for this project, which targets operator-owned physical machines
+  including the operator's own desktop) — checks `SystemTray.isSupported()` once at construction and
+  becomes an honest, logged no-op rather than crashing when unsupported (any headless server/container).
+  Opt-in via `ALERT_DESKTOP_NOTIFICATIONS_ENABLED=true` rather than auto-enabling whenever a display
+  happens to be present, since silently popping up a tray icon nobody asked for would be surprising.
+- **`CompositeAlertNotifier`** — fans a single event out to every configured channel, so any
+  combination of webhook/email/desktop-notification can run at once; `HeartbeatMonitor`/`RiskMonitor`
+  themselves still take exactly one `AlertNotifier` and stay unaware more than one channel exists.
+  Isolates each channel in its own try/catch so a defect in one can never block a different, working
+  channel or throw back into a monitor's sweep thread.
+
+Tested against real infrastructure, not mocks: `EmailAlertNotifierTest` runs a hand-rolled real SMTP
+server (`ServerSocket`, no mocked mail client — the same discipline `WebhookAlertNotifierTest` already
+established for the webhook channel); `DesktopNotificationAlertNotifierTest` exercises the real
+`SystemTray` registration-and-display path on a host that has one and self-skips (via `Assumptions`,
+not silently reporting false coverage) on a headless one.
+
+### Fixed / Added - Bug fixes, hardening, and feature-completeness pass found via live end-to-end testing and three parallel deep-audit agents
+
+Everything below was found empirically (a real live multi-node run plus three read-only audits of the
+Java gRPC layer, the desktop-ui HTTP layer, and the CLI/Python predictor) rather than assumed, and every
+fix was verified with a real Docker/gRPC/Raft/file-I/O test — never a mock for the mechanism under test.
+
+- **Fixed real bugs found live**: a duplicate-`CancelTask` no-op turned real (waits for confirmed
+  container teardown, not fire-and-forget); container-name/build-context-directory collisions on a
+  migrate-away-then-back cycle (attempt-scoped naming); a `nx logs <bad-job-id>` hang (missing
+  `NOT_FOUND` check + missing CLI deadlines); three resource leaks (`nx cloud up` orphaning containers
+  on client disconnect, unattached relay-port reservations never being swept, a double-HELLO on
+  `TaskChannel`/`DockerStateChannel` orphaning the first node id's registry entry); a state-corruption
+  guard (`markDispatched`) that can no longer push a `COMPLETED` task back to `DISPATCHED`, correctly
+  scoped to not also break `JobCoordinator`'s legitimate one-retry-on-failure path.
+- **Predictor crash-per-request hardening**: `load_forecast_store.py`/`model_store.py` now survive an
+  empty or garbage-bytes model file, a non-dict JSON model file, and NaN anywhere in a
+  `PredictionRequest` — always falling back to the last-known-good model or an honest
+  `model_trained=false`, never crashing or returning a confidently-wrong verdict.
+- **Write-path validation parity**: blank-id rejection on every registration/submission path and both
+  channel HELLOs; `SubmitTask`'s direct-dispatch path now validates payload JSON before ever consuming
+  a node dispatch, matching `SubmitJob`'s existing discipline.
+- **desktop-ui HTTP hardening**: five handlers that could previously have their socket silently closed
+  by the JDK on a malformed body now return a real 400; wrong-method-on-a-real-path now returns 405 +
+  `Allow` instead of an indistinguishable-from-unknown-route 404; a persistently failing SSE poll now
+  force-closes connected clients so their `EventSource` actually reconnects.
+- **CLI/parser raw-error hardening**: `ComposeFileParser`, the trace-import scripts, and
+  `train_risk_model.py`'s JSONL reader now give clear, project-authored errors instead of a raw
+  stack trace for a missing file, invalid YAML, invalid UTF-8, or a missing CSV column; `ArgReader` now
+  rejects a value-taking flag whose value was accidentally omitted instead of silently treating it as
+  `"true"`.
+- **Docker resource write actions**: `nx images pull/rm/tag`, `nx volumes create/rm`,
+  `nx networks create/rm` — extending Stage T's originally list-only coverage.
+- **Bounded log replay**: `nx logs <job-id>` (without `--follow`) now replays real recent history from
+  a new bounded per-job ring buffer instead of returning nothing, matching `docker`/`kubectl logs`'
+  own show-and-exit default; `--follow` keeps today's indefinite-tail behavior.
+- **Real node-failure alerting**: a new `AlertNotifier` hook fires on `HeartbeatMonitor`'s reactive
+  `SUSPECTED_DEAD` transition and `RiskMonitor`'s predictive rising-edge trigger. `WebhookAlertNotifier`
+  is the concrete channel shipped (a real async HTTP POST, opt-in via `ALERT_WEBHOOK_URL`) — the
+  smallest real building block an email/desktop-notification channel could be layered on top of later.
+- **Durable task/job state outside Raft**: single-node (`RAFT_ENABLED=false`) deployments now survive a
+  plain restart — a new bounded `RegistrySnapshotStore` periodically snapshots `TaskRegistry`/
+  `JobRegistry` to disk (atomic write-then-rename) and restores from it on startup; unused, and
+  correctly not wired in, when Raft's own WAL is already authoritative.
+- **Raft-replicated enrollment tokens**: a token minted by a Raft leader that's then killed before the
+  token is used is still recognized by the newly-elected leader — closing the scope cut Stage J's own
+  design named explicitly. Minting blocks on real replication before the plaintext is ever handed to an
+  operator; consumption replicates best-effort immediately after the (already-atomic, already-correct)
+  local decision, closing the token-reuse-after-failover window without adding latency to a request
+  that's already succeeded.
+- **Multi-region deployment**: intentionally NOT attempted in this pass — the project plan itself names
+  this as having no existing code to extend and needing its own architecture/design pass (cross-region
+  Raft latency, topology-aware scheduling), not a fix pattern. Left as explicit future work rather than
+  forced.
+
+### Added - Container-orchestration baseline hygiene: resource limits, restart policies, health checks, secrets, load-balanced replicas, confirmed cancellation, rolling updates
+
+Closes the concrete gap identified when scoping this project's predictive-scheduling differentiation
+claim against Kubernetes/BOINC: the claim itself (proactive, trend-based migration measured in the
+low milliseconds versus Kubernetes' ~340s reactive path and BOINC's ~10-day default) doesn't need
+feature parity with either — but baseline container-orchestration hygiene needed to actually be real,
+not just claimed, for that comparison to be taken seriously. See the README's new **Comparison
+scope** section for the full boundary — what's real, what's explicitly out of scope, and why BOINC
+isn't a meaningful comparison point for most of this.
+
+- **Resource limits** — `deploy.resources.limits.cpus`/`.memory` and `.reservations.memory` become
+  real `--cpus`/`--memory`/`--memory-reservation` flags, verified against real `docker inspect` output.
+- **Restart policies** — `restart: "no"|"always"|"on-failure"|"unless-stopped"` (plus
+  `"on-failure:N"` and `deploy.restart_policy.max_attempts`) drive a bounded Java-side retry loop in
+  `DockerComposeServiceExecutor`, deliberately not Docker's native `--restart` (incompatible with
+  `--rm` and this project's `waitFor()`-based lifecycle model).
+- **Health checks** — a `healthcheck:` block becomes real native `--health-*` flags; Docker's own
+  engine runs the check, a side-poller reads the result back and kills-and-retries an unhealthy
+  container through the same restart loop. Also surfaced on the dashboard via a new
+  `DockerContainerInfo.health_status` field, regex-extracted from `docker ps`'s own `Status` string.
+- **Secrets** — new `SecretStore` (AES-256-GCM, server-local key, same owner-only file-permission
+  discipline as this project's PKI key material), `nx secret set`, delivered to a node only at
+  dispatch time over its already-open `TaskChannel` (mirrors the Stage N build-context pattern), and
+  mounted as a real file at `/run/secrets/<name>` — never a container env var, verified against real
+  `docker inspect` output.
+- **Load-balanced replicas** — `replicas: N` runs N real copies of a service on distinct nodes;
+  `PortRelayManager` now supports multiple backends per relay port (round-robin at accept time, a
+  disconnecting backend removed without dropping the listener or its siblings), verified with real
+  sockets.
+- **Confirmed task cancellation** — the previously-`UNIMPLEMENTED` `CancelTask` RPC (`nx down`) is now
+  real: pushes the same `TaskCancel` command `ProactiveMigrator` already used internally, but waits
+  for genuine confirmation the task stopped before returning success, via a new shared
+  `TaskDispatcher.cancelAndAwaitConfirmation`.
+- **Rolling updates + rollback** — `nx update <job-id> <compose-file>` replaces a running project's
+  replicas one at a time (confirmed-cancel old → dispatch new → wait for real readiness before the
+  next), verified with a real invariant check that no later replica is ever touched mid-swap.
+  `nx rollback <job-id>` reconstructs and re-applies the previous spec directly from the superseded
+  job's own stored task payloads. Scoped to the direct (non-Raft) path in this pass.
+
+### Fixed - Certificate renewal now runs on a timer, not just at startup
+
+Closes the "named limitation" both README.md and ARCHITECTURE.md previously called out: a node's
+certificate was only ever checked for renewal once, at process startup — a node left running longer
+than the certificate lifetime would silently lose connectivity mid-run with nothing re-checking.
+
+- New `NodeAgent.CertificateRenewalLoop`, running continuously alongside the heartbeat loop
+  (`CERT_RENEWAL_CHECK_INTERVAL_MS`, hourly by default), using the previously-unwired
+  `NodeEnrollment.RenewCertificate` RPC — mTLS-authenticated by the node's own current certificate, no
+  token needed.
+- `NodeEnrollmentServiceImpl.renewCertificate` now also updates the registry's cached certificate
+  metadata (`registry.attachCertificate`), matching `enroll()`'s own behavior — previously a renewed
+  node's dashboard-visible serial/expiry silently went stale.
+- Two real bugs caught by `CertificateRenewalLoopTest` before shipping: (1) `renewOnce()` built its
+  gRPC stub *after* generating a new CSR, which overwrites the in-memory key pair immediately — pairing
+  the OLD certificate with the NEW key and guaranteeing a broken TLS handshake on a cold connection;
+  fixed by capturing the stub first. (2) `ControlPlaneConnection` never invalidated its cached channel
+  after a successful renewal, so every RPC afterward (heartbeats included) kept presenting the
+  now-server-revoked old certificate; fixed via a new `invalidateCurrentChannel()`.
+- A failed renewal attempt reloads credentials from disk, restoring the last-known-good key/certificate
+  pair rather than leaving the in-memory state mismatched, and retries with backoff.
+
+### Added - Local account system and Docker-Desktop-style UI redesign
+
+- Local, on-device account system: email/password signup and login (PBKDF2WithHmacSHA256), GitHub OAuth
+  via the device flow, password reset via a one-time recovery code (no email-sending capability exists
+  in this project), and an honest terms-and-conditions disclosure of exactly what telemetry is
+  collected and where it goes.
+- Full visual redesign of the desktop app's embedded web UI: grouped collapsible sidebar, top bar with
+  theme toggle and account avatar, bottom status bar, new icon set, blue accent palette across both
+  themes — scoped to real, already-backed features only.
+
+### Added - Opt-in auto-retrain for the XGBoost risk model
+
+`AUTO_RETRAIN_ENABLED=true` starts a background thread that periodically checks for enough new real
+examples, trains a candidate model, and only promotes it if validation accuracy doesn't regress beyond
+a configurable tolerance below the live model's — otherwise the candidate is saved separately for
+review. Off by default. See `python-predictor/auto_retrain.py`.
+
+### Added - Real Alibaba PAI GPU cluster trace used for risk-model training
+
+`import_alibaba_pai_trace.py`/`enrich_alibaba_memory.py` convert the real Alibaba
+`cluster-trace-gpu-v2020` dataset (not synthetic data) into this project's training schema, including a
+genuine machine-level memory-pressure feature. Training on the real trace improved XGBoost validation
+accuracy from 0.734 (CPU-only) to 0.7407.
+
+### Security - Real CVEs fixed in pinned dependencies
+
+Prompted by GitHub's Dependabot alerts on this repo. Every version below was checked against actual
+current pinned versions and verified via authoritative sources — `api.osv.dev` for affected-version
+ranges, `repo1.maven.org`/`pypi.org`'s own package metadata for true-latest (not `search.maven.org`,
+whose index proved stale, topping out ~15 months behind). Each bump was then verified against this
+project's real test suite, not assumed compatible from release notes alone.
+
+- **`grpc.version` 1.68.0 → 1.83.1, `protobuf.version` 3.25.5 → 3.25.8** — fixes CVE-2025-55163
+  ("MadeYouReset" HTTP/2 DoS) in `grpc-netty-shaded`, present in every version before 1.75.0. Bumped to
+  latest stable, not just the minimum fix, to pick up every subsequent patch too.
+- **`jackson.version` 2.17.0 → 2.22.1** — fixes five real `jackson-databind` CVEs: CVE-2026-59888
+  (`@JsonIgnore` on a Record property bypassed via `PropertyNamingStrategy`), CVE-2026-54515
+  (case-insensitive deserialization bypasses `@JsonIgnoreProperties`), CVE-2026-54514
+  (`InetSocketAddress` deserialization triggers eager DNS resolution — SSRF), and CVE-2026-54512 /
+  CVE-2026-54513 (`PolymorphicTypeValidator` bypasses allowing arbitrary class instantiation).
+- **`bouncycastle.version` 1.78.1 → 1.85** — fixes CVE-2025-8916 (`PKIXCertPathReviewer` excessive
+  allocation DoS — directly relevant, since `CertificateAuthority` does real X.509 cert-path handling
+  for node enrolment) and CVE-2026-5588 (`CompositeVerifier` accepts an empty signature sequence as
+  valid). 1.85 is the highest version published for all three artifacts this project actually uses
+  (`bcpkix-jdk18on`, `bcprov-jdk18on`, `bcutil-jdk18on`).
+- **Python `protobuf` 5.28.3 → 5.29.6** (`python-predictor/requirements.txt`) — fixes CVE-2025-4565
+  and CVE-2026-0994 (both recursion-depth DoS bugs in the protobuf Python bindings). Verified compatible
+  with the pinned `grpcio-tools==1.68.0`'s own `protobuf<6.0dev,>=5.26.1` requirement.
+- Checked and confirmed clean (no known CVEs against the pinned version): SnakeYAML 2.2, OSHI 6.6.5,
+  both Prometheus clients (Java `simpleclient` 0.16.0, Python `prometheus-client` 0.21.0), SLF4J 2.0.16,
+  and the Python `grpcio`/`grpcio-tools` 1.68.0, `numpy` 2.1.3, `xgboost` 3.4.0, `torch` 2.13.0 pins.
+
+### Added - Distributed Docker-Compose execution and the `nx` CLI (Stages L-R)
+
+Turns the cluster into a real distributed `docker compose`-style execution engine — a whole
+multi-service project spread across whichever nodes are currently idle — plus a single-machine "cloud"
+mode and the `nx` CLI tool that drives both. See
+[README's Distributed Docker-Compose execution section](README.md#distributed-docker-compose-execution--real-opt-in-per-task-kind)
+and [ARCHITECTURE.md's Distributed container execution section](ARCHITECTURE.md#distributed-container-execution)
+for the full design.
+
+- **New `TaskKind.DOCKER_COMPOSE_SERVICE`**, additive alongside the original `PRIME_COUNT_RANGE`.
+- **Node-side execution** (`DockerComposeServiceExecutor`/`DockerComposeRunner`) — shells out to the
+  real `docker` CLI, streams real stdout/stderr back over `TaskChannel`. `DockerCapabilityDetector` now
+  confirms an actual daemon round-trip (`docker info`), not just CLI presence, before reporting a node
+  as Docker-capable.
+- **Build-from-source on a remote node** — `UploadBuildContext` (CLI → control plane, chunked,
+  SHA-256-verified) plus delivery down the node's own `TaskChannel` (`BuildContextStore`/
+  `NodeBuildContextStore`), so a node with no prior copy of the source can still build the image itself.
+- **Cross-node service networking** via a control-plane relay (`TunnelPort`/`PortRelayManager`/
+  `PortTunnelClient`) — services on different nodes reach each other through injected
+  `<PEER>_HOST`/`<PEER>_PORT` environment variables, preserving the hub-and-spoke rule (no direct
+  node-to-node connections). Not transparent DNS resolution — a named, honest limitation.
+- **Scheduling**: node-level exclusivity (a node running one compose service is excluded from a second
+  concurrent project, but other idle nodes remain eligible) and a project-status reduce
+  (`{"services": [...]}` instead of a summed number) for this task kind.
+- **Cloud/single-machine mode** (`LocalDockerExecutionServiceImpl`, opt-in via
+  `LOCAL_DOCKER_EXEC_ENABLED`) — `nx cloud up` runs a compose project on one operator-designated host
+  with zero cluster involvement, reusing the same `DockerComposeRunner`.
+- **New `cli/` Maven module (`nextgen-cli`)** — the `nx` command-line tool: `enrol`, `up`, `down`, `ps`,
+  `logs`, `nodes`, `cloud up`, modeled on `docker compose`'s own command set. Parses a documented subset
+  of `docker-compose.yml` locally (the control plane never parses YAML).
+
+### Fixed - Three real bugs found by actually running the cluster end to end
+
+A live run of a real control plane plus two real `NodeAgent` processes, a real two-service compose
+project submitted via `nx up`, surfaced three bugs no amount of unit/integration testing under mocks
+had caught:
+
+- **`nx` CLI could not talk to this project's own default deployment** — every command hard-coded
+  mutual TLS, but `docker-compose.yml`'s own default is `TLS_ENABLED=false`. The CLI now defaults to
+  plaintext (matching the server default) and takes `--tls` to opt into mTLS after `nx enrol`.
+- **`StreamJobEvents` was proto-only** — added to the schema in Stage L with an honest "today nothing
+  relays that traffic back out to a non-node caller" note, but no stage ever actually implemented the
+  server-side handler, so `nx up`/`nx logs` failed with `UNIMPLEMENTED`. Implemented for real
+  (`JobEventBroadcaster`), wired into the existing `TaskChannel` progress/result/log handling.
+- **Cross-node relay used the wrong port** — `JobCoordinator` was injecting the control plane's own
+  *externally-reserved* relay port into a service's `relay_ports` field, instead of that service's own
+  *local* published port. The two are different numbers; conflating them meant a provider node opened a
+  tunnel to the wrong local target and every relayed connection would silently fail. Fixed, with a
+  regression test asserting the two ports are distinct.
+
+Verified live afterward: a `web` service on one node reached a `database` service's real, separately
+published port on a different node through the fixed relay path, with real log lines streaming back to
+the CLI in real time. `RiskMonitor`/`ProactiveMigrator` also fired unprompted during this run — genuine
+heartbeat RTT pressure on the (heavily loaded, single) demo machine triggered a real proactive
+migration, followed by a real reactive retry after a transient Docker container-name collision (an
+artifact of two "nodes" sharing one Docker daemon in a single-machine prototype, not something that can
+happen on genuinely separate physical hosts).
+
+### Removed - Dead code, the frozen web dashboard, and leftover scratch files
+
+A cleanup pass removing things that had no live consumer and content that was never meant to be
+committed project documentation, rather than continuing to carry them as unused weight.
+
+- **`com.nextgen.desktop.v2`** (`java-control-plane/src/main/java/com/nextgen/desktop/v2/` and its
+  test package) — SQLite persistence via Hibernate, a join-approval workflow, connection tokens, and
+  `ClusterManagerServiceImpl`. Compiled and unit-tested but never constructed at runtime; `Main` only
+  ever dispatched to `ControlPlaneServer` or `NodeAgent`. Previously retained deliberately as
+  documented dead code — now deleted outright since nothing in the running system used it.
+- **`com.nextgen.desktop`** (the non-`v2` root package: `NodeConfig`, `ServerConfig`,
+  `ProcessService`, the `model`/`exception` subpackages) — the same story: no imports, no reflection
+  usage, no tests, referenced from nowhere in the running system.
+- **The Hibernate/SQLite/Jakarta Persistence dependencies** (`java-control-plane/pom.xml` and the
+  root `pom.xml`'s dependency management) and `META-INF/persistence.xml`, which existed solely for
+  the package above.
+- **The web dashboard** (`dashboard/` — static HTML/JS frontend, nginx config, its own Dockerfile).
+  Superseded by the desktop app as the maintained interface; the control plane's own `/api/nodes`
+  JSON endpoint (`DashboardApiHandler`) is untouched and still serves real data for anyone who wants
+  to point a frontend at it — only the bundled static frontend itself is gone.
+- **Leftover AI-prompt/spec scratch files**: `addition.md`, `modification.md` (repo root) and
+  `docs/codingpromt.md` — raw instruction-prompt text from earlier development phases, not
+  documentation, referenced from nowhere.
+- **`docs/TESTING.md`** — a testing guide entirely about `desktop.v2` (every example used its
+  SQLite/Hibernate/entity classes); removed alongside the code it described, since none of it
+  applied to anything else in the project.
+- **`docs/CODE_SNIPPETS.md`** — a stale, report-style annotated code reference predating most of the
+  project's real functionality (no mention of tasks, jobs, risk scoring, ML, or Raft), three of whose
+  thirteen snippets were already about the `v2`/dashboard code removed above.
+- Stray JVM crash-dump logs (`hs_err_pid*.log`) that had accumulated inside
+  `desktop-ui/src/main/java/com/nextgen/desktop/ui/view/components/` — gitignored, never tracked, but
+  cluttering the actual source directory on disk.
+- `README.md`/`ARCHITECTURE.md`/`DEVELOPMENT.md`/`CONTRIBUTING.md`/`docker-compose.yml` updated
+  to stop referencing any of the above as though it still existed.
+
+### Added - Phase-2 rebuild: the join flow actually works over the internet now
+
+The onboarding screens (`RoleSelectionView` → `ServerSetupView` / `NodeJoinView`) were the last piece
+of the UI still built entirely around a LAN-only model, flagged as a named gap at the end of Phase 1.
+
+- **Server address is now the primary way to join, not a hidden "Advanced" field.**
+  `NodeJoinView`'s hero input is a plain `host[:port]` field — the same thing that already worked
+  when buried in "Advanced: Direct IP Connection", now promoted, honestly probed for reachability
+  before anything is reported as connected, and paired with a real failure message instead of a
+  generic one. The old "Advanced" section's direct-connect button never actually checked reachability
+  at all — it fired the connect callback immediately — which is fixed as part of promoting it.
+- **The LAN-only "Server ID" quick-connect code is now explicitly secondary.** Both
+  `ServerSetupView` and `NodeJoinView` show it collapsed behind a toggle labelled "same network
+  only", with on-screen text explaining why it won't work for a node anywhere else:
+  `ServerIdCodec` can only ever encode a private, site-local IPv4 address.
+- **`ServerSetupView` now shows real, current configuration instead of a LAN IP presented as the
+  whole answer.** The port shown is `GRPC_PORT` as actually configured (previously a hardcoded
+  default that could silently disagree with what the server bound), and encryption state
+  (`TLS_ENABLED`) is displayed honestly — green when mTLS is required, an explicit amber warning
+  when it isn't. A new editable "public address" field lets the operator record the hostname a
+  node from outside the LAN should actually use; nothing can auto-detect this from inside a NAT, so
+  the screen asks rather than guessing or omitting it.
+- **The desktop app's own node-mode registration is now capable of mTLS enrolment.** Previously only
+  the standalone CLI `NodeAgent` could enrol — `DesktopApp`'s node-join path called the old plaintext
+  `registerNode` RPC unconditionally, with no way to reach the `Enroll` RPC at all. This meant the
+  Settings → Certificates panel (built in Phase 3) could never show anything but "Not enrolled" for
+  anyone actually using the product. `NodeJoinView` now has an optional enrolment-token field; when
+  filled in, the same `NodeAgent.ensureEnrolled(...)` sequence the CLI agent uses (now `public`,
+  reused rather than duplicated) runs before the connection is made, and `GrpcConnectionManager`
+  gained a `connectSecurely(...)` path that builds a real mutual-TLS channel from the resulting
+  certificate. Leaving the token blank keeps the previous plaintext behaviour unchanged.
+- **A registration failure no longer silently shows the dashboard anyway.** The previous code logged
+  the exception and proceeded to `showMainDashboard()` regardless of whether registration succeeded.
+  Both a failed connection and a failed registration now show a specific error and return the user to
+  the join screen rather than presenting a node that was never actually added to the cluster.
+
+### Added - A real error taxonomy, not one generic "control plane error"
+
+"Something went wrong" was not an error message a user could act on. Three failure shapes are now
+classified distinctly, wherever a connection is attempted:
+
+- `ErrorCategory` (`NOT_FOUND`, `NETWORK`, `OVERLOAD`, `AUTHENTICATION`, `SERVER_ERROR`, `UNKNOWN`) —
+  the fixed small set every failure is sorted into, shared by both layers that can detect one.
+- `ConnectionDiagnostics` classifies a raw socket failure — the case before any gRPC channel exists —
+  distinguishing an unresolvable hostname (typo) from connection-refused (nothing listening) from a
+  timeout (likely a firewall silently dropping packets) from a TLS handshake failure, instead of
+  treating every `IOException` identically.
+- `ControlPlaneUnavailableException` now carries a `category()` alongside its message, and gained the
+  **overload** case that was missing entirely: a `RESOURCE_EXHAUSTED` response from the Phase-3 rate
+  limiter (enrolment being throttled) is now reported as "too many attempts, try again in Ns" — reading
+  the server's `retry-after-millis` trailer when present — rather than falling into the same generic
+  bucket as an unrelated server-side crash.
+
+### Changed - Window sizing
+
+The minimum window size dropped from a hardcoded 1280×800 to 960×640. The larger floor was never
+load-bearing — every layout in the app is built from grow-priority HBox/VBox, `ScrollPane`, and a
+wrapping `FlowPane` for the node grid, specifically so the window can be usefully smaller than a full
+display, not just larger. The window was already resizable (nothing had ever called
+`setResizable(false)`); the previous floor just prevented "resizable" from meaning much on a smaller
+screen.
+
+### Changed - Architecture pivot: real nodes, not simulated ones
+
+The product is now explicitly the desktop application, in both roles, running on real machines
+anywhere on the internet — not Docker containers standing in for nodes on a shared local network.
+
+- **`docker-compose.yml` no longer starts fake nodes.** `node1`/`node2`/`node3` are removed. It now
+  brings up exactly the server side of the system: `control-plane`, `predictor`, `prometheus`. A real
+  node is an install of the desktop app in Node mode, on whatever machine and OS it's actually
+  running on, pointed at the server's address.
+- **The web dashboard is frozen, not deleted.** No further feature work goes into `dashboard/`; its
+  source is untouched and it still functions if built and served by hand. The desktop app is the one
+  actively developed interface for both roles. Its compose service was removed accordingly.
+- **`deploy/prometheus.yml` no longer lists per-node scrape targets.** They were never going to work
+  once nodes stopped being containers on the compose network: Prometheus scraping is pull-based, and
+  a real node behind home or office NAT is, by design, unreachable for an inbound scrape — the same
+  property that lets it join without opening a port also means Prometheus can't reach it directly.
+  Per-node history in the desktop UI was never affected by this; it already flowed over gRPC through
+  the control plane, which is the one thing in this architecture guaranteed to be reachable.
+- **Removed a Windows-only `java.io.tmpdir` override from all three POMs.** It pointed at
+  `${user.home}/AppData/Local/Temp`, a path that doesn't exist on macOS or Linux, and — checked
+  against this session's own build log — it was never actually effective in the first place (Maven
+  project properties aren't pushed into `System.getProperty()` for plugins running in the build JVM).
+  It was dead configuration that was also a real cross-platform hazard; removed rather than kept.
+- Cross-platform audit of the application code: confirmed no OS-specific branching exists in
+  `desktop-ui` or the live `controlplane`/`agent`/`security` packages; confirmed `PkiPaths` and
+  `AgentCredentials` build every path through `Paths.get(...)` rather than string concatenation;
+  confirmed the JavaFX dependencies carry no hardcoded platform classifier, so Maven resolves the
+  correct native artifact for whatever OS the build actually runs on.
+
+### Fixed - NodeAgent could not actually complete mTLS enrolment
+
+Found during this pivot's own verification pass, not by inspection alone: the README's WAN example
+set `NEXTGEN_ENROLLMENT_TOKEN` and expected the standalone agent to enrol itself automatically. It
+couldn't. Two separate bugs, both in `NodeAgent`, both invisible to `MutualTlsEndToEndTest` because
+that test builds its gRPC channels directly rather than calling `NodeAgent`'s own methods:
+
+- **`NodeAgent.start()` never called the `Enroll` RPC at all.** `buildChannel` read a CA certificate
+  to verify the server, but nothing generated a CSR, presented the enrolment token, or stored an
+  issued certificate. `NEXTGEN_ENROLLMENT_TOKEN` was read by no code path — set it and it did nothing.
+- **Worse: `buildChannel` used the enrolment-only (server-auth) TLS context even for the ongoing
+  operational connection.** Even a node with a certificate already sitting on disk from a previous
+  successful enrolment would never have presented it — every heartbeat would be sent with no client
+  certificate at all, and rejected by `MtlsPolicyInterceptor` the moment the server enforced policy,
+  since `SendHeartbeat` is not on the anonymous allowlist.
+- Added `NodeAgent.ensureEnrolled(...)`: loads any existing certificate, checks it against a renewal
+  window (default 7 days before expiry), and — only if needed — builds a short-lived enrolment-only
+  channel, sends a CSR with the token attached as a metadata header, stores the issued certificate,
+  and discards that channel (per the documented one-cert-auth-per-connection constraint). Fails fast
+  with a specific, actionable message rather than falling back to plaintext or hanging: missing CA
+  certificate, missing token, or a rejected token are all distinct, named failures — never a silent
+  security downgrade.
+- `buildChannel` now correctly uses `TlsConfig.mutualClientContext` with the node's own issued
+  certificate for the operational connection, and refuses outright (rather than degrading to
+  plaintext) if `TLS_ENABLED=true` but no certificate is present.
+- New `NodeAgentEnrollmentTest`, which — unlike the existing mTLS suite — calls `NodeAgent`'s actual
+  production methods against a real server: enrolment followed by a real heartbeat over the resulting
+  channel, skip-on-valid-certificate, and fail-fast paths for a missing CA cert, a missing token, and
+  a rejected token.
+
+### Known gap, not yet fixed
+
+`ServerSetupView`'s "Server ID" quick-connect encodes only a site-local IPv4 address
+(`ServerIdCodec.detectLanIp()` deliberately filters for private ranges) and cannot represent a
+hostname. It's a LAN-only convenience that was the *primary* onboarding flow; for a server reachable
+only by a public hostname it produces a code that looks valid but doesn't work. The WAN-capable path
+(hostname + port, already wired end-to-end via `CONTROL_PLANE_HOST` / `GrpcConnectionManager` / the
+"Advanced" direct-connect field) is functionally complete but is not yet the *primary* path in the
+UI. Redesigning that screen is scoped to the next UI pass, not fixed here, since it's a screen
+redesign rather than a backend change.
+
+### Added - Phase-3: mutual TLS, WAN connectivity, real charts
+
+#### Mutual TLS with token-bootstrapped enrolment
+- New `com.nextgen.security` package: `CertificateAuthority`, `CertificateDenylist`, `PkiPaths`,
+  `TlsConfig`, `PeerIdentity(Interceptor)`, `MtlsPolicyInterceptor`, `EnrollmentTokenStore`,
+  `TokenBucket`, `RateLimitInterceptor`; plus `NodeEnrollmentServiceImpl` and `AgentCredentials`.
+- **A real CA.** EC P-256 / `SHA256withECDSA`, self-bootstrapping, with a serial counter and an
+  issuance ledger. This replaces `TlsCertificateGenerator`, which did not create an X.509 certificate
+  at all — it base64'd a raw public key, wrapped it in `BEGIN CERTIFICATE` markers, and concatenated
+  **the private key** into the same string before sending the whole thing to the peer.
+- **The node's private key never leaves the node.** Enrolment is CSR-based: the agent generates its
+  own key pair and sends only a PKCS#10 request. The server verifies proof-of-possession and then
+  **discards the CSR's subject**, using the node id the consumed token was bound to — otherwise any
+  enrolling node could name itself anything it liked.
+- **Single-use 256-bit enrolment tokens**, stored only as SHA-256, consumed atomically via
+  `ConcurrentHashMap.remove` so concurrent attempts yield exactly one winner. The previous connection
+  token was 8 characters from a 32-symbol alphabet — 40 bits, brute-forceable in hours.
+- **Per-method policy enforcement.** `ClientAuth.OPTIONAL` at the transport plus an interceptor:
+  enrolment is reachable anonymously, everything else requires a valid, unexpired, unrevoked
+  certificate. The interceptor is required regardless of transport settings — without it, node A
+  could heartbeat as node B over its own valid connection.
+- **Revocation is checked per RPC, not per handshake.** A CRL would leave a compromised node working
+  on its existing long-lived channel until it happened to reconnect.
+- **Rate limiting on enrolment only**, two-tier token bucket (per source IP, then global). Per-IP is
+  checked first so an abusive source cannot drain the global budget and lock out legitimate nodes.
+  IPv6 buckets on the /64 prefix, or one host would own 2^64 buckets. `X-Forwarded-For` is
+  deliberately not trusted.
+- `TLS_ENABLED` defaults to false; interceptors then run in **audit mode**, counting what they would
+  have rejected in `controlplane_mtls_would_deny_total{reason}` so readiness is observable before
+  enforcement is switched on.
+- Key material is restricted to the owner where the filesystem allows (POSIX mode set atomically at
+  creation; owner-only ACL on Windows), with `controlplane_pki_permissions_enforced` exposing the
+  cases where it could not be.
+
+#### WAN connectivity
+- gRPC keepalive tuned for an internet path on **both** ends, as a matched pair — a client pinging
+  more often than the server permits is answered with `ENHANCE_YOUR_CALM` and disconnected, so
+  one-sided tuning makes things worse.
+- `node_heartbeat_rtt_seconds` as a **Histogram** measured agent-side with `System.nanoTime()`, plus
+  `node_clock_skew_seconds` (NTP-style estimator) and `node_reconnects_total`. A gauge of the last
+  RTT would hide the tail, which is the only interesting part of a latency distribution.
+- Documented explicitly that absolute one-way latency across unsynchronised clocks is not measurable,
+  and is therefore not reported.
+
+#### Charts and metrics plumbing
+- Added a **`prometheus` service** to `docker-compose.yml` with `deploy/prometheus.yml`, scraping the
+  control plane, all three agents and the predictor. Published on host `9464` because `9090` is
+  already the control plane's own exporter.
+- Desktop Monitoring screen rewritten around live per-node CPU and memory charts. **A node that stops
+  reporting produces a break in its line, never a segment bridging the outage** — `MetricsHistory`
+  splits each node's samples into contiguous runs and the chart renders each run separately.
+- CPU and memory are separate charts rather than one dual-axis chart: two y-scales invite comparison
+  between quantities that were never comparable, and the crossing point is an artefact of the axis
+  choice.
+
+### Fixed - Phase-1 foundation audit
+
+Correctness fixes in the control plane and node agent. Each item below was a reproducible defect in
+the shipped code, and each now has a named regression test.
+
+- **Lost-update race between registration and heartbeat.** `registerNode` did an unconditional
+  `registry.put()` of a brand-new `NodeRecord`, so a concurrent heartbeat could write into the object
+  that `put()` had just orphaned. The heartbeat was silently discarded and the node was later declared
+  `SUSPECTED_DEAD` despite an unbroken heartbeat stream. `NodeRecord` is now immutable and all
+  mutation goes through `ConcurrentHashMap.compute`/`computeIfPresent` in the new `NodeRegistry`,
+  making read-decide-write atomic per node.
+- **Re-registration wiped live telemetry.** Reconnecting reset a healthy node's CPU and memory to a
+  phantom `0%`. Registration now merges: network identity (ip/port/hostname) updates, readings carry
+  forward, and the response reports `resumed_existing`.
+- **Round-robin was neither round nor robin.** The candidate list was rebuilt from
+  `ConcurrentHashMap.values()` — unspecified iteration order that changes on resize — and indexed with
+  `Math.abs(counter.getAndIncrement()) % size` against a list whose size changed as nodes died,
+  starving some nodes and double-loading others. `Math.abs(Integer.MIN_VALUE)` is also still negative,
+  crashing the RPC after 2^31 submissions. Replaced by `RoundRobinScheduler`, which rotates over node
+  identity in a sorted snapshot and has no counter to overflow.
+- **`controlplane_active_nodes` never decreased.** It was only ever `set()` in `registerNode`, and to
+  the total registry size rather than the alive count. Replaced by `NodeRegistryCollector`, which
+  derives counts from the registry at scrape time; added `controlplane_nodes{status}` and
+  `controlplane_registered_nodes`.
+- **Liveness sweep could clobber a heartbeat that had already arrived.** The monitor iterated
+  `values()` and mutated the records it found, so it could read a stale timestamp and overwrite an
+  `ALIVE` status set moments earlier — excluding a healthy node from scheduling for a full check
+  interval. The sweep now iterates keys and mutates atomically per key.
+- **Nodes never recovered from a control-plane restart.** With an empty registry every heartbeat
+  returned `UNKNOWN_NODE` forever and the agent logged it at INFO alongside the normal case. The
+  response now carries `reregistration_required`, and the agent re-registers automatically.
+- **Unavailable OS readings were reported as real values.** `OperatingSystemMXBean.getCpuLoad()`
+  returns `-1` when no reading is available; the agent clamped that to `0.0f` and sent it as fact.
+  Readings now carry `cpu_available`/`memory_available` on the wire; the control plane preserves the
+  last known value and flags it stale; the dashboard emits `null` plus `cpuStale`/`memoryStale`
+  rather than a number. Stale values are excluded from cluster averages, and an empty cluster reports
+  `null` averages instead of `0.00`.
+- **Dashboard JSON was invalid outside English locales.** `String.format("%.2f", …)` used the default
+  locale, emitting `"cpuUsage":45,50`. All numeric formatting now uses `Locale.ROOT`, with NaN and
+  infinity guarded.
+- **Agent gave up after 10 fixed-delay retries and called `System.exit(1)`**, requiring a manual
+  restart after any transient blip. Replaced by `BackoffPolicy` — capped exponential backoff (1s → 30s)
+  with jitter — retrying indefinitely.
+
+### Fixed - Phase-2 desktop UI honesty
+
+- **An RPC failure was indistinguishable from an empty cluster.** `ControlPlaneClient.getNodes()`
+  caught `StatusRuntimeException` and returned `List.of()`, so a dead control plane rendered as
+  "0 nodes, 100% healthy". All client methods now throw `ControlPlaneUnavailableException`, carrying
+  a short user-facing reason with no stack trace in it.
+- **Every node was stamped `HEALTHY`.** `NodeMonitoringService` hardcoded the status because
+  `NodeInfo` had no status field; the "Warning" counter was therefore structurally always zero and a
+  dead node displayed as healthy. Status now maps from the real `NodeStatus` enum.
+- **Last-heartbeat time came from the local clock** (`LocalDateTime.now()`), so every node looked
+  like it had just reported. It now uses the control plane's `last_heartbeat_epoch_millis`.
+- **The "LIVE" pill was hardcoded** and lit regardless of connectivity, as was the sidebar's green
+  role badge. The pill is now bound to the real connection state and only pulses while connected.
+- **Cluster health showed a green 100% when there was nothing to measure**
+  (`total > 0 ? healthy * 100.0 / total : 100`). An empty or unreachable cluster now shows "n/a" and
+  an unfilled ring.
+- **Task progress was fabricated.** `TaskExecutionService` animated 0→100% over a fixed 3 seconds
+  *before* issuing the RPC. Progress now reflects the real submit-and-resolve lifecycle, and a task
+  the control plane could not place is reported as FAILED rather than COMPLETED.
+- **"✓ Connected" was printed without connecting.** `NodeJoinView` decoded the Server ID (pure string
+  arithmetic), slept 1200ms "for visual feedback", and declared success — any syntactically valid ID
+  appeared to connect. It now opens a real TCP connection to the control plane's port first.
+- **"Launch Server" never started a server.** `DesktopApp` reached `ControlPlaneServer` via
+  `Class.forName` while `desktop-ui` had no dependency on it, so the call always threw
+  `ClassNotFoundException`, logged a warning, and showed the dashboard anyway. The module dependency
+  now exists, startup is awaited by polling channel readiness, and failure is surfaced in the UI.
+- **`isControlPlaneConnected()` reported true for a channel that had never reached a server**, since
+  it only checked `!isShutdown()`. It now inspects the gRPC `ConnectivityState`.
+- **`connectTo()` did not reconnect** — it stored the new host and port and left the caller to find
+  out later. It now rebuilds the channels immediately.
+- **The light theme was unusable.** Views hardcoded dark hex values through inline `setStyle`, which
+  wins over stylesheet rules in JavaFX, leaving white-on-white text across cards and panels in light
+  mode. Structure now lives in a colour-free `base.css` written against tokens that `dark.css` and
+  `light.css` each define; `ThemeTokenParityTest` fails the build if the two token sets diverge.
+- **Gauge tweens fought each other.** `NodeCard.animateGauge` started a new 21-keyframe `Timeline`
+  every 2s per node per metric without stopping the previous one, and wrapped an already-FX-thread
+  callback in a redundant `Platform.runLater`.
+- **A second, divergent copy of the agent's metric sampling** lived in `DesktopApp.startHeartbeats()`
+  — including the same clamp-unavailable-CPU-to-zero bug, and SLF4J calls using `{:.1f}` placeholders
+  that SLF4J does not support. It now delegates to the shared `SystemMetricsReader`.
+
+### Added
+- A persistent **connection banner** on every screen (`ConnectionBanner` +
+  `ConnectionStateManager`), reporting connected / reconnecting / disconnected, and an "Updated Ns
+  ago" counter that visibly ages so a frozen feed cannot pass for a live one. A single failure shows
+  *reconnecting*; three consecutive failures escalate to *disconnected* and label on-screen data as
+  stale.
+- Grouped **Settings**: Connection (host, ports, live status), Monitoring (refresh interval),
+  Appearance (theme), Certificates.
+- `rpc DeregisterNode` with drain support; a drained node keeps its record and telemetry but stops
+  receiving work.
+- `NodeStatus` enum on the wire (`NodeInfo.status`). Previously `NodeInfo` had no status field at all,
+  so every gRPC consumer had to assume everything it received was healthy.
+- `NodeCapabilities` (cores, memory, disk, OS, arch, JVM) and `CertificateInfo` reported at
+  registration; heartbeat round-trip fields (`client_send_epoch_millis`, `server_receive/send`,
+  `sequence`, `agent_uptime_millis`).
+- `EnvConfig` — all ports, hosts, intervals and timeouts are now environment-configurable. See the
+  Configuration table in the README.
+- Metrics: `controlplane_reregistrations_total`, `controlplane_unknown_heartbeats_total`,
+  `controlplane_tasks_assigned_total{node_id}`, `controlplane_tasks_unplaceable_total`,
+  `controlplane_heartbeat_processing_seconds`, `controlplane_heartbeat_interarrival_seconds`,
+  `controlplane_node_status_transitions_total{from,to}`, `node_reconnects_total`,
+  `node_reregistrations_total`, `node_cpu_reading_unavailable_total`,
+  `node_memory_reading_unavailable_total`, `node_heartbeat_failures_total`.
+- Predictor calls now carry a 500ms deadline so a slow predictor cannot stall task placement, and are
+  skipped entirely when the node's telemetry is stale.
+
+### Changed
+- **JaCoCo gate raised from 10% to 60% instruction coverage, and now enforced in both modules.**
+  Generated protobuf classes are excluded from the denominator; the old bundle-wide 10% included
+  them, so machine-written code dominated the measurement and the number meant nothing. Achieved:
+  `java-control-plane` 63.9% instruction / 52.5% branch, `desktop-ui` 61.0% / 45.3%, across 379 tests
+  (up from 132).
+- Node agent's Prometheus exporter defaults to `9091` instead of `9090`, which collided with the
+  control plane's exporter when both roles ran on one host.
+- Removed `java-control-plane/src/main/proto/node_agent.proto`: it was never compiled (both modules
+  build from `proto/control_plane.proto`) and nothing referenced any type it declared.
+- `desktop-ui` now depends on `control-plane` and no longer regenerates the proto itself. The two
+  modules were compiling the same `.proto` independently, which would have put two copies of every
+  generated class on one classpath once the dependency existed.
+- The control plane's shaded jar is attached under the `all` classifier rather than replacing the
+  main artifact, so the jar `desktop-ui` consumes is a thin library rather than a fat jar containing
+  a second copy of gRPC, protobuf and Hibernate. The runnable artifact is now
+  `control-plane-<version>-all.jar` (the Dockerfile was updated to match).
+- JaCoCo added to `desktop-ui`, which previously had no coverage measurement at all. JavaFX view
+  classes are excluded — they need a running toolkit and a display, and counting them would measure
+  the wrong thing.
+- JaCoCo upgraded 0.8.12 → 0.8.15. 0.8.12 predates JDK 26 and cannot read class file major version
+  70; its agent threw on every JDK and third-party class it tried to instrument, flooding the build
+  log and intermittently failing test-class loading outright with "Unable to create test class".
+  The upgrade removes all of it (hundreds of errors → zero).
+- Desktop UI rebuilt around a design system. Chart series use a colour order validated against this
+  application's own surfaces for lightness band, chroma, colour-blind separation and contrast
+  (`Palette`); a node's colour follows the node, so a changing node list never repaints the
+  survivors. Node cards use labelled bars against a common baseline rather than circular gauges,
+  which cannot be compared across cards. Screens are built from shared `StatTile` / `TimeSeriesChart`
+  components and styled entirely through tokens.
+- `dashboard/nginx.conf` proxied `/api/` to `control-plane:8080`, but the server binds `8085` — so
+  every API call from the containerised dashboard hit a closed port and the page permanently read
+  "Disconnected". The Dockerfile's `EXPOSE` was wrong in the same way, and compose never published
+  the port at all.
+- The compose healthcheck shelled out to `bash` for a `/dev/tcp` probe inside a JRE-only image that
+  has no bash, so it could never pass. It now uses the metrics endpoint.
+- The CA now lives on a named volume. Without one, restarting the control plane mints a new CA and
+  every previously-enrolled node is instantly untrusted.
+
+### Housekeeping — repo cleanup, doc reorganization, zero-warnings pass
+
+- **`docs/ARCHITECTURE.md` moved to the repo root as `ARCHITECTURE.md`.** Every cross-reference across
+  `README.md`, `DEVELOPMENT.md`, `proto/control_plane.proto`, `docker-compose*.yml`,
+  `deploy/prometheus.yml`, and several Java source comments updated to the new path.
+- **The IEEE paper (real and draft) removed from the repository entirely** — both the current, real,
+  fully-cited paper and the earlier flawed draft (with fabricated benchmark numbers) now live outside
+  version control, since a paper submission isn't repo content. `docs/` is now empty and removed.
+- **New `ALGORITHMS.md`** — a complete, standalone technical reference for every algorithm this project
+  runs: exact formula/pseudocode, the rejected alternative and why, current real measured evidence
+  (model accuracy, live-migration latency), and default-vs-opt-in status for each. Linked from
+  `README.md` and `DEVELOPMENT.md`.
+- **Zero compiler/lint warnings.** `-Xlint:all` enabled project-wide in the root POM; fixed every real
+  warning it surfaced — missing `serialVersionUID` on three custom exceptions, a raw-type
+  `StreamObserver[]` array creation properly annotated, and a single-caller `@Deprecated` constructor
+  removed outright rather than kept around unused. `pyflakes` run across `python-predictor/`; removed
+  four genuinely-unused imports/variables (hand-written files only — generated `*_pb2_grpc.py` left
+  untouched). The one remaining numpy `RuntimeWarning` (a transient NaN from an intentionally-malformed
+  input test) is now explicitly suppressed at its one real call site rather than left as test-run noise.
+- **`.gitignore` gap closed**: the `datasets/` directory (raw, multi-GB cluster-trace source archives)
+  was never actually covered by any ignore pattern despite a comment implying it was — now it is.
+- **Three abandoned git worktrees removed** (`.claude/worktrees/agent-*`, each pinned to a stale commit
+  with zero unique history, confirmed via `git log main..<branch>` before deletion) along with their
+  now-orphaned local branches.
+- **Dead JavaFX-Scene theming code removed**, superseded by the current WebView + `web/css/tokens.css`/
+  `palette.js` frontend since the desktop app stopped rendering styled JavaFX `Scene` nodes directly:
+  `view/theme/Palette.java`, `styles/{base,dark,light}.css`, and `ThemeService`'s now-unreachable
+  `registerScene`/`applyTheme`/`getBackgroundColor`-family methods (confirmed zero production callers
+  before deletion). `ThemeService` itself stays — `isDarkMode`/`setDarkMode`/`toggleTheme` are genuinely
+  live, serving the real `/api/theme` HTTP endpoint the frontend actually reads.
+
 ### Planned
-- Consensus protocol (Raft or Paxos) for fault tolerance
-- Leader election mechanism
-- Real ML model in Predictor service
 - WebSocket support for dashboard
-- Alert system for node failures
-- Multi-region deployment support
-- Automated node recovery
-- Task queue persistence
+- Multi-region deployment support — needs its own architecture/design pass (cross-region Raft latency,
+  topology-aware scheduling); intentionally not attempted yet, see the Unreleased entry above
+- Independent-host PKI for the 3-replica Raft cluster (today's replicas share one PKI filesystem)
+
+## [3.0.0] - 2026-08-12
+
+### Added - Real Raft consensus: the control plane can now run as a fault-tolerant 3-replica cluster
+
+A hand-rolled Raft implementation (`com.nextgen.controlplane.raft`) — leader election with randomized
+timeouts, log replication with the mandatory Figure-8 commit-safety check, a durable write-ahead log,
+and a no-op entry on election per §5.4.2 — replicates node registration and the full task/job
+lifecycle across replicas. This is not a demo: `RaftSafetyInvariantTest` runs a seeded randomized
+fault-injection loop asserting single-leader-per-term, the log-matching property, and identical
+applied state across replicas at every shared index; `ReplicatedControlPlaneIntegrationTest` proves an
+actual killed leader's in-flight task survives, replicates to the new leader, and completes correctly
+once the fake node reconnects.
+
+- New package `com.nextgen.controlplane.raft`: `RaftNode` (the algorithm), `RaftLog` (durable WAL —
+  `state.meta` + `log.wal`, torn-write recovery via CRC32), `RaftStateMachine` (deterministic apply
+  over `NodeRegistry`/`TaskRegistry`/`JobRegistry`), `GrpcRaftTransport`/`RaftConsensusServiceImpl`
+  (real gRPC peer transport on `RAFT_PORT`, a separate port from the client-facing one and outside
+  `MtlsPolicyInterceptor`), `RaftLeaderRedirectInterceptor` (`UNAVAILABLE` + a leader-hint trailer for
+  a non-leader call), `ApplyClock` (every replica stamps the leader's proposal time, not its own wall
+  clock, while applying — otherwise "identical state machines" would be false from the first command).
+- `ControlPlaneWriter` seam (`DirectControlPlaneWriter` / `RaftControlPlaneWriter`): every registry
+  mutation now goes through one interface, so `RAFT_ENABLED=false` (the default) is provably a
+  zero-behavior-change path — every pre-existing test passes completely unchanged.
+- Client/agent redirect-following: `ControlPlaneEndpoints` (shared by `desktop-ui` and `NodeAgent`),
+  redirect-following in `GrpcConnectionManager`/`ControlPlaneClient` within one total 4s call budget,
+  and a new `ControlPlaneConnection` shared by `NodeAgent`'s registration/heartbeat/task-channel paths
+  — a redirect hint is followed immediately, never burning a backoff delay slot the way a genuine
+  transport failure does.
+- Fixed a real bug this stage's own headline test would otherwise have caught: `TaskChannelClient`
+  captured its outbound stream once at dispatch time and reused it after the task finished executing.
+  A rare edge case before Raft; under Raft failover it meant every leader change mid-task lost that
+  task's result. It now reads the current stream fresh at send time instead.
+- PKI issuance (`NodeEnrollmentServiceImpl`) is gated to the current leader via the same redirect
+  interceptor, since `CertificateAuthority.nextSerial()` is a JVM-local lock that three replicas
+  sharing a PKI volume would otherwise race on. A new `ROLE=pki-init` one-shot mode bootstraps the
+  CA/server certificate once, before any replica starts, closing that same race at a different layer.
+- `HeartbeatMonitor`/`RiskMonitor`/the dashboard API are leader-gated; a freshly-elected leader waits
+  out a grace period before its first heartbeat sweep (its inherited `NodeRecord`s have frozen
+  timestamps a follower never advanced); a new `QueuedTaskReconciler` redispatches (or honestly fails)
+  any task orphaned `QUEUED` by a leader dying between accept and dispatch.
+- Opt-in 3-replica topology: `docker-compose.raft.yml` (a separate file — `docker compose up` on the
+  plain `docker-compose.yml` still starts exactly one control plane, unchanged) plus
+  `deploy/prometheus.raft.yml`.
+- Named scope cut, stated plainly rather than silently left inconsistent: the enrollment TOKEN store
+  itself is not Raft-replicated — it stays leader-local, in-memory; a token minted by a since-superseded
+  leader is not honoured by a new one, so `ControlPlaneServer` re-mints configured tokens on every
+  become-leader edge rather than stranding an unenrolled node indefinitely. Full token replication
+  (mint/consume as a linearizable Raft command) is real, named future work.
+
+### Added - Real XGBoost failure-risk classifier
+
+`train_risk_model.py --model-type xgboost` (now the default) replaces the previous hand-rolled NumPy
+logistic regression with real gradient-boosted trees (the raw `xgboost.Booster` API — no scikit-learn
+dependency added). `features.py` expanded from 8 to 14 features (rolling mean/max, an RTT trend slope,
+staleness). Model persistence gained a `modelType` field, so an existing logistic-regression model file
+on disk keeps working unchanged. Still opt-in via `ML_RISK_SCORER_ENABLED=true`, and still honestly
+reports `model_trained=false` until an operator actually runs training against real accumulated data.
+
+### Added - Real LSTM load forecasting
+
+New `load_forecast_model.py` / `train_load_forecast_model.py` / `load_forecast_store.py`: a
+`torch.nn.LSTM` forecasting 5-minute-horizon CPU/memory from the raw telemetry sequence
+`RiskSnapshotLogger` already collects (opt-in, `RISK_SNAPSHOT_LOGGING_ENABLED=true`) — a genuinely
+different capability from the XGBoost classifier above, which only ever sees collapsed trend scalars.
+`MLRiskScorer` folds a crossed-threshold forecast into its risk score as one more bounded, composable
+signal, never dominating the classifier's own assessment.
 
 ## [2.0.0] - 2026-04-30
 

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  One-time per-machine setup for building/running desktop-ui — see DEVELOPMENT.md's
+  "Build & Launch" section for why this is needed (javafx-web requires the JDK 21-only
+  `jdk.jsobject` module regardless of whichever JDK you otherwise use day to day).
+
+  Copy this file to ~/.m2/toolchains.xml (create the file if it doesn't already exist there;
+  if it does, merge this <toolchain> entry into your existing <toolchains> list instead of
+  overwriting it) and edit <jdkHome> to point at a real JDK 21 install on your machine.
+  This file itself is NOT read from here — Maven only ever looks in ~/.m2/toolchains.xml,
+  which is why it isn't committed as that file directly: the right path is different on
+  every machine.
+
+  This does not change your system's default `java`/JAVA_HOME. Maven Toolchains exists
+  specifically so a project can require a different JDK than whichever one is currently
+  running Maven, for exactly this kind of case.
+-->
+<toolchains>
+    <toolchain>
+        <type>jdk</type>
+        <provides>
+            <version>21</version>
+        </provides>
+        <configuration>
+            <!-- EDIT ME: point this at a real JDK 21 install on your machine. -->
+            <jdkHome>C:\Program Files\Java\jdk-21.0.11</jdkHome>
+        </configuration>
+    </toolchain>
+</toolchains>

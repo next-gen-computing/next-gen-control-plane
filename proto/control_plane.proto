@@ -5,13 +5,395 @@ option java_package = "com.nextgen.proto";
 option java_outer_classname = "ControlPlaneProto";
 
 // ────────────────────────────────────────────────
+// SCHEMA CONVENTIONS — read before editing
+// ────────────────────────────────────────────────
+// 1. `option java_multiple_files` MUST stay absent. Enabling it renames every
+//    generated type from ControlPlaneProto.NodeInfo to NodeInfo and breaks
+//    every import in BOTH java-control-plane and desktop-ui, which each
+//    regenerate this file independently.
+// 2. Every enum value MUST carry its enum's name as a prefix. In proto3,
+//    enum VALUE names live in the enclosing package scope (C++ scoping rules),
+//    not the enum's scope — two enums with a bare UNKNOWN value fail protoc.
+// 3. On the Java side, protobuf generates an UNRECOGNIZED constant for every
+//    proto3 enum. Always write a `default ->` arm when switching over one, and
+//    never call .getNumber() on a value that could be UNRECOGNIZED (it throws).
+// 4. All changes here must be additive. Never reuse or renumber a field.
+
+// ────────────────────────────────────────────────
+// Enums
+// ────────────────────────────────────────────────
+
+// Liveness of a node as tracked by the control plane's HeartbeatMonitor.
+enum NodeStatus {
+  NODE_STATUS_UNSPECIFIED    = 0;
+  NODE_STATUS_ALIVE          = 1;
+  NODE_STATUS_SUSPECTED_DEAD = 2;
+  NODE_STATUS_DRAINING       = 3;
+  NODE_STATUS_DEREGISTERED   = 4;
+}
+
+// Outcome of an enrollment attempt. Returned in-band rather than as a gRPC status so a client can
+// tell a rejected token apart from a transport failure.
+enum EnrollmentResult {
+  ENROLLMENT_RESULT_UNSPECIFIED        = 0;
+  ENROLLMENT_RESULT_ISSUED             = 1;
+  ENROLLMENT_RESULT_INVALID_TOKEN      = 2;
+  ENROLLMENT_RESULT_TOKEN_EXPIRED      = 3;
+  ENROLLMENT_RESULT_TOKEN_ALREADY_USED = 4;
+  ENROLLMENT_RESULT_CSR_INVALID        = 5;
+  ENROLLMENT_RESULT_NODE_ID_MISMATCH   = 6;
+  ENROLLMENT_RESULT_DISABLED           = 7;
+}
+
+// What kind of real, executable work a TaskDispatch carries. Each value needs a matching executor
+// registered node-side (see com.nextgen.agent.task.TaskExecutor) before a node can run it.
+enum TaskKind {
+  TASK_KIND_UNSPECIFIED            = 0;
+  TASK_KIND_PRIME_COUNT_RANGE      = 1;
+  // Stage L: one service from a distributed docker-compose-style project — see
+  // com.nextgen.agent.task.DockerComposeServiceExecutor. payload_json documents the resolved spec.
+  TASK_KIND_DOCKER_COMPOSE_SERVICE = 2;
+}
+
+// Lifecycle of one real task, tracked server-side in TaskRegistry. Distinct from NodeStatus: a task's
+// state says what's happening to a unit of work, not whether a machine is reachable.
+enum TaskState {
+  TASK_STATE_UNSPECIFIED = 0;
+  TASK_STATE_QUEUED      = 1; // accepted, no node chosen/reachable yet
+  TASK_STATE_DISPATCHED  = 2; // sent down a node's task channel, no ack yet
+  TASK_STATE_RUNNING     = 3; // node confirmed it started executing
+  TASK_STATE_COMPLETED   = 4;
+  TASK_STATE_FAILED      = 5;
+  TASK_STATE_MIGRATING   = 6; // proactively being moved to a different node before its old node died
+}
+
+// Lifecycle of a job — N real sub-tasks (see TaskDispatch) sharing one job_id, reduced server-side
+// once every sub-task is terminal. Distinct from TaskState: a job's state summarises many tasks.
+enum JobState {
+  JOB_STATE_UNSPECIFIED     = 0;
+  JOB_STATE_RUNNING         = 1; // at least one sub-task is not yet terminal
+  JOB_STATE_COMPLETED       = 2; // every sub-task succeeded
+  JOB_STATE_PARTIAL_FAILURE = 3; // some sub-tasks succeeded, some failed even after their one retry
+  JOB_STATE_FAILED          = 4; // every sub-task failed even after retry — nothing usable came back
+}
+
+// ────────────────────────────────────────────────
+// Node Enrollment Service
+//
+// Trust bootstrap: a new node proves itself ONCE with an out-of-band enrollment token and receives
+// a CA-signed client certificate in exchange. From then on the certificate carries authenticated
+// transport; the token is consumed and cannot be reused.
+//
+// This is the only service reachable without a client certificate. Everything else requires mutual
+// TLS — see ARCHITECTURE.md.
+// ────────────────────────────────────────────────
+service NodeEnrollment {
+  rpc Enroll           (EnrollRequest) returns (EnrollResponse);
+  rpc RenewCertificate (RenewRequest)  returns (EnrollResponse);
+}
+
+message EnrollRequest {
+  string           node_id       = 1;
+  // PKCS#10 certificate signing request, PEM-encoded. The node's private key NEVER leaves the node;
+  // only the CSR (which carries the public key and a proof of possession) is transmitted.
+  bytes            csr_pem       = 2;
+  NodeCapabilities capabilities  = 3;
+  string           agent_version = 4;
+
+  // NOTE: the enrollment token is deliberately NOT a field here. It travels in the gRPC metadata
+  // header "x-nextgen-enrollment-token" so it stays out of proto toString()/TextFormat dumps, which
+  // surface in gRPC debug logs and exception messages.
+}
+
+message EnrollResponse {
+  EnrollmentResult result                   = 1;
+  bytes            client_certificate_pem   = 2;
+  bytes            ca_certificate_pem       = 3;
+  string           certificate_serial       = 4;  // hex, no 0x prefix
+  int64            not_before_epoch_millis  = 5;
+  int64            not_after_epoch_millis   = 6;
+  int64            renew_after_epoch_millis = 7;  // ~2/3 of the lifetime
+  string           message                  = 8;
+}
+
+message RenewRequest {
+  string node_id = 1;
+  bytes  csr_pem = 2;  // authenticated by the CURRENT client certificate over mTLS; no token needed
+}
+
+// ────────────────────────────────────────────────
 // Control Plane Service (Java, port 50051)
 // ────────────────────────────────────────────────
 service ControlPlaneService {
-  rpc RegisterNode  (NodeInfo)          returns (RegisterResponse);
-  rpc SendHeartbeat (HeartbeatRequest)  returns (HeartbeatResponse);
-  rpc SubmitTask    (TaskRequest)       returns (TaskResponse);
-  rpc GetNodes      (Empty)            returns (NodeList);
+  rpc RegisterNode   (NodeInfo)           returns (RegisterResponse);
+  rpc SendHeartbeat  (HeartbeatRequest)   returns (HeartbeatResponse);
+  rpc SubmitTask     (TaskRequest)        returns (TaskResponse);
+  rpc GetNodes       (Empty)              returns (NodeList);
+  rpc DeregisterNode (DeregisterRequest)  returns (DeregisterResponse);
+
+  // Real task dispatch/execution/result path (see java-control-plane's com.nextgen.controlplane.task
+  // package). SubmitTask above only ever picked a node and returned a confirmation string — nothing
+  // executed anywhere. This is that missing execution path.
+  //
+  // Node-initiated, exactly like every other connection in this system: a node opens this stream once
+  // after registering and keeps it open. The server pushes TaskDispatch/TaskCancel down it whenever it
+  // wants — this is what lets the server reach a node without the node ever listening on a socket.
+  rpc TaskChannel   (stream NodeTaskEvent) returns (stream ServerTaskCommand);
+  rpc GetTaskStatus (TaskStatusRequest)    returns (TaskStatusResponse);
+  rpc ListTasks     (Empty)                returns (TaskList);
+
+  // A job is N of the above sub-tasks sharing one job_id, split and dispatched together, reduced into
+  // one combined result once every sub-task is terminal. Not a second dispatch path: jobs are built
+  // entirely out of the same TaskRegistry/TaskDispatcher SubmitTask already uses (see
+  // com.nextgen.controlplane.job.JobCoordinator) — SubmitTask is the degenerate case of a job with
+  // exactly one sub-task and no job_id at all.
+  rpc SubmitJob    (JobRequest)       returns (JobSubmitResponse);
+  rpc GetJobStatus (JobStatusRequest) returns (JobStatusResponse);
+  rpc ListJobs     (Empty)            returns (JobList);
+
+  // Stage PP: a rolling update. Reuses JobStatusRequest's shape verbatim (just a job_id) — no new
+  // message needed. Re-applies the CURRENT job's own supersedes_job_id chain one step back, replacing
+  // this job's replicas with the ones it itself superseded, one at a time, gated the same way a forward
+  // update is (see JobCoordinator.rollbackJob).
+  rpc RollbackJob (JobStatusRequest) returns (JobSubmitResponse);
+
+  // Stage J: answerable by ANY replica (leader or follower) — the discovery mechanism a client uses
+  // to find the current leader proactively, rather than only learning it from a rejected write's
+  // trailer. NOT gated by RaftLeaderRedirectInterceptor, unlike every other RPC on this service.
+  rpc GetClusterStatus (Empty) returns (ClusterStatus);
+
+  // Stage L: makes the already-existing TaskCancel mechanism (previously server-internal only, used
+  // by ProactiveMigrator) reachable by an external caller — e.g. the nx CLI's `nx down`.
+  rpc CancelTask (TaskCancelRequest) returns (TaskCancelResponse);
+
+  // Stage L: live fan-out of a job's TaskProgressEvent/TaskResultEvent/TaskLogEvent traffic to an
+  // external caller (e.g. the nx CLI following `nx up`/`nx logs`) as it arrives over the relevant
+  // nodes' TaskChannel streams — today nothing relays that traffic back out to a non-node caller.
+  rpc StreamJobEvents (JobEventsRequest) returns (stream TaskEvent);
+
+  // Stage N: CLI → control plane build-context upload (a tarball, chunked). The server assembles the
+  // chunks, hashes what it actually wrote, and stages it for later delivery to whichever node ends up
+  // building it — see com.nextgen.controlplane.task.BuildContextStore. The response's sha256 is what
+  // the CLI actually received back — it compares that against the hash it computed locally BEFORE
+  // uploading, to catch a corrupted transfer immediately rather than at build time on some node three
+  // hops later.
+  rpc UploadBuildContext (stream BuildContextChunk) returns (UploadBuildContextResponse);
+
+  // Stage NN: operator-set secret, encrypted at rest server-side (see
+  // com.nextgen.controlplane.task.SecretStore) and shipped to a node only at dispatch time, over the
+  // node's own already-open TaskChannel — see SecretMaterial's Javadoc. Never persisted in plaintext,
+  // never delivered as a container env var (docker inspect/ps reveal those); mounted as a file instead.
+  rpc SetSecret (SetSecretRequest) returns (Empty);
+
+  // Stage O: cross-node service networking relay. A node opens this ONCE per one of its own service's
+  // ports that a peer service on another node may need to reach, and keeps it open for as long as that
+  // service runs — real TCP bytes for every concurrent consumer connection multiplex over this one
+  // stream, distinguished by tunnel_id (see TunnelFrame's own Javadoc). Node-initiated, like every
+  // other stream here — this is what lets two services on different nodes reach each other without
+  // either node ever accepting a direct inbound connection from the other.
+  rpc TunnelPort (stream TunnelFrame) returns (stream TunnelFrame);
+
+  // Stage T: real Docker container/image/volume/network observability + container control, cluster-
+  // wide. Node-initiated, like every other stream here — a node with docker_available=true opens this
+  // once and reports its real `docker ps -a`/etc. output on an interval; the server pushes container
+  // start/stop/restart/rm commands down the same stream. A separate concern from task dispatch — never
+  // gated on a node's TaskChannel state.
+  rpc DockerStateChannel (stream NodeDockerEvent) returns (stream ServerDockerCommand);
+
+  // Point-in-time aggregate across every currently-connected Docker-capable node — what the desktop UI
+  // and `nx images`/`nx volumes`/`nx networks`/`nx container ls` poll.
+  rpc GetDockerResources (Empty) returns (DockerResourcesSnapshot);
+
+  // Routes a start/stop/restart/rm request to the node that owns container_id, over its already-open
+  // DockerStateChannel — fails honestly ("node has no open Docker-state channel") if none is open,
+  // never silently no-ops.
+  rpc ControlDockerContainer (DockerControlCommand) returns (DockerControlResult);
+}
+
+// ────────────────────────────────────────────────
+// Stage Q: Local Docker Execution ("cloud"/single-machine mode)
+//
+// Deliberately separate from ControlPlaneService and NEVER gated by RaftLeaderRedirectInterceptor: it
+// is tied to THIS ONE HOST's Docker daemon specifically, not to "whichever replica is cluster leader" —
+// wrapping it in the leader-redirect interceptor would silently redirect a caller to a different
+// replica that might not even have Docker installed. Only registered on the server at all when
+// LOCAL_DOCKER_EXEC_ENABLED=true AND a real Docker daemon is confirmed reachable at startup (see
+// com.nextgen.agent.DockerCapabilityDetector) — disabled/unavailable means this RPC is UNIMPLEMENTED,
+// never a silent no-op. `nx cloud up` talks to this directly, bypassing RegisterNode/TaskChannel/
+// NodeRegistry/TaskRegistry/JobRegistry/Raft entirely — no cluster involved at all.
+// ────────────────────────────────────────────────
+service LocalDockerExecution {
+  rpc RunCompose (stream ComposeCommand) returns (stream ComposeEvent);
+}
+
+message ComposeCommand {
+  oneof command {
+    ComposeUpRequest   up   = 1;
+    ComposeDownRequest down = 2;
+  }
+}
+
+message ComposeUpRequest {
+  string project_name = 1;
+  string compose_yaml = 2;
+  bool   build         = 3;
+}
+
+message ComposeDownRequest {
+  string project_name = 1;
+}
+
+message ComposeEvent {
+  oneof event {
+    TaskLogEvent     log      = 1;
+    ComposeFinished  finished = 2;
+  }
+}
+
+message ComposeFinished {
+  bool   success = 1;
+  string message = 2;
+}
+
+// ────────────────────────────────────────────────
+// Stage T: real Docker resource observability + container control (cluster/distributed mode only —
+// the LocalDockerExecution "cloud"/single-machine service above is untouched). A node with
+// docker_available=true (see NodeCapabilities, DockerCapabilityDetector) opens ONE more node-initiated
+// stream, exactly like TaskChannel: it periodically reports its REAL `docker ps -a`/`docker images`/
+// `docker volume ls`/`docker network ls` output (never guessed, never synthesized — see
+// DockerStateCollector), and the server pushes container start/stop/restart/rm commands down that
+// same stream. No inbound port on the node, ever — same hub-and-spoke rule as everywhere else here.
+// ────────────────────────────────────────────────
+
+message DockerContainerInfo {
+  string container_id            = 1;
+  string name                    = 2;
+  string image                   = 3;
+  string status                  = 4;  // docker's own short status word, e.g. "running", "exited"
+  string state_text              = 5;  // docker's human-readable status line, e.g. "Up 5 minutes"
+  repeated string ports          = 6;  // e.g. "0.0.0.0:8080->80/tcp", already formatted by docker
+  int64  created_at_epoch_millis = 7;
+  string command                 = 8;
+  // Stage MM: "healthy"/"unhealthy"/"starting", regex-extracted from docker's own Status string (see
+  // DockerStateCollector) — empty when the container declares no HEALTHCHECK at all, never fabricated.
+  string health_status            = 9;
+  // Stage RR: live per-container resource usage from `docker stats --no-stream`, collected as a
+  // separate call alongside `docker ps -a` (see DockerStateCollector). All default to 0 (proto3's own
+  // unset-numeric default) whenever that specific stats collection failed/timed out for this report —
+  // never fabricated, and never blocks the static fields above from still being reported honestly.
+  float  cpu_percent              = 10;
+  int64  memory_usage_bytes       = 11;
+  int64  memory_limit_bytes       = 12;
+  float  memory_percent           = 13;
+  int64  net_rx_bytes             = 14;
+  int64  net_tx_bytes             = 15;
+}
+
+message DockerImageInfo {
+  string image_id                = 1;
+  string repository              = 2;
+  string tag                     = 3;
+  int64  size_bytes              = 4;
+  int64  created_at_epoch_millis = 5;
+}
+
+message DockerVolumeInfo {
+  string name       = 1;
+  string driver      = 2;
+  string mountpoint  = 3;
+}
+
+message DockerNetworkInfo {
+  string network_id = 1;
+  string name        = 2;
+  string driver      = 3;
+  string scope       = 4;
+}
+
+// One node's full Docker inventory snapshot, reported fresh on every DockerStateChannel report tick —
+// never a diff, so a dropped/reconnected stream self-heals on the very next report with no special
+// resync logic needed.
+message DockerStateReport {
+  repeated DockerContainerInfo containers = 1;
+  repeated DockerImageInfo     images     = 2;
+  repeated DockerVolumeInfo    volumes    = 3;
+  repeated DockerNetworkInfo   networks   = 4;
+  int64 reported_at_epoch_millis          = 5;
+}
+
+// First message a node must send after opening DockerStateChannel, mirroring TaskChannelHello — binds
+// the stream to a node identity before the server trusts anything else on it.
+message DockerChannelHello {
+  string node_id = 1;
+}
+
+enum DockerControlAction {
+  DOCKER_CONTROL_ACTION_UNSPECIFIED = 0;
+  DOCKER_CONTROL_ACTION_START       = 1;
+  DOCKER_CONTROL_ACTION_STOP        = 2;
+  DOCKER_CONTROL_ACTION_RESTART     = 3;
+  DOCKER_CONTROL_ACTION_REMOVE      = 4;  // any resource_kind: container/image/volume/network
+  // Stage FF: image/volume/network write actions, extending Stage T's list-only coverage of those
+  // three resource types (containers already had full start/stop/restart/rm).
+  DOCKER_CONTROL_ACTION_PULL        = 5;  // images only — resource_id is the image reference to pull
+  DOCKER_CONTROL_ACTION_TAG         = 6;  // images only — resource_id=source ref, tag_target=new tag
+  DOCKER_CONTROL_ACTION_CREATE      = 7;  // volumes/networks only — resource_id is the name to create
+}
+
+// Stage FF: which real Docker resource a DockerControlCommand targets — defaults to CONTAINER so every
+// pre-Stage-FF caller (container_id + START/STOP/RESTART/REMOVE) is byte-identical and unaffected.
+enum DockerResourceKind {
+  DOCKER_RESOURCE_KIND_CONTAINER = 0;
+  DOCKER_RESOURCE_KIND_IMAGE     = 1;
+  DOCKER_RESOURCE_KIND_VOLUME    = 2;
+  DOCKER_RESOURCE_KIND_NETWORK   = 3;
+}
+
+message DockerControlCommand {
+  string command_id          = 1;
+  string node_id             = 2;
+  string container_id        = 3;  // CONTAINER kind only — see resource_id for image/volume/network
+  DockerControlAction action = 4;
+  // Stage FF, additive: resource_kind defaults to CONTAINER (proto3 enum-zero default), so this field
+  // is simply absent/zero on every existing container-control call site — zero behavior change.
+  DockerResourceKind resource_kind = 5;
+  string resource_id               = 6;  // image ref / volume name / network name for non-container kinds
+  string tag_target                = 7;  // TAG only: the new tag applied to resource_id
+}
+
+message DockerControlResult {
+  string command_id = 1;
+  bool   ok         = 2;
+  string message    = 3;
+}
+
+// Node → Server, over the one long-lived DockerStateChannel stream a node opens once it has confirmed
+// docker_available=true — a non-Docker node never opens this stream at all.
+message NodeDockerEvent {
+  oneof event {
+    DockerChannelHello  hello  = 1;
+    DockerStateReport   report = 2;
+    DockerControlResult result = 3;
+  }
+}
+
+// Server → Node, pushed on that same stream — the only way the server ever reaches a node here too.
+message ServerDockerCommand {
+  oneof command {
+    DockerControlCommand control = 1;
+  }
+}
+
+message NodeDockerState {
+  string node_id           = 1;
+  DockerStateReport report = 2;
+}
+
+// GetDockerResources' response — every currently-connected Docker-capable node's latest reported
+// snapshot. A node that has never reported (or isn't Docker-capable) is simply absent from this list —
+// never present with a fabricated empty report.
+message DockerResourcesSnapshot {
+  repeated NodeDockerState nodes = 1;
 }
 
 // ────────────────────────────────────────────────
@@ -45,43 +427,458 @@ message NodeInfo {
   string hostname = 4;
   float  cpu      = 5;
   float  memory   = 6;
+
+  // ── added: liveness and provenance, so consumers no longer have to guess ──
+  NodeStatus       status                      = 7;
+  int64            last_heartbeat_epoch_millis = 8;
+  NodeCapabilities capabilities                = 9;
+  CertificateInfo  certificate                 = 10;
+  string           agent_version               = 11;
+  int64            registered_at_epoch_millis  = 12;
+  // When true, `cpu` is the last KNOWN-GOOD reading, not a current one: the
+  // agent could not read the OS metric on its most recent heartbeat. Consumers
+  // MUST render this as unavailable rather than displaying the stale number.
+  bool             cpu_stale                   = 13;
+  bool             memory_stale                = 14;
+
+  // ── added: mirrors the LATEST heartbeat's power signals (see HeartbeatRequest below) — the
+  // predictive risk scorer's real input, surfaced here purely for dashboard display. A desktop with
+  // no battery reports battery_available=false forever, never a fabricated reading. ──
+  float            battery_percent             = 15;
+  bool             battery_available           = 16;
+  bool             charging                    = 17;
+  bool             charging_known              = 18;
+  bool             on_ac_power                 = 19;
+  bool             on_ac_power_known           = 20;
+
+  // ── added: predictive risk, advisory alongside `status` — see RiskMonitor. A node can be
+  // simultaneously ALIVE (confirmed reachable) and at_risk (predicted to fail soon); this is never
+  // folded into `status`, which stays purely reactive. risk_assessed_at_epoch_millis == 0 means no
+  // assessment has run for this node yet. ──
+  float            risk_score                  = 21;
+  bool             at_risk                     = 22;
+  int64            risk_assessed_at_epoch_millis = 23;
+  // Stage RR, additive: the reasons behind the risk score above (e.g. "memory non-decreasing and above
+  // 90% ceiling") — real strings from RuleBasedRiskScorer/MLRiskScorer, never fabricated; empty when
+  // risk_assessed_at_epoch_millis == 0 (no assessment has run yet). Mirrors NodeInfo's existing
+  // "advisory alongside status" precedent above, just surfacing the WHY, not only the score.
+  repeated string  risk_reasons                = 24;
+  // Stage RR, additive: the agent's own previously-measured heartbeat RTT, relayed one tick late — see
+  // HeartbeatRequest's identical fields below for why this is never a fabricated one-way measurement.
+  // Overlaid from NodeHistory's latest sample exactly like the battery/AC-power fields above.
+  double           previous_rtt_seconds        = 25;
+  bool             previous_rtt_available      = 26;
 }
 
 message RegisterResponse {
   string status      = 1;
   string assigned_id = 2;
+
+  // ── added ──
+  int32 heartbeat_interval_millis = 3;
+  int64 server_epoch_millis       = 4;  // lets the agent estimate clock skew
+  bool  resumed_existing          = 5;  // true => an existing record was merged, not created
 }
 
 message HeartbeatRequest {
   string node_id = 1;
   float  cpu     = 2;
   float  memory  = 3;
+
+  // ── added ──
+  int64 client_send_epoch_millis = 4;
+  int64 sequence                 = 5;
+  int64 agent_uptime_millis      = 6;
+  // False => the corresponding value field is meaningless and MUST NOT be
+  // recorded as a reading. This is what keeps an unavailable OS metric from
+  // being reported as a real-looking 0.0.
+  bool  cpu_available            = 7;
+  bool  memory_available         = 8;
+
+  // ── added: real signals for predictive (not reactive) failure detection — see NodeHistory and
+  // the future risk scorer. Every "known"/"available" flag follows the same rule as cpu_available
+  // above: false means the value field is meaningless, never a substituted number. ──
+  float  battery_percent          = 9;
+  bool   battery_available        = 10;
+  bool   charging                 = 11;
+  bool   charging_known           = 12;
+  bool   on_ac_power              = 13;
+  bool   on_ac_power_known        = 14;
+  // The RTT of the PREVIOUS heartbeat this agent sent, relayed one tick late — never a fabricated
+  // one-way latency (see NodeAgent's own Javadoc on why that can't be measured honestly). This is a
+  // real number the agent already measured locally with System.nanoTime(); reporting it here just
+  // gives the server a latency-TREND signal it didn't have before. False on an agent's first-ever
+  // heartbeat, when no previous RTT exists yet.
+  double previous_rtt_seconds     = 15;
+  bool   previous_rtt_available   = 16;
 }
 
 message HeartbeatResponse {
-  string status = 1;
+  string status = 1;  // "OK" | "UNKNOWN_NODE"
+
+  // ── added ──
+  int64      server_receive_epoch_millis = 2;
+  int64      server_send_epoch_millis    = 3;
+  int32      suggested_interval_millis   = 4;
+  // Set when the control plane has no record for this node (e.g. it restarted).
+  // The agent must re-run RegisterNode rather than heartbeating into the void.
+  bool       reregistration_required     = 5;
+  NodeStatus node_status                 = 6;
+}
+
+message DeregisterRequest {
+  string node_id = 1;
+  string reason  = 2;
+  bool   drain   = 3;  // true => mark DRAINING and stop scheduling, but keep the record
+}
+
+message DeregisterResponse {
+  bool   accepted = 1;
+  string message  = 2;
+}
+
+// Static hardware/platform facts about a node, reported at registration.
+message NodeCapabilities {
+  int32  cpu_cores          = 1;
+  int64  total_memory_bytes = 2;
+  int64  total_disk_bytes   = 3;
+  string os_name            = 4;
+  string os_arch            = 5;
+  string jvm_version        = 6;
+  map<string, string> labels = 7;
+
+  // ── added: Stage L — real detection only, never assumed. A node that fails `docker --version`/
+  // `docker compose version` at startup (see DockerCapabilityDetector) leaves these at proto default
+  // (false/empty) and remains a fully ordinary, non-Docker worker for every other task kind. ──
+  bool   docker_available       = 8;
+  string docker_version         = 9;
+  string docker_compose_version = 10;
+}
+
+// Public, non-secret facts about a node's client certificate. Never carries
+// key material.
+message CertificateInfo {
+  string serial                 = 1;  // hex, no 0x prefix
+  string subject_cn             = 2;
+  int64  not_after_epoch_millis = 3;
+  bool   revoked                = 4;
 }
 
 message TaskRequest {
   string task_id  = 1;
   string payload  = 2;
+  TaskKind kind   = 3;
 }
 
+// SubmitTask is an ACCEPTANCE, not a final result — ControlPlaneClient attaches a 4s deadline to
+// every call, so a real (potentially long-running) task cannot be awaited synchronously here. Poll
+// GetTaskStatus (or subscribe to the desktop UI's task stream) for the real outcome.
 message TaskResponse {
   string assigned_node = 1;
   string result        = 2;
+}
+
+// ────────────────────────────────────────────────
+// Real task dispatch/execution/result path
+// ────────────────────────────────────────────────
+
+// Node → Server, over the one long-lived TaskChannel stream a node opens after registering.
+message NodeTaskEvent {
+  oneof event {
+    TaskChannelHello   hello    = 1;
+    TaskProgressEvent  progress = 2;
+    TaskResultEvent    result   = 3;
+    // Stage L: incremental stdout/stderr lines, e.g. from a running docker-compose service.
+    TaskLogEvent       log      = 4;
+  }
+}
+
+// Server → Node, pushed on that same stream whenever the server has work (or a cancellation) for
+// this node. This is the only way the server ever reaches a node — no inbound port, no change to
+// the hub-and-spoke model.
+message ServerTaskCommand {
+  oneof command {
+    TaskDispatch dispatch = 1;
+    TaskCancel   cancel   = 2;
+    // Stage N: the server-to-node push half of build-context delivery — sent as a sequence of chunks
+    // immediately before the TaskDispatch whose payload_json references this context_id.
+    BuildContextChunk build_context_chunk = 3;
+    // Stage NN: one decrypted secret, sent unchunked (secrets are small, unlike a build context)
+    // immediately before the TaskDispatch whose payload_json's "secrets" list references this name.
+    SecretMaterial secret_material = 4;
+  }
+}
+
+// First message a node must send after opening the stream, so the server can bind this stream to a
+// node identity before trusting anything else it sends.
+message TaskChannelHello {
+  string node_id = 1;
+}
+
+message TaskProgressEvent {
+  string    task_id = 1;
+  TaskState state    = 2;
+}
+
+message TaskResultEvent {
+  string task_id     = 1;
+  bool   success      = 2;
+  string result_json  = 3;
+  string error        = 4;
+}
+
+// Stage L: incremental output — TaskProgressEvent/TaskResultEvent cannot carry this (one is a bare
+// state, the other a single terminal result). One line per event; sequence lets a consumer detect a
+// dropped/reordered line even across a reconnecting stream.
+message TaskLogEvent {
+  string task_id                 = 1;
+  string line                    = 2;
+  bool   stderr                  = 3;
+  int64  sequence                = 4;
+  int64  emitted_at_epoch_millis = 5;
+}
+
+message TaskDispatch {
+  string   task_id                    = 1;
+  string   job_id                     = 2; // empty for a standalone task (Stage A); set for a job sub-task (Stage B)
+  TaskKind kind                       = 3;
+  string   payload_json               = 4;
+  int64    dispatched_at_epoch_millis = 5;
+}
+
+message TaskCancel {
+  string task_id = 1;
+  string reason  = 2;
+}
+
+message TaskStatusRequest {
+  string task_id = 1;
+}
+
+message TaskStatusResponse {
+  string    task_id                  = 1;
+  TaskState state                    = 2;
+  string    assigned_node            = 3;
+  string    result_json              = 4;
+  string    error                    = 5;
+  int64     updated_at_epoch_millis  = 6;
+  // Stage RR, additive: real fields TaskRecord already carries server-side, exposed here so a
+  // cluster-wide task view (desktop-ui) can show what kind of work is running and whether it's been
+  // retried/migrated, without adding a second RPC.
+  TaskKind  kind                      = 7;
+  string    job_id                    = 8;
+  int32     attempt                   = 9;
+  int64     created_at_epoch_millis   = 10;
+  int64     dispatched_at_epoch_millis = 11;
+}
+
+message TaskList {
+  repeated TaskStatusResponse tasks = 1;
+}
+
+// Stage L: the external entry point for a TaskCancel — see ControlPlaneService.CancelTask.
+message TaskCancelRequest {
+  string task_id = 1;
+  string reason  = 2;
+}
+
+message TaskCancelResponse {
+  bool   accepted = 1;
+  string message  = 2;
+}
+
+// ────────────────────────────────────────────────
+// Stage N: build-context shipping
+//
+// A `build:` context lives on the operator's machine, where the CLI runs — never reachable directly
+// by a node under this project's hub-and-spoke rule (nodes only ever dial OUT; nothing dials IN). The
+// context travels operator → control plane (UploadBuildContext, this file) → node's already-open
+// TaskChannel (ServerTaskCommand.build_context_chunk), reusing connections that already exist rather
+// than opening new ones. See com.nextgen.controlplane.task.BuildContextStore and
+// com.nextgen.agent.task.NodeBuildContextStore for the two ends.
+// ────────────────────────────────────────────────
+
+// One chunk of a build-context tarball. Reused for both halves of the transfer: CLI → control plane
+// (context_id is ignored/may be empty — one UploadBuildContext stream is always exactly one context,
+// the server assigns the id) and control plane → node (context_id set, since a node's single
+// TaskChannel could in principle have more than one context queued for delivery).
+message BuildContextChunk {
+  string context_id = 1;
+  bytes  data        = 2;
+  bool   last         = 3;
+}
+
+message UploadBuildContextResponse {
+  string context_id = 1;
+  int64  size_bytes  = 2;
+  // The SHA-256 of what the server actually wrote to disk, hex-encoded. The CLI compares this against
+  // the hash it computed locally BEFORE uploading — a mismatch means the upload was corrupted, caught
+  // immediately here rather than at build time on some node three hops later.
+  string sha256      = 3;
+}
+
+// ────────────────────────────────────────────────
+// Stage NN: secrets — encrypted at rest server-side, decrypted and shipped to a node only at dispatch
+// time over its own already-open TaskChannel, mounted as a file (never a container env var).
+//
+
+message SetSecretRequest {
+  string name  = 1;
+  bytes  value = 2;
+}
+
+// Node → this is what TaskDispatcher.shipSecrets sends, once per referenced secret, immediately before
+// the TaskDispatch that references it — see DockerComposeServiceExecutor for how it's mounted.
+message SecretMaterial {
+  string name  = 1;
+  bytes  value = 2;
+}
+
+// ────────────────────────────────────────────────
+// Stage O: cross-node service networking (control-plane relay)
+//
+// This does NOT reproduce Docker Compose's transparent same-daemon DNS resolution — a service reaches
+// a peer on another node via env-injected host/port (12-factor style), never a bare service name. See
+// com.nextgen.controlplane.task.PortRelayManager (server side, owns the ephemeral TCP listener a
+// consumer connects to) and com.nextgen.agent.task.PortTunnelClient (node side, the outbound stream a
+// service's own node opens once per port it needs reachable).
+// ────────────────────────────────────────────────
+
+// One multiplexed byte-relay stream (TunnelPort) carries frames for many concurrent consumer TCP
+// connections at once, distinguished by tunnel_id — one node's single relay stream serves arbitrarily
+// many consumers. The (project_name, service_name) this stream backs travels as the FIRST frame's
+// data, JSON-encoded ({"project_name","service_name"}), with tunnel_id left empty — a hello, exactly
+// like NodeTaskEvent.hello establishes TaskChannel's node identity before anything else on that stream
+// is trusted. A tunnel_id appearing for the first time after that (in either direction) implicitly
+// opens it; closed=true (data may be empty) ends it — no explicit "open" message needed since the
+// first frame for a given id always carries real data to forward.
+message TunnelFrame {
+  string tunnel_id = 1;
+  bytes  data       = 2;
+  bool   closed      = 3;
+}
+
+// Stage L: see ControlPlaneService.StreamJobEvents.
+message JobEventsRequest {
+  string job_id = 1;
+  // Stage FF: false (the default) replays whatever this job's bounded server-side history buffer
+  // currently holds (see JobEventBroadcaster) and closes the stream immediately — matching docker/
+  // kubectl's own `logs` default of "show what's there and exit," not an indefinite tail. true keeps
+  // the stream open indefinitely afterward, following live events exactly like today's pre-Stage-FF
+  // behavior (`nx up`/`nx update`'s attached mode always sets this).
+  bool follow = 2;
+}
+
+// One event relayed live from a node's TaskChannel out to an external StreamJobEvents caller.
+message TaskEvent {
+  string task_id                 = 1;
+  int64  emitted_at_epoch_millis = 2;
+  oneof event {
+    TaskProgressEvent progress = 3;
+    TaskResultEvent   result   = 4;
+    TaskLogEvent      log      = 5;
+  }
+}
+
+// ────────────────────────────────────────────────
+// Job = N sub-tasks + server-side reduce
+// ────────────────────────────────────────────────
+
+message JobRequest {
+  string   job_id         = 1;
+  TaskKind kind            = 2;
+  // Kind-specific. For TASK_KIND_PRIME_COUNT_RANGE: {"range_start": N, "range_end": M}, split into
+  // sub_task_count contiguous sub-ranges.
+  string   payload_json    = 3;
+  int32    sub_task_count  = 4;
+  // Stage PP: a rolling update, not a fresh job — set to the job_id this one replaces. Only meaningful
+  // for TASK_KIND_DOCKER_COMPOSE_SERVICE; empty means "an ordinary new job" (every existing caller).
+  string   supersedes_job_id = 5;
+}
+
+message JobSubmitResponse {
+  string job_id         = 1;
+  string result         = 2; // "ACCEPTED — n sub-task(s) dispatched" or "FAILED — <reason>"
+  int32  sub_task_count  = 3; // the actual count used — may be clamped below what was requested
+}
+
+message JobStatusRequest {
+  string job_id = 1;
+}
+
+message JobStatusResponse {
+  string          job_id                  = 1;
+  JobState        state                   = 2;
+  int32           sub_task_count          = 3;
+  int32           completed_count         = 4;
+  int32           failed_count            = 5;
+  string          combined_result_json    = 6;
+  int64           updated_at_epoch_millis = 7;
+  repeated string task_ids                = 8; // so any sub-task can be inspected via GetTaskStatus
+}
+
+message JobList {
+  repeated JobStatusResponse jobs = 1;
 }
 
 message PredictionRequest {
   string node_id = 1;
   float  cpu     = 2;
   float  memory  = 3;
+
+  // ── added: Stage G — the recent trend window, oldest first, mirroring NodeHistory.Sample
+  // field-for-field. A single cpu/memory point is too little for the same trend features
+  // RuleBasedRiskScorer already uses (rising RTT, memory-pressure trend); this lets the predictor
+  // engineer the same ones instead of being limited to instantaneous values. ──
+  repeated TrendSample recent_samples = 4;
+}
+
+// One heartbeat's worth of trend-relevant signals, mirroring NodeHistory.Sample exactly — added for
+// Stage G so PredictionRequest can carry a real trend window, not just a single cpu/memory point.
+message TrendSample {
+  int64  recorded_at_epoch_millis = 1;
+  float  cpu_percent              = 2;
+  bool   cpu_available            = 3;
+  float  memory_percent           = 4;
+  bool   memory_available         = 5;
+  float  battery_percent          = 6;
+  bool   battery_available        = 7;
+  bool   charging                 = 8;
+  bool   charging_known           = 9;
+  bool   on_ac_power              = 10;
+  bool   on_ac_power_known        = 11;
+  double previous_rtt_seconds     = 12;
+  bool   previous_rtt_available   = 13;
 }
 
 message PredictionResponse {
   float  predicted_load       = 1;
   float  failure_probability  = 2;
   string recommendation       = 3;
+
+  // ── added: Stage G — the honest "do you actually have a trained model" signal. Callers (see
+  // MLRiskScorer) must key off this, never off failure_probability's numeric value alone, when
+  // deciding whether to trust the response — a value of 0.12 means nothing if model_trained=false. ──
+  bool   model_trained          = 4;
+  int32  training_example_count = 5;
+
+  // added: Stage H — which algorithm actually produced this prediction ("logistic_regression" or
+  // "xgboost"), so callers (see MLRiskScorer) can surface it for transparency. Empty when
+  // model_trained is false.
+  string model_type             = 6;
+
+  // added: Stage I — the LSTM load-forecast model, independent of the failure classifier above (it can
+  // be trained/untrained on its own schedule). predicted_load (field 1) becomes this forecast's
+  // predicted_cpu_percent / 100.0 once load_model_trained is true; predicted_memory_percent is the
+  // matching memory forecast. Both are 0 and MUST be ignored when load_model_trained is false.
+  float  predicted_memory_percent           = 7;
+  bool   load_model_trained                 = 8;
+  int32  load_model_training_example_count  = 9;
+
+  // How far ahead this forecast looks (matches --horizon-seconds at training time). 0 when
+  // load_model_trained is false. Lets callers (see MLRiskScorer) state the forecast's timeframe rather
+  // than presenting a bare percentage with no "by when".
+  float  horizon_seconds                    = 10;
 }
 
 message Empty {}
@@ -172,6 +969,191 @@ message CommandRequest {
   string node_id = 1;
   string command = 2;
   string payload = 3;
+}
+
+// ────────────────────────────────────────────────
+// Raft state-machine commands (Stage J)
+//
+// A StateCommand records a DECISION the leader already made — never the inputs to one (see RaftNode's
+// class Javadoc: "a Raft command records a decision that has already been made"). apply() on every
+// replica is a pure, deterministic replay: each command maps to one thin call into
+// NodeRegistry/TaskRegistry/JobRegistry, unchanged. Heartbeats, risk/capacity scoring, and the
+// round-robin cursor are deliberately NOT commands — they stay leader-local (see
+// ARCHITECTURE.md's "Consensus & replication" section).
+// ────────────────────────────────────────────────
+
+message StateCommand {
+  // The leader's own clock at proposal time — every replica's apply() uses THIS value (via
+  // ApplyClock) instead of its own wall clock, so timestamps stamped into NodeRecord/TaskRecord/
+  // JobRecord are byte-identical across replicas. Application code never reads this directly.
+  int64 proposed_at_epoch_millis = 1;
+
+  oneof command {
+    RegisterNodeCommand register_node = 2;
+    DeregisterNodeCommand deregister_node = 3;
+    SubmitTaskCommand submit_task = 4;
+    SubmitJobCommand submit_job = 5;
+    DispatchTaskCommand dispatch_task = 6;
+    MarkTaskRunningCommand mark_task_running = 7;
+    MarkTaskCompletedCommand mark_task_completed = 8;
+    MarkTaskFailedCommand mark_task_failed = 9;
+    MarkTaskMigratingCommand mark_task_migrating = 10;
+    MarkTaskRetriedCommand mark_task_retried = 11;
+    CompleteJobCommand complete_job = 12;
+    // Hash only — never the plaintext token (see ARCHITECTURE.md's mTLS trust model). Single-use
+    // enforcement is a linearizable compare-and-delete, which only Raft (not a shared filesystem
+    // volume) can provide across replicas. Wired in Stage J's PKI work, not this proto's first users.
+    MintEnrollmentTokenCommand mint_enrollment_token = 13;
+    ConsumeEnrollmentTokenCommand consume_enrollment_token = 14;
+  }
+}
+
+message RegisterNodeCommand {
+  string node_id = 1;
+  string ip = 2;
+  int32 port = 3;
+  string hostname = 4;
+  NodeCapabilities capabilities = 5;
+  string agent_version = 6;
+}
+
+message DeregisterNodeCommand {
+  string node_id = 1;
+  bool drain = 2;
+}
+
+message SubmitTaskCommand {
+  string task_id = 1;
+  TaskKind kind = 2;
+  string payload_json = 3;
+  string assigned_node_id = 4; // empty when no alive node existed at submission time
+}
+
+// One sub-task of a job, fully pre-computed by the leader (id, payload, and the node it's going to)
+// before this command is ever proposed — see the file header note on why a job is one command, not a
+// CreateJob followed by N separate dispatch commands.
+message JobSubTaskPlan {
+  string task_id = 1;
+  string payload_json = 2;
+  string assigned_node_id = 3; // empty when no alive node existed at submission time
+}
+
+message SubmitJobCommand {
+  string job_id = 1;
+  TaskKind kind = 2;
+  repeated JobSubTaskPlan sub_tasks = 3;
+}
+
+message DispatchTaskCommand {
+  string task_id = 1;
+  string node_id = 2;
+}
+
+message MarkTaskRunningCommand {
+  string task_id = 1;
+  string reporting_node_id = 2;
+}
+
+message MarkTaskCompletedCommand {
+  string task_id = 1;
+  string reporting_node_id = 2;
+  string result_json = 3;
+}
+
+message MarkTaskFailedCommand {
+  string task_id = 1;
+  string reporting_node_id = 2;
+  string error = 3;
+}
+
+message MarkTaskMigratingCommand {
+  string task_id = 1;
+}
+
+message MarkTaskRetriedCommand {
+  string job_id = 1;
+  string task_id = 2;
+}
+
+message CompleteJobCommand {
+  string job_id = 1;
+  JobState final_state = 2;
+  string combined_result_json = 3;
+}
+
+message MintEnrollmentTokenCommand {
+  string node_id = 1;
+  string token_hash = 2;
+  int64 expires_at_epoch_millis = 3;
+}
+
+message ConsumeEnrollmentTokenCommand {
+  string token_hash = 1;
+}
+
+// One replica's view of the Raft cluster — answerable by ANY replica (leader or follower), so a client
+// can discover the current leader by asking instead of only learning it from a rejected write. See
+// RaftLeaderRedirectInterceptor. In a non-Raft deployment (RAFT_ENABLED=false, the default single-server
+// setup), the one server always answers role="LEADER", term=0 — there is no cluster to describe.
+message ClusterStatus {
+  string node_id = 1;
+  string role = 2; // "LEADER" | "FOLLOWER" | "CANDIDATE"
+  int64 term = 3;
+  string leader_id = 4;
+  string leader_address = 5;
+  int64 commit_index = 6;
+  int64 last_applied = 7;
+  repeated string members = 8;
+}
+
+// ────────────────────────────────────────────────
+// Raft consensus service (Stage J) — replica-to-replica ONLY, on RAFT_PORT, never on the node-facing
+// GRPC_PORT and never behind MtlsPolicyInterceptor (a peer replica is not a node and presents no node
+// certificate). Mirrors RaftTransport's plain-Java request/reply shapes field-for-field; GrpcRaftTransport
+// is the only code that converts between the two.
+// ────────────────────────────────────────────────
+
+service RaftConsensus {
+  rpc RequestVote (RaftRequestVoteRequest) returns (RaftRequestVoteResponse);
+  rpc AppendEntries (RaftAppendEntriesRequest) returns (RaftAppendEntriesResponse);
+}
+
+message RaftLogEntryProto {
+  int64 index = 1;
+  int64 term = 2;
+  bytes command = 3;
+}
+
+message RaftRequestVoteRequest {
+  int64 term = 1;
+  string candidate_id = 2;
+  int64 last_log_index = 3;
+  int64 last_log_term = 4;
+}
+
+message RaftRequestVoteResponse {
+  int64 term = 1;
+  bool vote_granted = 2;
+}
+
+message RaftAppendEntriesRequest {
+  int64 term = 1;
+  string leader_id = 2;
+  string leader_address = 3;
+  int64 prev_log_index = 4;
+  int64 prev_log_term = 5;
+  repeated RaftLogEntryProto entries = 6;
+  int64 leader_commit = 7;
+}
+
+message RaftAppendEntriesResponse {
+  int64 term = 1;
+  bool success = 2;
+  int64 match_index = 3;
+  // conflict_term == 0 means "my log was too short, retry directly at conflict_index"; otherwise
+  // conflict_index is the first index of conflict_term in the follower's log. See RaftNode's Javadoc.
+  int64 conflict_index = 4;
+  int64 conflict_term = 5;
 }
 
 message CommandResponse {

@@ -22,26 +22,22 @@ class TaskModelTest {
 
     @Test
     void testTaskCreation() {
-        TaskModel task = new TaskModel("task-1", TaskModel.TaskType.MATRIX_MULTIPLICATION, "1024");
+        TaskModel task = new TaskModel("task-1", TaskModel.TaskType.PRIME_COUNT_RANGE, "1024");
         assertEquals("task-1", task.getId());
-        assertEquals(TaskModel.TaskType.MATRIX_MULTIPLICATION, task.getType());
+        assertEquals(TaskModel.TaskType.PRIME_COUNT_RANGE, task.getType());
         assertEquals("1024", task.getPayload());
         assertEquals(TaskModel.TaskStatus.PENDING, task.getStatus());
     }
 
     @Test
     void testTypeDisplayName() {
-        assertEquals("Matrix Multiplication",
-                new TaskModel("t", TaskModel.TaskType.MATRIX_MULTIPLICATION, "").getTypeDisplayName());
-        assertEquals("Large Array Sum",
-                new TaskModel("t", TaskModel.TaskType.LARGE_ARRAY_SUM, "").getTypeDisplayName());
-        assertEquals("Prime Counter",
-                new TaskModel("t", TaskModel.TaskType.PRIME_COUNTER, "").getTypeDisplayName());
+        assertEquals("Prime Count (Range)",
+                new TaskModel("t", TaskModel.TaskType.PRIME_COUNT_RANGE, "").getTypeDisplayName());
     }
 
     @Test
     void testStatusDisplayName() {
-        TaskModel task = new TaskModel("t", TaskModel.TaskType.MATRIX_MULTIPLICATION, "");
+        TaskModel task = new TaskModel("t", TaskModel.TaskType.PRIME_COUNT_RANGE, "");
         assertEquals("Pending", task.getStatusDisplayName());
 
         task.setStatus(TaskModel.TaskStatus.RUNNING);
@@ -56,7 +52,7 @@ class TaskModelTest {
 
     @Test
     void testProgressTracking() {
-        TaskModel task = new TaskModel("t", TaskModel.TaskType.LARGE_ARRAY_SUM, "");
+        TaskModel task = new TaskModel("t", TaskModel.TaskType.PRIME_COUNT_RANGE, "");
         assertEquals(0.0, task.getProgress());
 
         task.setProgress(50.0);

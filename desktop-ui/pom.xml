@@ -17,11 +17,28 @@
     <name>Desktop UI</name>
     <description>Modern JavaFX desktop application for Next-Gen Control Plane</description>
 
-    <properties>
-        <java.io.tmpdir>${user.home}/AppData/Local/Temp</java.io.tmpdir>
-    </properties>
+    <!-- See java-control-plane/pom.xml for why the Windows-only java.io.tmpdir property that
+         used to live here was removed rather than kept: it never worked and was actively
+         wrong on macOS/Linux. -->
 
     <dependencies>
+        <!--
+          Control plane core. This provides three things the UI needs:
+            1. The generated com.nextgen.proto.* classes, so this module no longer regenerates the
+               same proto independently. It must not — two copies of ControlPlaneProto on one
+               classpath is a duplicate-class hazard.
+            2. ControlPlaneServer, which DesktopApp's "Launch Server" starts. It previously reached
+               for it via Class.forName without a dependency, so in the shaded jar that call ALWAYS
+               threw ClassNotFoundException, logged a warning, and showed a dashboard for a server
+               that was never started.
+            3. Shared configuration (EnvConfig) and the NodeStatus domain enum.
+        -->
+        <dependency>
+            <groupId>com.nextgen</groupId>
+            <artifactId>control-plane</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- gRPC Client -->
         <dependency>
             <groupId>io.grpc</groupId>
@@ -50,6 +67,12 @@
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-fxml</artifactId>
+        </dependency>
+        <!-- WebView: hosts the HTML/CSS/JS frontend served by LocalUiServer. Version is already
+             managed centrally in the root pom's dependencyManagement. -->
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-web</artifactId>
         </dependency>
 
         <!-- Jackson -->
@@ -103,22 +126,45 @@
         </extensions>
 
         <plugins>
-            <!-- Maven Clean: Force delete on Windows -->
+            <!--
+              No maven-clean-plugin override here. This module no longer runs
+              protobuf-maven-plugin (see the note below), so the protoc-dependencies fileset a
+              previous version of this file cleaned is dead configuration: that directory is
+              never created by this module's build anymore.
+            -->
+
+            <!--
+              Requires a JDK 21 Maven Toolchain — this is what makes `mvn javafx:run` work
+              correctly even when Maven itself is running on a newer JDK. javafx-web's module
+              descriptor requires the `jdk.jsobject` module (backs WebView's Java<->JavaScript
+              bridge), which was removed from the JDK in later feature releases (confirmed gone
+              by JDK 26; present through at least JDK 21) — javafx-maven-plugin's `run` goal
+              otherwise launches the app with whatever JVM is running Maven, which fails at boot
+              with `FindException: Module jdk.jsobject not found` on such a JVM.
+              javafx-maven-plugin has built-in support for picking up whatever toolchain this
+              plugin selects (via ToolchainManager) and launching the app with THAT JDK instead
+              — so the system-default `java`/JAVA_HOME never needs to change; only compiling and
+              running desktop-ui specifically routes through JDK 21.
+              One-time setup this depends on: a `~/.m2/toolchains.xml` declaring a JDK 21
+              install. See DEVELOPMENT.md's "Build & Launch" section.
+            -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-clean-plugin</artifactId>
+                <artifactId>maven-toolchains-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>toolchain</goal>
+                        </goals>
+                    </execution>
+                </executions>
                 <configuration>
-                    <retryOnError>true</retryOnError>
-                    <failOnError>false</failOnError>
-                    <filesets>
-                        <fileset>
-                            <directory>${project.build.directory}/protoc-dependencies</directory>
-                            <includes>
-                                <include>**/*</include>
-                            </includes>
-                            <followSymlinks>false</followSymlinks>
-                        </fileset>
-                    </filesets>
+                    <toolchains>
+                        <jdk>
+                            <version>21</version>
+                        </jdk>
+                    </toolchains>
                 </configuration>
             </plugin>
 
@@ -128,49 +174,86 @@
                 <artifactId>maven-compiler-plugin</artifactId>
             </plugin>
 
-            <!-- Protobuf + gRPC code generation -->
+            <!--
+              NOTE: protobuf-maven-plugin and build-helper are deliberately absent here. The
+              generated com.nextgen.proto.* classes now arrive via the control-plane dependency.
+              Re-adding local generation would put two copies of every proto class on one classpath.
+            -->
+
+            <!-- Surefire: matches the control-plane module so JaCoCo's argLine is honoured.
+                 forkedProcessTimeoutInSeconds is a real, previously-missing safety net: this module's
+                 full suite runs in well under two minutes locally, so a real CI run (a JavaFX toolkit
+                 startup or a headless-environment quirk neither of which shows up on a machine with a
+                 real display) hanging for HOURS instead of failing was a genuine, confirmed problem —
+                 GitHub Actions' own default job timeout is 6 hours, so nothing would have stopped it
+                 otherwise. Bounded generously (well over 10x the normal local runtime) so this only
+                 ever fires on a genuine hang, never a slow-but-legitimate CI run, and Surefire dumps
+                 the forked JVM's thread state on timeout — turning a silent multi-hour stall into an
+                 immediate, diagnosable failure with a real stack trace. -->
             <plugin>
-                <groupId>org.xolstice.maven.plugins</groupId>
-                <artifactId>protobuf-maven-plugin</artifactId>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <protocArtifact>
-                        com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}
-                    </protocArtifact>
-                    <pluginId>grpc-java</pluginId>
-                    <pluginArtifact>
-                        io.grpc:protoc-gen-grpc-java:${grpc.version}:exe:${os.detected.classifier}
-                    </pluginArtifact>
-                    <protoSourceRoot>${project.basedir}/../proto</protoSourceRoot>
-                    <clearOutputDirectory>false</clearOutputDirectory>
-                    <attachProtoSources>false</attachProtoSources>
-                    <checkStaleness>false</checkStaleness>
+                    <argLine>@{argLine} -XX:+EnableDynamicAgentLoading -Dnet.bytebuddy.experimental=true -Djava.awt.headless=true</argLine>
+                    <forkedProcessTimeoutInSeconds>600</forkedProcessTimeoutInSeconds>
+                    <forkedProcessExitTimeoutInSeconds>30</forkedProcessExitTimeoutInSeconds>
+                </configuration>
+            </plugin>
+
+            <!-- JaCoCo: this module previously had no coverage measurement at all -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <!-- JavaFX view classes need a running toolkit and a display; they are
+                             verified by running the app, not by unit tests. Counting them would
+                             measure the wrong thing. -->
+                        <exclude>com/nextgen/desktop/ui/view/**</exclude>
+                        <exclude>com/nextgen/desktop/ui/DesktopApp*</exclude>
+                    </excludes>
                 </configuration>
                 <executions>
                     <execution>
+                        <id>prepare-agent</id>
                         <goals>
-                            <goal>compile</goal>
-                            <goal>compile-custom</goal>
+                            <goal>prepare-agent</goal>
                         </goals>
                     </execution>
-                </executions>
-            </plugin>
-
-            <!-- Build Helper: add generated sources to classpath for IDE -->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>build-helper-maven-plugin</artifactId>
-                <executions>
                     <execution>
-                        <id>add-source</id>
-                        <phase>generate-sources</phase>
+                        <id>report</id>
+                        <phase>test</phase>
                         <goals>
-                            <goal>add-source</goal>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>check</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>check</goal>
                         </goals>
                         <configuration>
-                            <sources>
-                                <source>${project.build.directory}/generated-sources/protobuf/java</source>
-                                <source>${project.build.directory}/generated-sources/protobuf/grpc-java</source>
-                            </sources>
+                            <rules>
+                                <rule>
+                                    <element>BUNDLE</element>
+                                    <limits>
+                                        <!-- Measured on the client/model/service layer (views are
+                                             excluded above): 61.0% instruction / 45.3% branch at
+                                             the time this gate was set. -->
+                                        <limit>
+                                            <counter>INSTRUCTION</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.60</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.42</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
                         </configuration>
                     </execution>
                 </executions>
@@ -199,7 +282,11 @@
                         <configuration>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>com.nextgen.desktop.ui.DesktopApp</mainClass>
+                                    <!-- Launcher, not DesktopApp: see Launcher's Javadoc. A Main-Class that
+                                         directly extends javafx.application.Application makes the java
+                                         launcher demand JavaFX on the module path, which "java -jar" on a
+                                         shaded jar never provides — it fails before main() even runs. -->
+                                    <mainClass>com.nextgen.desktop.ui.Launcher</mainClass>
                                 </transformer>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                             </transformers>

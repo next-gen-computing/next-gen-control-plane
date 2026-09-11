@@ -29,7 +29,9 @@ RUN mvn package -DskipTests -q
 FROM eclipse-temurin:21-jre
 
 WORKDIR /app
-COPY --from=builder /workspace/java-control-plane/target/control-plane-1.0-SNAPSHOT.jar /app/control-plane.jar
+# The "-all" classifier is the shaded, runnable jar. The unclassified artifact is the thin library
+# jar that desktop-ui depends on, and has no bundled dependencies.
+COPY --from=builder /workspace/java-control-plane/target/control-plane-1.0-SNAPSHOT-all.jar /app/control-plane.jar
 
 # Default env vars (overridden by docker-compose)
 ENV ROLE=server
@@ -37,6 +39,8 @@ ENV NODE_ID=default
 ENV CONTROL_PLANE_HOST=control-plane
 ENV PREDICTOR_HOST=predictor
 
-EXPOSE 50051 9090 8080
+# 8085 is the dashboard/API port the server actually binds (DASHBOARD_PORT).
+# This previously declared 8080, which nothing has ever listened on.
+EXPOSE 50051 9090 8085
 
 ENTRYPOINT ["java", "-jar", "/app/control-plane.jar"]

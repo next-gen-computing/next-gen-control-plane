@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B0F19"/>
+      <stop offset="100%" stop-color="#131C2E"/>
+    </linearGradient>
+    <linearGradient id="node" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60A5FA"/>
+      <stop offset="100%" stop-color="#2563EB"/>
+    </linearGradient>
+    <radialGradient id="hubGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#3B82F6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- App-icon backdrop: a squircle, the shape convention shared by Windows/macOS/Linux icon sets -->
+  <rect x="0" y="0" width="512" height="512" rx="108" ry="108" fill="url(#bg)"/>
+
+  <!-- Hub glow -->
+  <circle cx="256" cy="256" r="150" fill="url(#hubGlow)"/>
+
+  <!-- Spokes: hub-and-spoke, not mesh — this is the app's real topology (nodes dial the control
+       plane; they never connect directly to each other), not decorative network clip art. -->
+  <g stroke="url(#node)" stroke-width="14" stroke-linecap="round" opacity="0.9">
+    <line x1="256" y1="256" x2="150" y2="150"/>
+    <line x1="256" y1="256" x2="362" y2="150"/>
+    <line x1="256" y1="256" x2="150" y2="362"/>
+    <line x1="256" y1="256" x2="362" y2="362"/>
+  </g>
+
+  <!-- Satellite nodes -->
+  <circle cx="150" cy="150" r="34" fill="url(#node)"/>
+  <circle cx="362" cy="150" r="34" fill="url(#node)"/>
+  <circle cx="150" cy="362" r="34" fill="url(#node)"/>
+  <circle cx="362" cy="362" r="34" fill="url(#node)"/>
+
+  <!-- Hub (the control plane) -->
+  <circle cx="256" cy="256" r="58" fill="url(#node)"/>
+  <circle cx="256" cy="256" r="58" fill="none" stroke="#F8FAFC" stroke-width="4" opacity="0.35"/>
+</svg>

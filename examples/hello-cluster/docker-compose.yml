@@ -1,0 +1,20 @@
+# Minimal example for `nx up` — see README.md's "Executing a Project on the Cluster" section.
+#
+# Only the compose subset this project's CLI actually parses is used here: image, build.context /
+# build.dockerfile, command, environment, ports (see cli/src/main/java/com/nextgen/cli — this is
+# not a general docker-compose.yml implementation). Two services on purpose:
+#   - web    demonstrates a plain pre-built image landing on an idle node.
+#   - worker demonstrates `nx up --build`: this directory's own Dockerfile is shipped to and built
+#            on a node that never had it on local disk.
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    environment:
+      GREETING: "hello from the NextGen cluster"

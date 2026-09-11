@@ -1,0 +1,4 @@
+# Dev/test-only dependencies — kept separate from requirements.txt so the deployable predictor image
+# never installs a test framework it doesn't need.
+-r requirements.txt
+pytest==9.1.1
