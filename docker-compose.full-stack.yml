@@ -47,8 +47,8 @@ services:
   # ── Java Control Plane (gRPC + Spring REST API) ─────────────────────────────
   java-cp:
     build:
-      context: ./java-control-plane
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: java-control-plane/Dockerfile
     environment:
       ROLE:                       server
       GRPC_PORT:                  "50051"

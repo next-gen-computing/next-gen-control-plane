@@ -34,17 +34,28 @@ import org.springframework.context.annotation.ComponentScan;
         "com.nextgen.controlplane.ws"
 })
 public class ControlPlaneSpringApp {
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(ControlPlaneSpringApp.class);
 
     /**
      * Called from {@link com.nextgen.controlplane.ControlPlaneServer#start()} once the gRPC
      * server is fully initialised. Starts the Spring context (REST API + DB + WebSocket) in
-     * a non-blocking way — Spring's embedded Tomcat runs on its own threads and the gRPC
-     * server continues to block its own main thread via {@code grpcServer.awaitTermination()}.
+     * a non-blocking background daemon thread — Spring's embedded Tomcat runs on its own threads and
+     * the gRPC server continues to block its own main thread via {@code grpcServer.awaitTermination()}.
      */
     public static void startSpringContext(String[] args) {
-        SpringApplication app = new SpringApplication(ControlPlaneSpringApp.class);
-        // Run in background — do not let Spring's own lifecycle block the gRPC main thread
-        app.setRegisterShutdownHook(true);
-        app.run(args);
+        Thread springThread = new Thread(() -> {
+            try {
+                LOG.info("Starting Spring Boot REST API + DB context...");
+                SpringApplication app = new SpringApplication(ControlPlaneSpringApp.class);
+                app.setRegisterShutdownHook(true);
+                app.run(args);
+                LOG.info("✅ Spring Boot REST API + DB + WebSocket context started successfully");
+            } catch (Throwable t) {
+                LOG.error("Spring Boot context initialization failed (gRPC server and core control plane remain operational): {}",
+                        t.getMessage(), t);
+            }
+        }, "spring-context-bootstrap");
+        springThread.setDaemon(true);
+        springThread.start();
     }
 }

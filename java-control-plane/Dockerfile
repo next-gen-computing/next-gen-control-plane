@@ -28,6 +28,8 @@ RUN mvn package -DskipTests -q
 # ── Stage 2: Runtime ───────────────────────────
 FROM eclipse-temurin:21-jre
 
+RUN apt-get update && apt-get install -y --no-install-recommends wget curl && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 # The "-all" classifier is the shaded, runnable jar. The unclassified artifact is the thin library
 # jar that desktop-ui depends on, and has no bundled dependencies.
@@ -40,7 +42,7 @@ ENV CONTROL_PLANE_HOST=control-plane
 ENV PREDICTOR_HOST=predictor
 
 # 8085 is the dashboard/API port the server actually binds (DASHBOARD_PORT).
-# This previously declared 8080, which nothing has ever listened on.
-EXPOSE 50051 9090 8085
+# 8080 is the Spring Boot REST API (/api/v1) and STOMP WebSocket (/ws).
+EXPOSE 50051 9090 8085 8080
 
 ENTRYPOINT ["java", "-jar", "/app/control-plane.jar"]
