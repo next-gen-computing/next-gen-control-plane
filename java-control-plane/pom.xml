@@ -169,7 +169,6 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <version>2.3.232</version>
-            <scope>test</scope>
         </dependency>
 
         <!-- Testing -->
@@ -259,7 +258,6 @@
                     <clearOutputDirectory>false</clearOutputDirectory>
                     <attachProtoSources>false</attachProtoSources>
                     <checkStaleness>false</checkStaleness>
-                    <includeDependenciesInProtoc>false</includeDependenciesInProtoc>
                 </configuration>
                 <executions>
                     <execution>
@@ -392,6 +390,15 @@
                                     <mainClass>com.nextgen.Main</mainClass>
                                 </transformer>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/spring.handlers</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/spring.schemas</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/spring.tooling</resource>
+                                </transformer>
                             </transformers>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
                             <!--
