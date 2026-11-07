@@ -22,8 +22,9 @@
             <version>21</version>
         </provides>
         <configuration>
-            <!-- EDIT ME: point this at a real JDK 21 install on your machine. -->
-            <jdkHome>C:\Program Files\Java\jdk-21.0.11</jdkHome>
+            <!-- EDIT ME: point this at a real JDK 21 install on your machine.
+                 Example on a standard Windows install: C:\Program Files\Java\latest\jdk-21 -->
+            <jdkHome>C:\Program Files\Java\latest\jdk-21</jdkHome>
         </configuration>
     </toolchain>
 </toolchains>

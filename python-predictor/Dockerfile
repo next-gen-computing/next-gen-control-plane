@@ -47,10 +47,10 @@ COPY python-predictor/load_forecast_model.py /app/load_forecast_model.py
 COPY python-predictor/train_load_forecast_model.py /app/train_load_forecast_model.py
 COPY python-predictor/load_forecast_store.py /app/load_forecast_store.py
 
-# The trained model lives on a volume (see docker-compose.yml) so it survives a container recreate and
-# so train_risk_model.py — normally run via `docker compose exec predictor ...` — writes somewhere the
-# running server will actually see. This just ensures the directory exists before the first mount.
-RUN mkdir -p /app/model
+# A new named model volume is initialized from these checked-in risk-model files. Later operator-trained
+# models remain in the volume across container recreates and take precedence over these image defaults.
+COPY python-predictor/model/risk_model.json /app/model/risk_model.json
+COPY python-predictor/model/xgboost_booster.json /app/model/xgboost_booster.json
 
 EXPOSE 50052 9091
 

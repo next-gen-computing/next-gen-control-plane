@@ -283,6 +283,18 @@ whether a trained model actually produced it.
    Two other public cluster traces (Google's and a second Alibaba 2018 trace) were also imported and
    tried; neither improved on the above and this is documented plainly in `CHANGELOG.md` rather than
    only reporting the number that looked best.
+   This stored `validationAccuracy` comes from the model-training script's seeded example-level split;
+   it is not the machine-held-out benchmark below and should not be compared as if the protocols were
+   identical.
+4a. **Machine-held-out benchmark.** Reproduce with
+   `python python-predictor/benchmark_alibaba_trace.py --input python-predictor/alibaba_risk_examples_large_enriched.jsonl --output python-predictor/benchmark-results/alibaba-pai-risk.json`.
+   The checked-in report uses seed 42, holds out 329 complete machines (55,364 examples), and reports
+   ROC-AUC **0.6632** (machine-bootstrap 95% CI **[0.6513, 0.6758]**), average precision **0.6263**
+   (95% CI **[0.6108, 0.6485]**), accuracy **0.6177**, Brier score **0.2296**, and 10-bin ECE **0.0178**.
+   The majority-class accuracy baseline is **0.5146**. This predicts Alibaba workload outcomes, not this project's node failures;
+   the imported memory feature is an explicitly approximate machine-level estimate. The run used
+   Python 3.14.6 / NumPy 2.5.1 / XGBoost 3.4.0 on Windows 11, so repeat in the pinned deployment image
+   before treating these values as cross-environment baselines.
 5. **Serving.** `predictor_service.py`'s `GetPrediction` loads the model (mtime-polled hot reload, no
    restart needed) and returns `model_trained`, `training_example_count`, and `model_type` alongside the
    prediction — the caller must key off `model_trained`, never off the raw probability alone.
@@ -297,8 +309,9 @@ either alone) natively, without hand-engineering interaction terms, and tolerate
 values by design — relevant since `staleness_millis` and rolling stats can be legitimately absent early
 in a node's history.
 
-**Status.** Opt-in, `ML_RISK_SCORER_ENABLED=true`, **and** `train_risk_model.py` must actually have been
-run at least once — every response honestly reports `model_trained=false` until then. A separate opt-in
+**Status.** The predictor image seeds a new model volume with the checked-in trained XGBoost baseline,
+so inference can report `model_trained=true` immediately. Java-side ML scoring remains opt-in via
+`ML_RISK_SCORER_ENABLED=true`; otherwise the server uses `RuleBasedRiskScorer`. A separate opt-in
 `auto_retrain.py` background thread (`AUTO_RETRAIN_ENABLED=true`, default off) periodically retrains a
 **candidate** model and only promotes it if validation accuracy doesn't regress beyond a configurable
 threshold (default 2 points) below the live model's — the live model can get better as data accumulates;
@@ -430,6 +443,30 @@ other RPC routes through the leader; the cheap step-down rule bounds staleness i
 
 ---
 
+**Measured local timing sample.** `mvn -q -pl java-control-plane -Dtest=RaftElectionTimingBenchmarkTest test`
+reported the following 20-trial sample on Windows 11 with JDK 26.0.1:
+
+| Measurement | Mean | Median | Min | Max | p95 |
+|---|---:|---:|---:|---:|---:|
+| Cold-start election | 1065.3 ms | 1074 ms | 875 ms | 1330 ms | 1293 ms |
+| Leader failover | 1103.0 ms | 1050 ms | 824 ms | 2157 ms | 1352 ms |
+
+These are machine-specific observations from the test's production Raft timings, not performance
+guarantees and not substitutes for the draft paper's unverified ROC-AUC, RMSE, or chaos-trial claims.
+The test prints its raw samples so a run can be repeated and independently checked.
+
+**Measured local timing sample.** `mvn -q -pl java-control-plane -Dtest=RaftElectionTimingBenchmarkTest test`
+reported the following 20-trial sample on Windows 11 with JDK 26.0.1:
+
+| Measurement | Mean | Median | Min | Max | p95 |
+|---|---:|---:|---:|---:|---:|
+| Cold-start election | 1065.3 ms | 1074 ms | 875 ms | 1330 ms | 1293 ms |
+| Leader failover | 1103.0 ms | 1050 ms | 824 ms | 2157 ms | 1352 ms |
+
+These are machine-specific observations from the test's production Raft timings, not performance
+guarantees and not substitutes for the draft paper's unverified ROC-AUC, RMSE, or chaos-trial claims.
+The test prints its raw samples so a run can be repeated and independently checked.
+
 ## 8. Distributed Docker-Compose scheduling: node-level exclusivity
 
 **What.** Spread a multi-service project across whichever nodes are currently idle and Docker-capable —
@@ -554,8 +591,8 @@ rollback test re-applying the stored previous spec and confirming it matches the
 
 ## Full test evidence, as of this document
 
-874 automated tests across four modules (`java-control-plane` 555, `desktop-ui` 207, `cli` 34,
-`python-predictor` 78), real Docker containers, real gRPC channels, real Raft fault-injection loops,
+880 automated tests across four modules (`java-control-plane` 555, `desktop-ui` 207, `cli` 34,
+`python-predictor` 84), real gRPC channels, real Raft fault-injection loops,
 real SMTP/system-tray for the alert channels, zero mocked assertions on any mechanism under test. Exact
 current counts are always available by running the suites directly — see [DEVELOPMENT.md](DEVELOPMENT.md)
 — rather than trusted here as a number that can silently drift out of date the moment a test is added.

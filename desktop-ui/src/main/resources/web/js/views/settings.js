@@ -6,99 +6,137 @@ NG.views.settings = {
     mount(container) {
         container.innerHTML = `
             <div class="ng-page">
-                <h1 class="ng-page-title">Settings</h1>
-                <p class="ng-page-subtitle">Connection, monitoring, appearance and certificate management</p>
+                <div class="ng-page-header ng-animate-fade-in">
+                    <div class="ng-page-header-left">
+                        <h1 class="ng-page-title">Settings</h1>
+                        <p class="ng-page-subtitle">Connection, monitoring, appearance and certificate management</p>
+                    </div>
+                </div>
                 <div class="ng-page-scroll">
                     <div class="ng-settings-grid">
 
-                        <div class="ng-card">
-                            <h3 style="margin-top:0">Account</h3>
-                            <div id="ng-account-current"></div>
-                            <div class="ng-row" style="justify-content:flex-end; gap:8px;">
-                                <button class="ng-button ng-button-secondary" id="ng-account-switch-toggle" type="button">Switch account</button>
-                                <button class="ng-button ng-button-secondary" id="ng-account-logout" type="button">Log out</button>
+                        <!-- Account -->
+                        <div class="ng-settings-section ng-animate-fade-in ng-stagger-1">
+                            <div class="ng-settings-section-header">👤 Account</div>
+                            <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+                                <div id="ng-account-current"></div>
+                                <div style="display:flex;gap:8px;justify-content:flex-end">
+                                    <button class="ng-button ng-button-secondary" id="ng-account-switch-toggle" type="button">Switch account</button>
+                                    <button class="ng-button ng-button-danger"  id="ng-account-logout"        type="button">Log out</button>
+                                </div>
+                                <div id="ng-account-switch-body" class="ng-collapsible-body"></div>
                             </div>
-                            <div id="ng-account-switch-body" class="ng-collapsible-body"></div>
                         </div>
 
-                        <div class="ng-card">
-                            <div class="ng-help-body" style="padding:0">
-                                <h3 style="margin-top:0">Connection</h3>
-                                <p>The control plane can live anywhere reachable — a LAN host, a cloud
-                                VM, or a home server with this port forwarded. Nodes always dial out,
-                                so they need no inbound ports of their own.</p>
+                        <!-- Connection -->
+                        <div class="ng-settings-section ng-animate-fade-in ng-stagger-2">
+                            <div class="ng-settings-section-header">🔌 Connection</div>
+                            <div style="padding:0 16px 4px">
+                                <p style="font-size:12px;color:var(--ng-text-muted);margin:12px 0">
+                                    The control plane can live anywhere reachable — a LAN host, a cloud VM, or
+                                    a home server with this port forwarded. Nodes always dial out.
+                                </p>
                             </div>
                             <div class="ng-setting-row">
-                                <span class="ng-setting-label">Control plane host</span>
-                                <input class="ng-input" id="ng-set-host" style="max-width:240px">
+                                <div class="ng-setting-label-group">
+                                    <span class="ng-setting-label">Control plane host</span>
+                                </div>
+                                <input class="ng-input" id="ng-set-host" style="max-width:240px;width:100%">
                             </div>
                             <div class="ng-setting-row">
-                                <span class="ng-setting-label">Control plane port</span>
-                                <input class="ng-input" id="ng-set-cp-port" style="max-width:240px">
+                                <div class="ng-setting-label-group">
+                                    <span class="ng-setting-label">Control plane port</span>
+                                </div>
+                                <input class="ng-input ng-numeric" id="ng-set-cp-port" style="max-width:120px">
                             </div>
                             <div class="ng-setting-row">
-                                <span class="ng-setting-label">Predictor port</span>
-                                <input class="ng-input" id="ng-set-pred-port" style="max-width:240px">
+                                <div class="ng-setting-label-group">
+                                    <span class="ng-setting-label">Predictor port</span>
+                                </div>
+                                <input class="ng-input ng-numeric" id="ng-set-pred-port" style="max-width:120px">
                             </div>
                             <div class="ng-setting-row">
-                                <span class="ng-setting-label">Status</span>
-                                <span id="ng-set-status"></span>
+                                <div class="ng-setting-label-group">
+                                    <span class="ng-setting-label">Status</span>
+                                </div>
+                                <span id="ng-set-status" style="font-size:12px"></span>
                             </div>
-                            <div class="ng-row" style="justify-content:flex-end">
+                            <div style="padding:12px 16px;display:flex;justify-content:flex-end">
                                 <button class="ng-button ng-button-primary" id="ng-set-apply">Apply &amp; Connect</button>
                             </div>
                         </div>
 
-                        <div class="ng-card">
-                            <h3 style="margin-top:0">Monitoring</h3>
+                        <!-- Monitoring -->
+                        <div class="ng-settings-section ng-animate-fade-in ng-stagger-2">
+                            <div class="ng-settings-section-header">📊 Monitoring</div>
                             <div class="ng-setting-row">
-                                <span class="ng-setting-label">Refresh interval</span>
-                                <span>
-                                    <input type="range" id="ng-set-refresh" min="1000" max="10000" step="500">
-                                    <span id="ng-set-refresh-value" class="ng-numeric"></span>
-                                </span>
+                                <div class="ng-setting-label-group">
+                                    <span class="ng-setting-label">Refresh interval</span>
+                                    <span class="ng-setting-hint">Heartbeat cadence set on control plane</span>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:8px">
+                                    <input type="range" id="ng-set-refresh" min="1000" max="10000" step="500"
+                                           style="accent-color:var(--ng-accent)">
+                                    <span id="ng-set-refresh-value" class="ng-numeric"
+                                          style="min-width:52px;text-align:right;font-size:12px"></span>
+                                </div>
                             </div>
-                            <div class="ng-setting-hint">Heartbeat cadence and liveness timeout are set on
-                                the control plane via HEARTBEAT_INTERVAL_MS and HEARTBEAT_TIMEOUT_MS.</div>
                         </div>
 
-                        <div class="ng-card">
-                            <h3 style="margin-top:0">Appearance</h3>
+                        <!-- Appearance -->
+                        <div class="ng-settings-section ng-animate-fade-in ng-stagger-3">
+                            <div class="ng-settings-section-header">🎨 Appearance</div>
                             <div class="ng-setting-row">
-                                <span class="ng-setting-label">Theme</span>
+                                <div class="ng-setting-label-group">
+                                    <span class="ng-setting-label">Theme</span>
+                                    <span class="ng-setting-hint">Switch between dark and light mode</span>
+                                </div>
                                 <button class="ng-button ng-button-secondary" id="ng-set-theme"></button>
                             </div>
-                        </div>
-
-                        <div class="ng-card">
-                            <div class="ng-help-body" style="padding:0">
-                                <h3 style="margin-top:0">Saved setup</h3>
-                                <p>This device remembers its role and server so a launch can reconnect
-                                automatically instead of asking "Server or Node?" every time. Forgetting
-                                it only affects the next launch here — it does not touch the cluster or
-                                any other device.</p>
-                            </div>
-                            <div class="ng-row" style="justify-content:flex-end">
-                                <button class="ng-button ng-button-secondary" id="ng-forget-device">Forget this device</button>
+                            <div class="ng-setting-row">
+                                <div class="ng-setting-label-group">
+                                    <span class="ng-setting-label">Network background</span>
+                                    <span class="ng-setting-hint">Animated 3D node mesh canvas</span>
+                                </div>
+                                <label class="ng-toggle">
+                                    <input type="checkbox" id="ng-set-canvas" checked>
+                                    <span class="ng-toggle-track"></span>
+                                </label>
                             </div>
                         </div>
 
-                        <div class="ng-card">
-                            <div class="ng-help-body" style="padding:0">
-                                <h3 style="margin-top:0">Certificates</h3>
-                                <p>Mutual TLS between this machine and the control plane. A node proves
-                                itself once with an enrolment token and receives a signed certificate in
-                                exchange; the certificate carries authentication from then on.</p>
+                        <!-- Saved setup -->
+                        <div class="ng-settings-section ng-animate-fade-in ng-stagger-3">
+                            <div class="ng-settings-section-header">💾 Saved Setup</div>
+                            <div style="padding:12px 16px">
+                                <p style="font-size:12px;color:var(--ng-text-muted);margin:0 0 12px">
+                                    This device remembers its role and server so a launch can reconnect
+                                    automatically. Forgetting only affects the next launch here.
+                                </p>
+                                <div style="display:flex;justify-content:flex-end">
+                                    <button class="ng-button ng-button-secondary" id="ng-forget-device">Forget this device</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Certificates -->
+                        <div class="ng-settings-section ng-animate-fade-in ng-stagger-4">
+                            <div class="ng-settings-section-header">🔐 Certificates</div>
+                            <div style="padding:12px 16px">
+                                <p style="font-size:12px;color:var(--ng-text-muted);margin:0 0 12px">
+                                    Mutual TLS between this machine and the control plane. A node proves
+                                    itself once with an enrolment token and receives a signed certificate.
+                                </p>
                             </div>
                             <div class="ng-setting-row">
                                 <span class="ng-setting-label">Status</span>
-                                <span id="ng-cert-status"></span>
+                                <span id="ng-cert-status" style="font-size:12px"></span>
                             </div>
                             <div class="ng-setting-row">
                                 <span class="ng-setting-label">Details</span>
-                                <span id="ng-cert-detail" style="max-width:360px;text-align:right;font-size:var(--ng-font-size-2xs);color:var(--ng-text-muted)"></span>
+                                <span id="ng-cert-detail" style="max-width:320px;text-align:right;font-size:11px;color:var(--ng-text-muted)"></span>
                             </div>
-                            <div class="ng-row" style="justify-content:flex-end">
+                            <div style="padding:12px 16px;display:flex;justify-content:flex-end">
                                 <button class="ng-button ng-button-primary" id="ng-cert-refresh">Re-check</button>
                             </div>
                         </div>

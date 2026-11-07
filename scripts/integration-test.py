@@ -17,9 +17,8 @@ What this actually verifies, against the real running containers, nothing mocked
   2. SubmitTask against an empty cluster fails cleanly via the real "no alive nodes" path (a real,
      already-implemented behavior — see ControlPlaneServiceImpl.submitTask), not by hanging or
      throwing an unexpected error.
-  3. The predictor's gRPC port is up and GetPrediction() responds. model_trained=false is the
-     correct, honest answer for a freshly-built container with no accumulated training data — this
-     script asserts that honesty, not a fabricated trained response.
+  3. The predictor's gRPC port is up and GetPrediction() responds with the trained XGBoost baseline
+      seeded into a fresh model volume by the predictor image. Java-side ML scoring remains opt-in.
   4. The control plane's dashboard HTTP API (/api/nodes) returns valid JSON.
 
 Usage: python scripts/integration-test.py
@@ -136,19 +135,22 @@ def main():
     except grpc.RpcError as e:
         log_fail("SubmitTask", f"{e.code()}: {e.details()}")
 
-    # ── Test 3: The predictor is up and honestly reports it has no trained model yet ──
-    print(f"\n── Test 3: Predictor reachable, GetPrediction responds honestly ──")
+    # ── Test 3: The predictor serves the bundled trained model baseline ──
+    print(f"\n── Test 3: Predictor serves a trained model from its fresh image volume ──")
     try:
         predictor_channel = grpc.insecure_channel(PREDICTOR_ADDRESS)
         predictor_stub = pb2_grpc.PredictorServiceStub(predictor_channel)
         pred_resp = predictor_stub.GetPrediction(
             pb2.PredictionRequest(node_id="smoke-test-node", cpu=10.0, memory=10.0), timeout=10)
-        if pred_resp.model_trained:
-            log_pass("Predictor reachable", f"model_trained=true (a real model has already been "
-                                             f"trained in this deployment)")
+        if pred_resp.model_trained and pred_resp.training_example_count > 0 and pred_resp.model_type:
+            log_pass("Predictor trained baseline",
+                     f"model_type={pred_resp.model_type}, "
+                     f"training_example_count={pred_resp.training_example_count}")
         else:
-            log_pass("Predictor reachable", "model_trained=false — correct for a fresh container "
-                                             "with no accumulated training data")
+            log_fail("Predictor trained baseline",
+                     f"model_trained={pred_resp.model_trained}, "
+                     f"model_type={pred_resp.model_type!r}, "
+                     f"training_example_count={pred_resp.training_example_count}")
     except grpc.RpcError as e:
         log_fail("Predictor GetPrediction", f"{e.code()}: {e.details()}")
 

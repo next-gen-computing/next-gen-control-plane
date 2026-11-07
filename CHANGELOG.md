@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Predictor baseline provisioning and live-agent E2E validation
+
+- The predictor image now seeds a fresh Compose model volume with the repository's trained XGBoost
+  baseline metadata and booster. Compose exposes `ML_RISK_SCORER_ENABLED` and
+  `RISK_SNAPSHOT_LOGGING_ENABLED` as overrides while preserving their default-off settings.
+- `scripts/e2e-test.py` now targets externally managed agents, submits real prime-count tasks over
+  gRPC, polls for completed results, and accepts explicit commands for optional node stop/rejoin tests.
+  Prometheus assertions match the actual server/predictor/Prometheus scrape topology.
+- Added `benchmark_alibaba_trace.py` and a checked-in machine-held-out report for the Alibaba risk
+  trace, including majority/chance baselines and 200 machine-bootstrap confidence resamples. The result
+  is explicitly labeled as workload-outcome evaluation, not node-failure prediction; the irregular
+  trace cadence is not used to claim LSTM forecast accuracy.
+- The local three-agent process E2E passed 64/64 checks, including failure detection, rerouting, restart,
+  and rejoin. Prometheus was skipped; Docker Desktop's Linux engine was unavailable, so image build,
+  fresh-volume seeding, Docker workload execution, and the Compose smoke test still require runtime
+  verification.
+- Added six Python benchmark tests; the predictor suite now passes 84 tests.
+
 ### Fixed - Documentation pass: stale numbers, a broken anchor, and gaps against recent work
 
 Every core doc (`README.md`, `ARCHITECTURE.md`, `ALGORITHMS.md`, `DEVELOPMENT.md`, `CONTRIBUTING.md`)

@@ -13,6 +13,16 @@ window.NG = window.NG || {};
 
     NG.sse.subscribe('/api/theme/stream', (theme) => applyTheme(theme.dark));
 
+    // ── 3D network canvas — mounted immediately, persists for entire session ──
+    // Runs behind ALL screens (login, onboarding, dashboard).  The canvas is
+    // transparent to mouse events (pointer-events:none) so it never blocks the UI.
+    // When nodes join the cluster the SSE feed updates the pictorial scene live.
+    if (NG.networkCanvas) {
+        NG.networkCanvas.mount();
+        // Global node subscription — independent of which view is currently active
+        NG.sse.subscribe('/api/nodes/stream', (nodes) => NG.networkCanvas.updateNodes(nodes));
+    }
+
     // Mounted once, directly on <body> (not #content), so it survives every router navigation and
     // is reachable from any screen — including before a connection exists, which is exactly when
     // "how do I find and connect to a server" questions come up.

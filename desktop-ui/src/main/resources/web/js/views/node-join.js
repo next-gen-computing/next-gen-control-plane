@@ -3,17 +3,32 @@ NG.views = NG.views || {};
 
 NG.views.nodeJoin = {
     mount(container) {
+        function decodeLanServerId(value) {
+            if (!value || !/^NGX-[A-F0-9]{4}-[A-F0-9]{4}$/i.test(value)) {
+                return value;
+            }
+            const upper = parseInt(value.slice(4, 8), 16);
+            const lower = parseInt(value.slice(9, 13), 16);
+            const o1 = (upper >> 8) & 0xFF;
+            const o2 = upper & 0xFF;
+            const o3 = (lower >> 8) & 0xFF;
+            const o4 = lower & 0xFF;
+            return `${o1}.${o2}.${o3}.${o4}`;
+        }
+
         container.innerHTML = `
             <div class="ng-screen ng-onboarding-bg">
                 <div class="ng-screen-content">
                     <div class="ng-brand">
                         <h1 class="ng-brand-title">Join a Server</h1>
-                        <p class="ng-brand-subtitle">Connect this machine to a cluster running elsewhere.</p>
+                        <p class="ng-brand-subtitle">Connect this machine to a cluster on the same LAN or anywhere else.</p>
                     </div>
-                    <div class="ng-card">
+                    <div class="ng-card ng-card-hero">
                         <div class="ng-field">
-                            <label for="ng-address">Server address (host[:port])</label>
-                            <input class="ng-input" id="ng-address" type="text" placeholder="192.168.1.42:50051" autocomplete="off">
+                            <label for="ng-address">Server address or LAN ID</label>
+                            <div class="ng-inline-helper-row">
+                                <input class="ng-input" id="ng-address" type="text" placeholder="192.168.1.42:50051 or NGX-C0A8-0164" autocomplete="off">
+                            </div>
                         </div>
                         <div class="ng-field">
                             <label for="ng-token">Enrolment token (optional — leave blank for a plaintext connection)</label>
@@ -57,11 +72,17 @@ NG.views.nodeJoin = {
         }
 
         connectButton.addEventListener('click', () => {
-            const address = addressInput.value.trim();
+            const rawAddress = addressInput.value.trim();
+            const decodedAddress = decodeLanServerId(rawAddress);
+            const address = decodedAddress.trim();
             const enrollmentToken = tokenInput.value.trim();
             if (!address) {
                 showError('UNKNOWN', 'Enter a server address first');
                 return;
+            }
+
+            if (decodedAddress !== rawAddress) {
+                addressInput.value = decodedAddress;
             }
 
             status.innerHTML = '';
