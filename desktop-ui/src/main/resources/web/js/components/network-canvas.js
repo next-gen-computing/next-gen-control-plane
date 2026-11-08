@@ -520,8 +520,18 @@
 
         /* ── 4. Task Lifecycle Execution & Packet Animations ── */
         activeTasks = activeTasks.filter(task => {
-            const rn = realNodes.find(n => n.id === task.nodeId) || task.node;
-            if (!rn || isNodeDead(rn)) return false;
+            let rn = realNodes.find(n => n.id === task.nodeId) || task.node;
+
+            // Automatic Task Failover: if assigned node is dead, reroute to a healthy survivor!
+            if (!rn || isNodeDead(rn)) {
+                const survivors = realNodes.filter(n => !isNodeDead(n));
+                if (survivors.length === 0) return false;
+                rn = survivors[0];
+                task.nodeId = rn.id;
+                task.node = rn;
+                task.phase = 'MIGRATING';
+                task.t = 0;
+            }
 
             if (task.phase === 'DISPATCH') {
                 // SERVER -> NODE PACKET MOVEMENT
@@ -543,6 +553,34 @@
                 ctx.font       = 'bold 8px monospace';
                 ctx.textAlign  = 'center';
                 ctx.fillText(task.label, px, py - 8);
+                ctx.restore();
+
+                if (task.t >= 1) {
+                    task.phase = 'PROCESSING';
+                    task.t = 0;
+                    rn.isProcessing = true;
+                }
+                return true;
+
+            } else if (task.phase === 'MIGRATING') {
+                // FAILOVER REROUTING TO SURVIVOR
+                task.t += task.speed * 1.5;
+                const px = lerp(sx, rn.x, task.t);
+                const py = lerp(sy, rn.y, task.t);
+
+                ctx.save();
+                ctx.fillStyle   = '#ffb700'; // Amber failover pulse
+                ctx.shadowColor = '#ffb700';
+                ctx.shadowBlur  = 16;
+                ctx.beginPath();
+                ctx.arc(px, py, 6.5 * rn.depth, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.shadowBlur = 0;
+                ctx.fillStyle  = '#ffb700';
+                ctx.font       = 'bold 8.5px monospace';
+                ctx.textAlign  = 'center';
+                ctx.fillText(`⚡ FAILOVER ➔ ${rn.name || rn.id}`, px, py - 9);
                 ctx.restore();
 
                 if (task.t >= 1) {
