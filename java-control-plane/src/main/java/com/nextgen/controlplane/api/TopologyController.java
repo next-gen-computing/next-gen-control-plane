@@ -182,14 +182,24 @@ public class TopologyController {
         long startTime = System.currentTimeMillis();
         String taskId = "TASK-" + (1000 + (int)(Math.random() * 9000));
 
-        // 1. Resolve real execution node
+        // 1. Resolve real execution node — enforce that work CANNOT execute on a dead or stopped node!
         List<NodeRecord> aliveNodes = nodeRegistry.aliveSnapshot();
-        String targetNodeName = assignedNode;
-        if (targetNodeName == null || targetNodeName.isBlank()) {
+        final String requestedNode = (assignedNode != null) ? assignedNode.trim() : "";
+        String targetNodeName = requestedNode;
+
+        boolean targetIsAlive = !requestedNode.isEmpty()
+                && aliveNodes.stream().anyMatch(n -> n.getNodeId().equalsIgnoreCase(requestedNode)
+                        || (n.getHostname() != null && n.getHostname().equalsIgnoreCase(requestedNode)));
+
+        if (!targetIsAlive) {
             if (!aliveNodes.isEmpty()) {
                 targetNodeName = aliveNodes.get(0).getNodeId();
+                simulatedFailover = true;
             } else {
-                targetNodeName = "local-worker-1";
+                return ResponseEntity.status(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE).body(Map.of(
+                        "error", "Task execution failed: No ALIVE nodes in cluster. Node '" + requestedNode + "' is dead or unreachable.",
+                        "status", "FAILED_NO_NODES"
+                ));
             }
         }
 
@@ -204,7 +214,10 @@ public class TopologyController {
         taskRegistry.createAndQueue(taskId, "", TaskKindDomain.PRIME_COUNT_RANGE, payload);
 
         String resultDesc = String.format("Found %,d prime numbers in range [%,d .. %,d]", primeCount, startRange, endRange);
-        String finalStatus = simulatedFailover ? "COMPLETED_AFTER_FAILOVER" : "COMPLETED";
+        if (simulatedFailover) {
+            resultDesc += String.format(" (Failover adopted by survivor %s)", targetNodeName);
+        }
+        String finalStatus = simulatedFailover ? "RECOVERED_ON_FAILOVER" : "COMPLETED";
 
         Map<String, Object> taskRecord = new LinkedHashMap<>();
         taskRecord.put("taskId", taskId);

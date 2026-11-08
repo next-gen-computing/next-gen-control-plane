@@ -81,8 +81,9 @@
     };
 
     function isNodeDead(rn) {
+        if (!rn) return true;
         const s = (rn.status || '').toUpperCase();
-        return s === 'DEAD' || s === 'OFFLINE' || s === 'FAILED' || s === 'UNREACHABLE';
+        return s === 'DEAD' || s === 'SUSPECTED_DEAD' || s === 'OFFLINE' || s === 'FAILED' || s === 'UNREACHABLE' || s === 'DEREGISTERED';
     }
 
     function nodeColor(n) {

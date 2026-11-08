@@ -94,10 +94,14 @@ NG.views.nodes = {
 
         function statusPill(status) {
             const colors = {
-                HEALTHY:  { dot: 'var(--ng-status-good)',     text: 'var(--ng-status-good)' },
-                ONLINE:   { dot: 'var(--ng-status-good)',     text: 'var(--ng-status-good)' },
-                OFFLINE:  { dot: 'var(--ng-status-critical)', text: 'var(--ng-status-critical)' },
-                DEGRADED: { dot: 'var(--ng-status-warning)',  text: 'var(--ng-status-warning)' },
+                HEALTHY:        { dot: 'var(--ng-status-good)',     text: 'var(--ng-status-good)' },
+                ONLINE:         { dot: 'var(--ng-status-good)',     text: 'var(--ng-status-good)' },
+                ALIVE:          { dot: 'var(--ng-status-good)',     text: 'var(--ng-status-good)' },
+                OFFLINE:        { dot: 'var(--ng-status-critical)', text: 'var(--ng-status-critical)' },
+                DEAD:           { dot: 'var(--ng-status-critical)', text: 'var(--ng-status-critical)' },
+                SUSPECTED_DEAD: { dot: 'var(--ng-status-critical)', text: 'var(--ng-status-critical)' },
+                DEREGISTERED:   { dot: 'var(--ng-status-critical)', text: 'var(--ng-status-critical)' },
+                DEGRADED:       { dot: 'var(--ng-status-warning)',  text: 'var(--ng-status-warning)' },
             };
             const c = colors[status] || { dot: 'var(--ng-status-unknown)', text: 'var(--ng-text-subtle)' };
             return `<span class="ng-status-pill">

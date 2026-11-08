@@ -642,6 +642,10 @@
           const res = await fetch('/api/v1/topology');
           if (res.ok) {
             topologyData = await res.json();
+            if (topologyData.nodes && topologyData.nodes.length > 0) {
+              nodesList = topologyData.nodes;
+              updateNodesUI();
+            }
             updateTopologyUI();
           }
         } catch (e) {}
@@ -659,11 +663,13 @@
 
       async function fetchNodes() {
         try {
-          const res = await fetch('/api/v1/nodes');
+          const res = await fetch('/api/v1/topology');
           if (res.ok) {
             const data = await res.json();
-            nodesList = data.nodes || [];
-            updateNodesUI();
+            if (data.nodes && data.nodes.length > 0) {
+              nodesList = data.nodes;
+              updateNodesUI();
+            }
           }
         } catch (e) {}
       }
@@ -735,6 +741,21 @@
         document.getElementById('kpiAvgMem').textContent = `${metricsData.avgClusterMemory || 0.0}%`;
       }
 
+      // ── Node Status Classifier ─────────────────────────────────────────────
+      function isDeadNode(n) {
+        if (!n) return true;
+        if (manualKilledNodes[n.nodeId]) return true;
+        const s = String(n.status || '').toUpperCase();
+        return s === 'DEAD' || s === 'SUSPECTED_DEAD' || s === 'OFFLINE' || s === 'FAILED' || s === 'UNREACHABLE' || s === 'DEREGISTERED';
+      }
+
+      function isAliveNode(n) {
+        if (!n) return false;
+        if (manualKilledNodes[n.nodeId]) return false;
+        const s = String(n.status || '').toUpperCase();
+        return (s === 'ALIVE' || s === 'HEALTHY' || s === 'ONLINE') && !isDeadNode(n);
+      }
+
       // ── Effective Nodes with Full State Sync ───────────────────────────────
       function getEffectiveNodes() {
         let displayNodes = nodesList.map(n => Object.assign({}, n));
@@ -753,13 +774,11 @@
           ];
         }
 
-        // Apply manual kill overrides per-node
+        // Apply synchronized state for dead/alive detection
         displayNodes.forEach(n => {
-          if (manualKilledNodes[n.nodeId]) {
+          n.isDead = isDeadNode(n);
+          if (n.isDead) {
             n.status = 'DEAD';
-            n.isDead = true;
-          } else {
-            n.isDead = (n.status || '').toUpperCase() === 'DEAD';
           }
         });
 
@@ -773,8 +792,8 @@
         const subKpi = document.getElementById('kpiNodeSub');
 
         const displayNodes = getEffectiveNodes();
-        const aliveNodes = displayNodes.filter(n => (n.status || '').toUpperCase() === 'ALIVE');
-        const deadNodes = displayNodes.filter(n => (n.status || '').toUpperCase() === 'DEAD');
+        const aliveNodes = displayNodes.filter(n => !n.isDead);
+        const deadNodes = displayNodes.filter(n => n.isDead);
 
         aliveKpi.textContent = `${aliveNodes.length} / ${displayNodes.length}`;
         subKpi.textContent = `${displayNodes.filter(n => n.isLocal).length} local, ${displayNodes.filter(n => !n.isLocal).length} remote connected`;
@@ -792,7 +811,7 @@
         updateSplitOptions(aliveNodes.length);
 
         tbody.innerHTML = displayNodes.map(n => {
-          const isDead = (n.status || '').toUpperCase() === 'DEAD';
+          const isDead = n.isDead;
           const isLoc = n.isLocal || n.ip === '127.0.0.1' || n.ip === 'localhost';
           const ramGb = n.totalMemoryBytes ? (n.totalMemoryBytes / (1024**3)).toFixed(1) + ' GB' : '16 GB';
           const cpuVal = n.cpuUsage != null ? n.cpuUsage.toFixed(1) + '%' : '12.0%';
@@ -804,8 +823,8 @@
               <td style="font-weight: 600;">${devIcon}</td>
               <td style="font-weight: 600;">${n.hostname || 'Unknown'}</td>
               <td style="font-family: var(--font-mono);">${n.ip || '127.0.0.1'}</td>
-              <td><span class="status-badge ${isLoc ? 'status-local' : 'status-remote'}">${isLoc ? 'Localhost' : 'Remote Edge'}</span></td>
-              <td><span class="status-badge ${isDead ? 'status-dead' : 'status-alive'}">${isDead ? 'DEAD' : 'ALIVE'}</span></td>
+              <td><span class="status-badge ${isLoc ? 'status-local' : 'status-remote'}">${isLoc ? 'Local Machine' : 'Remote Edge'}</span></td>
+              <td><span class="status-badge ${isDead ? 'status-dead' : 'status-alive'}">${isDead ? 'DEAD (UNREACHABLE)' : 'ALIVE'}</span></td>
               <td>${n.cpuCores || 8} cores / ${ramGb}</td>
               <td>
                 <div style="display: flex; align-items: center; gap: 8px;">
@@ -901,9 +920,9 @@
         const end = parseInt(document.getElementById('taskEnd').value) || 50000;
         const splitCount = parseInt(document.getElementById('splitModeSelect').value) || 1;
 
-        const effectiveNodes = getEffectiveNodes().filter(n => (n.status || '').toUpperCase() === 'ALIVE');
+        const effectiveNodes = getEffectiveNodes().filter(n => !n.isDead);
         if (effectiveNodes.length === 0) {
-          logTerminal('No ALIVE nodes available to accept work! Please revive a node first.', 'error');
+          logTerminal('❌ Cannot dispatch work: No ALIVE nodes available in cluster! Please start or revive a node.', 'error');
           return;
         }
 
@@ -941,7 +960,7 @@
 
       // ── Task Failover Trigger ───────────────────────────────────────────────
       function triggerImmediateFailover(failedNodeId) {
-        const aliveNodes = getEffectiveNodes().filter(n => (n.status || '').toUpperCase() === 'ALIVE');
+        const aliveNodes = getEffectiveNodes().filter(n => !n.isDead);
         if (aliveNodes.length === 0) {
           logTerminal('Cannot migrate task: No surviving healthy nodes in cluster!', 'error');
           return;
@@ -1385,11 +1404,16 @@
           // If target is dead or missing, trigger failover to a healthy node!
           if (!target || target.isDead) {
             const aliveSurvivors = nodePositions.filter(p => !p.isDead);
-            if (aliveSurvivors.length === 0) return false;
+            if (aliveSurvivors.length === 0) {
+              logTerminal(`❌ Task [${task.id}] FAILED: Assigned node died and ZERO healthy surviving nodes exist in cluster!`, 'error');
+              return false;
+            }
             target = aliveSurvivors[0];
+            logTerminal(`[FAILOVER MIGRATION] Node [${task.node ? task.node.hostname : task.nodeId}] is DEAD! Task [${task.id}] rerouted to surviving node [${target.node.hostname}]!`, 'error');
             task.nodeId = target.node.nodeId;
             task.node = target.node;
             task.phase = 'MIGRATING';
+            task.t = 0;
             task.wasFailover = true;
           }
 
@@ -1451,6 +1475,26 @@
             return true;
 
           } else if (task.phase === 'PROCESSING') {
+            // Check if node died while computing!
+            if (target.isDead) {
+              const aliveSurvivors = nodePositions.filter(p => !p.isDead);
+              if (aliveSurvivors.length === 0) {
+                logTerminal(`❌ Task [${task.id}] FAILED: Node [${target.node.hostname}] died mid-task and ZERO alive nodes remain in cluster!`, 'error');
+                target.isProcessing = false;
+                return false;
+              }
+              const survivor = aliveSurvivors[0];
+              logTerminal(`[FAILOVER MIGRATION] Node [${target.node.hostname}] died mid-task! Task [${task.id}] rerouted to surviving node [${survivor.node.hostname}]!`, 'error');
+              target.isProcessing = false;
+              target = survivor;
+              task.nodeId = survivor.node.nodeId;
+              task.node = survivor.node;
+              task.phase = 'MIGRATING';
+              task.t = 0;
+              task.wasFailover = true;
+              return true;
+            }
+
             target.isProcessing = true;
             task.t += 0.012; // ~2 seconds computation
             const pct = Math.min(100, Math.round(task.t * 100));
