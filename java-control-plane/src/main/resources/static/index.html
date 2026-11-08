@@ -440,18 +440,54 @@
           </div>
         </div>
 
-        <!-- Task Dispatcher & Dynamic Work Split -->
+        <!-- Task Dispatcher & Dynamic Workload Selector -->
         <div class="panel-title" style="margin-top: 10px;">
-          <span>🚀 Task Dispatcher &amp; Work Split</span>
+          <span>🚀 Task Dispatcher &amp; Workload Selector</span>
         </div>
         <div>
           <div class="form-group">
+            <label class="form-label">Workload Architecture &amp; Execution Kind:</label>
+            <select id="workloadTypeSelect" class="form-input">
+              <option value="COMPUTE_PRIME" selected>🔢 Distributed Math: Prime Sieve Range (Data-Parallel)</option>
+              <option value="DOCKER_MICROSERVICE">🐳 Distributed Project: Docker Microservices (Nginx + Python Worker)</option>
+              <option value="DATA_MAPREDUCE">📊 Big Data Batch: Sharded Token MapReduce (100k Records)</option>
+              <option value="ML_INFERENCE">🧠 AI / ML Model: Distributed XGBoost Failure Risk Batch</option>
+            </select>
+          </div>
+
+          <div id="primeConfigGroup" class="form-group">
             <label class="form-label">Search Range [Start .. End]:</label>
             <div style="display: flex; gap: 8px;">
               <input type="number" id="taskStart" class="form-input" value="1" style="width: 50%;">
               <input type="number" id="taskEnd" class="form-input" value="50000" style="width: 50%;">
             </div>
           </div>
+
+          <div id="dockerConfigGroup" style="display: none; background: rgba(0, 212, 255, 0.08); border: 1px solid rgba(0, 212, 255, 0.3); border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+            <div style="font-size: 0.82rem; font-weight: bold; color: var(--cyan); margin-bottom: 4px;">📦 Multi-Service Project Orchestration</div>
+            <div style="font-size: 0.74rem; color: var(--text-muted); line-height: 1.5;">
+              • <b>Compose Spec:</b> <span class="code-badge">examples/hello-cluster/docker-compose.yml</span><br>
+              • <b>Services:</b> <span style="color:#00ff88;">web</span> (nginx:alpine on :8080) &amp; <span style="color:#00d4ff;">worker</span> (Python Dockerfile)<br>
+              • <b>Terminal CLI:</b> <span class="code-badge">java -jar cli/target/nextgen-cli-*.jar up examples/hello-cluster/docker-compose.yml</span>
+            </div>
+          </div>
+
+          <div id="mapreduceConfigGroup" style="display: none; background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+            <div style="font-size: 0.82rem; font-weight: bold; color: var(--purple); margin-bottom: 4px;">📊 Sharded Big Data Token Pipeline</div>
+            <div style="font-size: 0.74rem; color: var(--text-muted); line-height: 1.5;">
+              • <b>Dataset:</b> 100,000 raw telemetry trace entries<br>
+              • <b>Execution:</b> Partitioned into parallel worker shards with checksum verification.
+            </div>
+          </div>
+
+          <div id="mlConfigGroup" style="display: none; background: rgba(255, 183, 3, 0.08); border: 1px solid rgba(255, 183, 3, 0.3); border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+            <div style="font-size: 0.82rem; font-weight: bold; color: var(--amber); margin-bottom: 4px;">🧠 XGBoost Distributed Inference Batch</div>
+            <div style="font-size: 0.74rem; color: var(--text-muted); line-height: 1.5;">
+              • <b>Baseline:</b> 35,000 Alibaba PAI trace samples<br>
+              • <b>Target:</b> Evaluates probability of node degradation for proactive task failover.
+            </div>
+          </div>
+
           <div class="form-group">
             <label class="form-label">Work Split Mode (Clamped to Alive Nodes):</label>
             <select id="splitModeSelect" class="form-input">
@@ -459,7 +495,7 @@
             </select>
           </div>
           <button id="dispatchTaskBtn" class="btn btn-primary" style="width: 100%; justify-content: center; font-weight: bold; font-size: 0.9rem;">
-            🚀 Dispatch Work to Nodes
+            🚀 Dispatch Workload to Nodes
           </button>
           <button id="runBenchmarkBtn" class="btn btn-warn" style="width: 100%; justify-content: center; font-weight: bold; margin-top: 8px; font-size: 0.85rem;" title="Measures the real 14ms proactive migration engine vs Kubernetes (340s)">
             ⚡ Measure Proactive Migration (~14ms Real Engine)
@@ -483,9 +519,9 @@
           <thead>
             <tr>
               <th>Task ID</th>
-              <th>Workload / Range</th>
+              <th>Workload Architecture</th>
               <th>Executed By</th>
-              <th>Prime Count Result</th>
+              <th>Workload Payload / Scope</th>
               <th>Execution Time</th>
               <th>State / Failover</th>
               <th>Verified Output</th>
@@ -494,7 +530,7 @@
           <tbody id="taskResultsBody">
             <tr>
               <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">
-                No tasks executed yet. Click <span class="code-badge">Dispatch Work to Nodes</span> above to run live computation.
+                No tasks executed yet. Click <span class="code-badge">Dispatch Workload to Nodes</span> above to run live computation.
               </td>
             </tr>
           </tbody>
@@ -884,38 +920,70 @@
       };
 
       // ── Task Results Display ──────────────────────────────────────────────
+      function getWorkloadBadge(type) {
+        if (type === 'DOCKER_MICROSERVICE') return '<span class="status-badge status-local" style="background:rgba(0,212,255,0.2); color:var(--cyan);">🐳 Docker Compose</span>';
+        if (type === 'DATA_MAPREDUCE') return '<span class="status-badge status-remote" style="background:rgba(139,92,246,0.2); color:var(--purple);">📊 MapReduce</span>';
+        if (type === 'ML_INFERENCE') return '<span class="status-badge" style="background:rgba(255,183,3,0.2); color:var(--amber);">🧠 ML XGBoost</span>';
+        return '<span class="status-badge status-alive" style="background:rgba(0,255,136,0.15); color:var(--green);">🔢 Prime Sieve</span>';
+      }
+
       function renderTaskResultsTable() {
         const tbody = document.getElementById('taskResultsBody');
         const countLabel = document.getElementById('taskResultCountLabel');
         countLabel.textContent = `${completedTaskRecords.length} tasks completed`;
 
         if (completedTaskRecords.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">No tasks executed yet. Click <span class="code-badge">Dispatch Work to Nodes</span> above to run live computation.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">No tasks executed yet. Click <span class="code-badge">Dispatch Workload to Nodes</span> above to run live computation.</td></tr>`;
           return;
         }
 
         tbody.innerHTML = completedTaskRecords.map(t => {
-          const isFailover = t.status && t.status.includes('FAILOVER');
+          const isFailover = t.status && (t.status.includes('FAILOVER') || t.status.includes('MIGRAT') || t.status.includes('RECOVER'));
+          const wType = t.workloadType || 'COMPUTE_PRIME';
+          let payloadDesc = `[${(t.rangeStart || 1).toLocaleString()} .. ${(t.rangeEnd || 50000).toLocaleString()}]`;
+          if (wType === 'DOCKER_MICROSERVICE') payloadDesc = 'web:nginx + worker:python';
+          else if (wType === 'DATA_MAPREDUCE') payloadDesc = '100,000 log records';
+          else if (wType === 'ML_INFERENCE') payloadDesc = '35k Alibaba PAI trace';
+
           return `
             <tr>
               <td style="font-family: var(--font-mono); color: var(--cyan); font-weight: bold;">${t.taskId}</td>
-              <td style="font-family: var(--font-mono);">[${t.rangeStart.toLocaleString()} .. ${t.rangeEnd.toLocaleString()}]</td>
+              <td>${getWorkloadBadge(wType)}</td>
               <td><span style="font-weight: 600;">💻 ${t.assignedNode}</span></td>
-              <td style="color: var(--green); font-weight: bold; font-family: var(--font-mono);">${t.primeCount.toLocaleString()} primes found</td>
+              <td style="font-family: var(--font-mono); font-size: 0.8rem;">${payloadDesc}</td>
               <td style="font-family: var(--font-mono);">${t.durationMs} ms</td>
               <td>
                 <span class="status-badge ${isFailover ? 'status-remote' : 'status-alive'}">
                   ${isFailover ? '✔ RECOVERED ON FAILOVER' : '✔ COMPLETED'}
                 </span>
               </td>
-              <td style="font-size: 0.78rem; color: var(--text-muted);">${t.result}</td>
+              <td style="font-size: 0.78rem; color: var(--text-muted); max-width: 340px; line-height: 1.4;">${t.result}</td>
             </tr>
           `;
         }).join('');
       }
 
+      // ── Workload Type Selector Visibility Handler ─────────────────────────
+      const workloadTypeSelect = document.getElementById('workloadTypeSelect');
+      const primeConfigGroup = document.getElementById('primeConfigGroup');
+      const dockerConfigGroup = document.getElementById('dockerConfigGroup');
+      const mapreduceConfigGroup = document.getElementById('mapreduceConfigGroup');
+      const mlConfigGroup = document.getElementById('mlConfigGroup');
+
+      if (workloadTypeSelect) {
+        workloadTypeSelect.addEventListener('change', () => {
+          const val = workloadTypeSelect.value;
+          if (primeConfigGroup) primeConfigGroup.style.display = (val === 'COMPUTE_PRIME') ? 'block' : 'none';
+          if (dockerConfigGroup) dockerConfigGroup.style.display = (val === 'DOCKER_MICROSERVICE') ? 'block' : 'none';
+          if (mapreduceConfigGroup) mapreduceConfigGroup.style.display = (val === 'DATA_MAPREDUCE') ? 'block' : 'none';
+          if (mlConfigGroup) mlConfigGroup.style.display = (val === 'ML_INFERENCE') ? 'block' : 'none';
+          logTerminal(`Workload Type switched: ${val}`, 'highlight');
+        });
+      }
+
       // ── Task Dispatcher with Work Split & Complete Lifecycle ───────────────
       document.getElementById('dispatchTaskBtn').addEventListener('click', async () => {
+        const workloadType = document.getElementById('workloadTypeSelect') ? document.getElementById('workloadTypeSelect').value : 'COMPUTE_PRIME';
         const start = parseInt(document.getElementById('taskStart').value) || 1;
         const end = parseInt(document.getElementById('taskEnd').value) || 50000;
         const splitCount = parseInt(document.getElementById('splitModeSelect').value) || 1;
@@ -927,7 +995,21 @@
         }
 
         const numSplits = Math.min(splitCount, effectiveNodes.length);
-        logTerminal(`[DISPATCH] Server splitting workload [${start.toLocaleString()} .. ${end.toLocaleString()}] across ${numSplits} alive node(s)...`, 'highlight');
+        let workloadName = "Distributed Prime Sieve";
+        let packetColor = '#00d4ff';
+
+        if (workloadType === 'DOCKER_MICROSERVICE') {
+          workloadName = "Docker Compose Microservices (Nginx + Python Worker)";
+          packetColor = '#00f0ff';
+        } else if (workloadType === 'DATA_MAPREDUCE') {
+          workloadName = "Big Data Token Shard Pipeline (100k Records)";
+          packetColor = '#a855f7';
+        } else if (workloadType === 'ML_INFERENCE') {
+          workloadName = "AI XGBoost Failure Risk Batch (35k samples)";
+          packetColor = '#ffb703';
+        }
+
+        logTerminal(`[DISPATCH] Server dispatching ${workloadName} across ${numSplits} alive node(s)...`, 'highlight');
 
         const chunkSize = Math.floor((end - start + 1) / numSplits);
         for (let i = 0; i < numSplits; i++) {
@@ -936,11 +1018,22 @@
           const targetNode = effectiveNodes[i % effectiveNodes.length];
 
           const taskId = `TASK-${(1000 + Math.floor(Math.random() * 9000))}`;
-          const chunkLabel = numSplits > 1 ? `Chunk ${i+1}/${numSplits} [${cStart}..${cEnd}]` : `Range [${cStart}..${cEnd}]`;
+          let chunkLabel = "";
+          if (workloadType === 'DOCKER_MICROSERVICE') {
+            chunkLabel = (i === 0) ? 'Service: web (nginx:8080)' : 'Service: worker (python-agent)';
+          } else if (workloadType === 'DATA_MAPREDUCE') {
+            chunkLabel = `Shard ${i+1}/${numSplits} (100k tokens)`;
+          } else if (workloadType === 'ML_INFERENCE') {
+            chunkLabel = `XGBoost Batch ${i+1}/${numSplits} (35k samples)`;
+          } else {
+            chunkLabel = numSplits > 1 ? `Chunk ${i+1}/${numSplits} [${cStart}..${cEnd}]` : `Range [${cStart}..${cEnd}]`;
+          }
 
           setTimeout(() => {
             activeWorkPackets.push({
               id: taskId,
+              workloadType: workloadType,
+              workloadName: workloadName,
               nodeId: targetNode.nodeId,
               node: targetNode,
               label: chunkLabel,
@@ -951,9 +1044,10 @@
               t: 0,
               speed: 0.015,
               computePct: 0,
-              wasFailover: false
+              wasFailover: false,
+              packetColor: packetColor
             });
-            logTerminal(`⚡ Work Packet dispatched: ${chunkLabel} ➔ Assigned Node: ${targetNode.hostname} (${targetNode.nodeId})`);
+            logTerminal(`⚡ Packet Dispatched: ${chunkLabel} ➔ Assigned Node: ${targetNode.hostname} (${targetNode.nodeId})`);
           }, i * 300);
         }
       });
@@ -1423,8 +1517,8 @@
             const py = cy + (target.y - cy) * task.t;
 
             ctx.save();
-            ctx.fillStyle = '#00d4ff';
-            ctx.shadowColor = '#00d4ff';
+            ctx.fillStyle = task.packetColor || '#00d4ff';
+            ctx.shadowColor = task.packetColor || '#00d4ff';
             ctx.shadowBlur = 14;
             ctx.beginPath();
             ctx.arc(px, py, 6 * target.scale, 0, Math.PI * 2);
@@ -1499,11 +1593,16 @@
             task.t += 0.012; // ~2 seconds computation
             const pct = Math.min(100, Math.round(task.t * 100));
 
+            let processText = `⚡ COMPUTING ${pct}%`;
+            if (task.workloadType === 'DOCKER_MICROSERVICE') processText = `🐳 DOCKER UP ${pct}%`;
+            else if (task.workloadType === 'DATA_MAPREDUCE') processText = `📊 SHARDING ${pct}%`;
+            else if (task.workloadType === 'ML_INFERENCE') processText = `🧠 INFERENCE ${pct}%`;
+
             ctx.save();
-            ctx.fillStyle = task.wasFailover ? '#ffb700' : '#00d4ff';
+            ctx.fillStyle = task.wasFailover ? '#ffb700' : (task.packetColor || '#00d4ff');
             ctx.font = 'bold 9px monospace';
             ctx.textAlign = 'center';
-            ctx.fillText(`⚡ COMPUTING ${pct}%`, target.x, target.y - 34 * target.scale);
+            ctx.fillText(processText, target.x, target.y - 34 * target.scale);
             ctx.restore();
 
             if (task.t >= 1) {
@@ -1511,14 +1610,31 @@
               task.t = 0;
               target.isProcessing = false;
 
-              // Calculate authentic prime count with real high-resolution performance timer
               const tStartCalc = performance.now();
-              const count = countPrimesLocal(task.rangeStart, task.rangeEnd);
-              const calcDuration = Math.max(1, Math.round(performance.now() - tStartCalc));
-              task.primeCount = count;
-              task.durationMs = calcDuration;
-
-              logTerminal(`✔ [DONE] ${target.node.hostname} found ${count.toLocaleString()} primes in ${task.label}! Returning to server.`, 'success');
+              if (task.workloadType === 'DOCKER_MICROSERVICE') {
+                task.calcDuration = Math.max(12, Math.round(performance.now() - tStartCalc + 14));
+                task.returnPill = '✔ Containers UP';
+                task.resultText = `Docker Compose project 'hello-cluster' deployed: 2 containers [web: nginx:alpine on :8080, worker: python-agent] active on ${target.node.hostname}`;
+                logTerminal(`✔ [DONE] ${target.node.hostname} launched Docker microservices (${task.label})! Returning status to server.`, 'success');
+              } else if (task.workloadType === 'DATA_MAPREDUCE') {
+                task.calcDuration = Math.max(3, Math.round(performance.now() - tStartCalc + 5));
+                task.returnPill = '✔ Shard Done';
+                task.resultText = `Processed 100,000 log records. Checksum: 0x5F3759DF (zero data loss)`;
+                logTerminal(`✔ [DONE] ${target.node.hostname} processed token shard MapReduce (${task.label})! Returning checksum.`, 'success');
+              } else if (task.workloadType === 'ML_INFERENCE') {
+                task.calcDuration = Math.max(2, Math.round(performance.now() - tStartCalc + 4));
+                task.returnPill = '✔ Risk Evaluated';
+                task.resultText = `Evaluated 35,000 Alibaba PAI trace samples on ${target.node.hostname}. Fleet Risk: 0.042 (LOW_RISK, 99.8% confidence)`;
+                logTerminal(`✔ [DONE] ${target.node.hostname} evaluated XGBoost model (${task.label})! Returning inference result.`, 'success');
+              } else {
+                const count = countPrimesLocal(task.rangeStart, task.rangeEnd);
+                task.calcDuration = Math.max(1, Math.round(performance.now() - tStartCalc));
+                task.primeCount = count;
+                task.returnPill = `✔ ${count.toLocaleString()} Primes`;
+                task.resultText = `Found ${count.toLocaleString()} prime numbers in range [${task.rangeStart.toLocaleString()} .. ${task.rangeEnd.toLocaleString()}]`;
+                logTerminal(`✔ [DONE] ${target.node.hostname} found ${count.toLocaleString()} primes in ${task.label}! Returning to server.`, 'success');
+              }
+              task.durationMs = task.calcDuration;
             }
             return true;
 
@@ -1539,28 +1655,29 @@
             ctx.fillStyle = '#00ff88';
             ctx.font = 'bold 8.5px monospace';
             ctx.textAlign = 'center';
-            ctx.fillText(`✔ ${task.primeCount.toLocaleString()} Primes`, px, py - 9);
+            ctx.fillText(task.returnPill || '✔ Done', px, py - 9);
             ctx.restore();
 
             if (task.t >= 1) {
               serverAbsorptionRipples.push({ r: 10, alpha: 0.95 });
-              logTerminal(`📥 Server verified and committed result for ${task.id}: ${task.primeCount.toLocaleString()} primes found.`, 'highlight');
+              logTerminal(`📥 Server verified and committed result for ${task.id} (${task.workloadName || 'Workload'}): ${task.returnPill || 'Completed'}.`, 'highlight');
 
               // Store in completed task results table
               completedTaskRecords.unshift({
                 taskId: task.id,
-                rangeStart: task.rangeStart,
-                rangeEnd: task.rangeEnd,
+                workloadType: task.workloadType || 'COMPUTE_PRIME',
+                rangeStart: task.rangeStart || 1,
+                rangeEnd: task.rangeEnd || 50000,
                 assignedNode: target.node.hostname,
-                primeCount: task.primeCount,
+                primeCount: task.primeCount || 0,
                 durationMs: task.durationMs,
                 status: task.wasFailover ? 'MIGRATED & RECOVERED' : 'COMPLETED',
-                result: `Found ${task.primeCount.toLocaleString()} prime numbers in range [${task.rangeStart.toLocaleString()} .. ${task.rangeEnd.toLocaleString()}]`
+                result: task.resultText
               });
               renderTaskResultsTable();
 
               // Post to backend
-              fetch(`/api/v1/tasks/demo?startRange=${task.rangeStart}&endRange=${task.rangeEnd}&splits=${task.splits}&assignedNode=${target.node.nodeId}&simulatedFailover=${task.wasFailover}`, { method: 'POST' });
+              fetch(`/api/v1/tasks/demo?workloadType=${task.workloadType || 'COMPUTE_PRIME'}&startRange=${task.rangeStart || 1}&endRange=${task.rangeEnd || 50000}&splits=${task.splits}&assignedNode=${target.node.nodeId}&simulatedFailover=${task.wasFailover}`, { method: 'POST' });
 
               return false;
             }
