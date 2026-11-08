@@ -150,7 +150,22 @@ NG.views.tasks = {
             })
             .then(r => r.json())
             .then(res => {
-                if (res.ok || res.id) { clearWarning(warnEl); startEl.value = ''; endEl.value = ''; }
+                if (res.ok || res.id) {
+                    clearWarning(warnEl);
+                    startEl.value = '';
+                    endEl.value = '';
+                    if (window.NG && window.NG.networkCanvas && window.NG.networkCanvas.dispatchTask) {
+                        const count = extra && extra.subTaskCount ? extra.subTaskCount : 1;
+                        for (let k = 0; k < count; k++) {
+                            setTimeout(() => {
+                                window.NG.networkCanvas.dispatchTask({
+                                    id: res.id || 'task-' + Date.now(),
+                                    label: count > 1 ? `Split [${k+1}/${count}]` : `Task [${rangeStart}..${rangeEnd}]`
+                                });
+                            }, k * 350);
+                        }
+                    }
+                }
                 else showWarning(warnEl, res.error || 'Submission failed');
             })
             .catch(() => showWarning(warnEl, 'Could not reach local service'))

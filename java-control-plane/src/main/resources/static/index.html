@@ -38,7 +38,6 @@
       background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
     }
 
-    /* Top Navigation Bar */
     header {
       display: flex;
       justify-content: space-between;
@@ -52,87 +51,48 @@
       z-index: 100;
     }
 
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
+    .brand { display: flex; align-items: center; gap: 12px; }
     .brand-logo {
-      width: 36px;
-      height: 36px;
+      width: 36px; height: 36px;
       background: linear-gradient(135deg, var(--cyan), var(--purple));
       border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 20px;
-      font-weight: bold;
-      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: bold; color: #fff;
       box-shadow: 0 0 16px rgba(0, 212, 255, 0.4);
     }
+    .brand-title { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.3px; }
+    .brand-subtitle { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
 
-    .brand-title {
-      font-size: 1.15rem;
-      font-weight: 700;
-      letter-spacing: -0.3px;
-    }
-
-    .brand-subtitle {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-
-    .header-actions {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
+    .header-actions { display: flex; align-items: center; gap: 16px; }
 
     .topology-badge {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 14px;
-      border-radius: 20px;
-      font-size: 0.82rem;
-      font-weight: 600;
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 14px; border-radius: 20px;
+      font-size: 0.82rem; font-weight: 600;
       background: rgba(0, 255, 136, 0.1);
       border: 1px solid rgba(0, 255, 136, 0.35);
       color: var(--green);
       transition: all 0.3s ease;
     }
-
     .topology-badge.local {
       background: rgba(0, 212, 255, 0.1);
       border-color: rgba(0, 212, 255, 0.35);
       color: var(--cyan);
     }
-
     .pulse-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: currentColor;
-      box-shadow: 0 0 8px currentColor;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: currentColor; box-shadow: 0 0 8px currentColor;
       animation: pulse 1.8s infinite;
     }
-
     @keyframes pulse {
       0%, 100% { opacity: 1; transform: scale(1); }
       50% { opacity: 0.4; transform: scale(0.85); }
     }
 
-    /* Main Container */
     main {
-      max-width: 1440px;
-      margin: 0 auto;
-      padding: 24px;
-      display: flex;
-      flex-direction: column;
-      gap: 24px;
+      max-width: 1440px; margin: 0 auto;
+      padding: 24px; display: flex;
+      flex-direction: column; gap: 24px;
     }
 
     /* KPI Summary Row */
@@ -141,178 +101,104 @@
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 16px;
     }
-
     .kpi-card {
       background: var(--bg-card);
       border: 1px solid var(--border-color);
-      border-radius: 12px;
-      padding: 18px 20px;
+      border-radius: 12px; padding: 18px 20px;
       backdrop-filter: blur(10px);
       transition: transform 0.2s, border-color 0.2s;
-      position: relative;
-      overflow: hidden;
+      position: relative; overflow: hidden;
     }
-
     .kpi-card::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 2px;
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
       background: linear-gradient(90deg, transparent, var(--cyan), transparent);
       opacity: 0.4;
     }
-
-    .kpi-card:hover {
-      transform: translateY(-2px);
-      border-color: var(--border-glow);
-    }
-
+    .kpi-card:hover { transform: translateY(-2px); border-color: var(--border-glow); }
     .kpi-title {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      margin-bottom: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+      font-size: 0.8rem; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.8px;
+      margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;
     }
-
     .kpi-value {
-      font-size: 1.85rem;
-      font-weight: 700;
-      color: var(--text-main);
-      font-family: var(--font-mono);
+      font-size: 1.85rem; font-weight: 700;
+      color: var(--text-main); font-family: var(--font-mono);
     }
+    .kpi-sub { font-size: 0.78rem; color: var(--text-muted); margin-top: 6px; }
 
-    .kpi-sub {
-      font-size: 0.78rem;
-      color: var(--text-muted);
-      margin-top: 6px;
-    }
-
-    /* Visualizer & Inspector Section */
+    /* Visualizer & Side Inspector */
     .viewport-grid {
       display: grid;
       grid-template-columns: 2fr 1fr;
       gap: 20px;
     }
-
-    @media (max-width: 1080px) {
-      .viewport-grid { grid-template-columns: 1fr; }
-    }
+    @media (max-width: 1080px) { .viewport-grid { grid-template-columns: 1fr; } }
 
     .canvas-panel {
       background: var(--bg-card);
       border: 1px solid var(--border-color);
-      border-radius: 14px;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
+      border-radius: 14px; padding: 20px;
+      display: flex; flex-direction: column;
       position: relative;
     }
-
     .panel-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 14px;
+      display: flex; justify-content: space-between;
+      align-items: center; margin-bottom: 14px;
     }
-
     .panel-title {
-      font-size: 1rem;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 10px;
+      font-size: 1rem; font-weight: 600;
+      display: flex; align-items: center; gap: 10px;
     }
-
-    .panel-controls {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
+    .panel-controls { display: flex; align-items: center; gap: 10px; }
 
     .btn {
       background: rgba(0, 212, 255, 0.1);
       border: 1px solid var(--border-color);
-      color: var(--cyan);
-      padding: 6px 14px;
-      border-radius: 6px;
-      font-size: 0.8rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
+      color: var(--cyan); padding: 6px 14px;
+      border-radius: 6px; font-size: 0.8rem; font-weight: 600;
+      cursor: pointer; transition: all 0.2s;
+      display: inline-flex; align-items: center; gap: 6px;
     }
-
     .btn:hover {
       background: rgba(0, 212, 255, 0.22);
       border-color: var(--cyan);
       box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
     }
+    .btn-primary { background: var(--cyan); color: #070a13; border: none; }
+    .btn-primary:hover { background: #33ddff; box-shadow: 0 0 14px rgba(0, 212, 255, 0.6); }
 
-    .btn-primary {
-      background: var(--cyan);
-      color: #070a13;
-      border: none;
-    }
+    .btn-warn { background: rgba(255, 183, 0, 0.15); border-color: rgba(255, 183, 0, 0.4); color: var(--amber); }
+    .btn-warn:hover { background: rgba(255, 183, 0, 0.3); }
 
-    .btn-primary:hover {
-      background: #33ddff;
-      box-shadow: 0 0 14px rgba(0, 212, 255, 0.6);
-    }
+    .btn-danger { background: rgba(255, 51, 102, 0.15); border-color: rgba(255, 51, 102, 0.4); color: var(--red); }
+    .btn-danger:hover { background: rgba(255, 51, 102, 0.3); }
 
     .select-dropdown {
       background: rgba(7, 10, 19, 0.85);
       border: 1px solid var(--border-color);
-      color: var(--text-main);
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 0.8rem;
-      cursor: pointer;
-      outline: none;
+      color: var(--text-main); padding: 6px 12px;
+      border-radius: 6px; font-size: 0.8rem;
+      cursor: pointer; outline: none;
     }
 
     /* 3D Network Canvas Container */
     .canvas-container {
-      width: 100%;
-      height: 480px;
-      background: radial-gradient(circle at 50% 50%, rgba(13, 24, 46, 0.6) 0%, rgba(7, 10, 19, 0.95) 100%);
+      width: 100%; height: 500px;
+      background: radial-gradient(circle at 50% 50%, rgba(13, 24, 46, 0.7) 0%, rgba(7, 10, 19, 0.98) 100%);
       border-radius: 10px;
-      border: 1px solid rgba(0, 212, 255, 0.12);
-      position: relative;
-      overflow: hidden;
+      border: 1px solid rgba(0, 212, 255, 0.15);
+      position: relative; overflow: hidden;
     }
-
-    #clusterCanvas {
-      width: 100%;
-      height: 100%;
-      display: block;
-      cursor: grab;
-    }
-
-    #clusterCanvas:active {
-      cursor: grabbing;
-    }
+    #clusterCanvas { width: 100%; height: 100%; display: block; cursor: grab; }
+    #clusterCanvas:active { cursor: grabbing; }
 
     .canvas-overlay-stats {
-      position: absolute;
-      bottom: 14px;
-      left: 14px;
-      background: rgba(7, 10, 19, 0.8);
+      position: absolute; bottom: 14px; left: 14px;
+      background: rgba(7, 10, 19, 0.85);
       border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 8px 14px;
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      font-family: var(--font-mono);
-      display: flex;
-      gap: 16px;
+      border-radius: 8px; padding: 8px 14px;
+      font-size: 0.75rem; color: var(--text-muted);
+      font-family: var(--font-mono); display: flex; gap: 16px;
       pointer-events: none;
     }
 
@@ -320,59 +206,33 @@
     .inspector-panel {
       background: var(--bg-card);
       border: 1px solid var(--border-color);
-      border-radius: 14px;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
+      border-radius: 14px; padding: 20px;
+      display: flex; flex-direction: column; gap: 16px;
     }
-
     .node-detail-card {
       background: rgba(7, 10, 19, 0.6);
       border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 10px;
-      padding: 16px;
+      border-radius: 10px; padding: 16px;
     }
-
     .node-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
+      display: flex; justify-content: space-between;
+      align-items: center; margin-bottom: 12px;
     }
+    .node-name { font-weight: 700; font-size: 0.95rem; color: var(--cyan); }
 
-    .node-name {
-      font-weight: 700;
-      font-size: 0.95rem;
-      color: var(--cyan);
-    }
-
-    .meter-group {
-      margin-bottom: 12px;
-    }
-
+    .meter-group { margin-bottom: 12px; }
     .meter-label {
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.78rem;
-      color: var(--text-muted);
-      margin-bottom: 4px;
+      display: flex; justify-content: space-between;
+      font-size: 0.78rem; color: var(--text-muted); margin-bottom: 4px;
     }
-
     .meter-bar {
-      height: 6px;
-      background: rgba(255, 255, 255, 0.08);
-      border-radius: 3px;
-      overflow: hidden;
+      height: 6px; background: rgba(255, 255, 255, 0.08);
+      border-radius: 3px; overflow: hidden;
     }
-
     .meter-fill {
-      height: 100%;
-      background: var(--cyan);
-      border-radius: 3px;
-      transition: width 0.4s ease;
+      height: 100%; background: var(--cyan);
+      border-radius: 3px; transition: width 0.4s ease;
     }
-
     .meter-fill.green { background: var(--green); }
     .meter-fill.amber { background: var(--amber); }
     .meter-fill.red { background: var(--red); }
@@ -381,117 +241,53 @@
     .table-panel {
       background: var(--bg-card);
       border: 1px solid var(--border-color);
-      border-radius: 14px;
-      padding: 20px;
+      border-radius: 14px; padding: 20px;
     }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 10px;
-      font-size: 0.85rem;
-    }
-
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
     th {
-      text-align: left;
-      padding: 10px 14px;
-      color: var(--text-muted);
-      border-bottom: 1px solid var(--border-color);
-      font-weight: 600;
-      text-transform: uppercase;
-      font-size: 0.72rem;
-      letter-spacing: 0.6px;
+      text-align: left; padding: 10px 14px; color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color); font-weight: 600;
+      text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.6px;
     }
-
-    td {
-      padding: 12px 14px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-      color: var(--text-main);
-    }
-
-    tr:hover td {
-      background: var(--bg-card-hover);
-    }
+    td { padding: 12px 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); color: var(--text-main); }
+    tr:hover td { background: var(--bg-card-hover); }
 
     .status-badge {
-      display: inline-block;
-      padding: 3px 8px;
-      border-radius: 4px;
-      font-size: 0.72rem;
-      font-weight: 700;
-      letter-spacing: 0.4px;
+      display: inline-block; padding: 3px 8px; border-radius: 4px;
+      font-size: 0.72rem; font-weight: 700; letter-spacing: 0.4px;
     }
-
     .status-alive { background: rgba(0, 255, 136, 0.15); color: var(--green); }
     .status-dead { background: rgba(255, 51, 102, 0.15); color: var(--red); }
     .status-local { background: rgba(0, 212, 255, 0.15); color: var(--cyan); }
     .status-remote { background: rgba(139, 92, 246, 0.18); color: var(--purple); }
 
-    /* Task Submission & Interactive Demo Panel */
     .demo-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
     }
+    @media (max-width: 900px) { .demo-grid { grid-template-columns: 1fr; } }
 
-    @media (max-width: 900px) {
-      .demo-grid { grid-template-columns: 1fr; }
-    }
-
-    .form-group {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      margin-bottom: 12px;
-    }
-
-    .form-label {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-    }
-
+    .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    .form-label { font-size: 0.8rem; color: var(--text-muted); }
     .form-input {
-      background: rgba(7, 10, 19, 0.75);
-      border: 1px solid var(--border-color);
-      padding: 8px 12px;
-      border-radius: 6px;
-      color: #fff;
-      font-family: var(--font-mono);
-      font-size: 0.85rem;
-      outline: none;
+      background: rgba(7, 10, 19, 0.75); border: 1px solid var(--border-color);
+      padding: 8px 12px; border-radius: 6px; color: #fff;
+      font-family: var(--font-mono); font-size: 0.85rem; outline: none;
     }
+    .form-input:focus { border-color: var(--cyan); box-shadow: 0 0 8px rgba(0, 212, 255, 0.3); }
 
-    .form-input:focus {
-      border-color: var(--cyan);
-      box-shadow: 0 0 8px rgba(0, 212, 255, 0.3);
-    }
-
-    /* Terminal Console */
     .terminal-box {
-      background: #03060c;
-      border: 1px solid rgba(0, 212, 255, 0.15);
-      border-radius: 8px;
-      padding: 12px 14px;
-      font-family: var(--font-mono);
-      font-size: 0.75rem;
-      color: #00ff88;
-      max-height: 220px;
-      overflow-y: auto;
-      line-height: 1.5;
+      background: #03060c; border: 1px solid rgba(0, 212, 255, 0.15);
+      border-radius: 8px; padding: 12px 14px; font-family: var(--font-mono);
+      font-size: 0.75rem; color: #00ff88; max-height: 220px;
+      overflow-y: auto; line-height: 1.5;
     }
-
     .terminal-line { margin-bottom: 4px; word-break: break-all; }
     .terminal-muted { color: var(--text-muted); }
     .terminal-highlight { color: var(--cyan); font-weight: bold; }
 
-    /* Instructions Modal / Card */
     .code-badge {
-      background: rgba(0, 0, 0, 0.4);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-family: var(--font-mono);
-      color: var(--cyan);
+      background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 2px 6px; border-radius: 4px; font-family: var(--font-mono); color: var(--cyan);
     }
   </style>
 </head>
@@ -515,9 +311,13 @@
 
       <select id="topologySelect" class="select-dropdown" title="Topology Presentation Mode">
         <option value="auto">Mode: Live Auto-Detect</option>
-        <option value="single">Preview: Single Machine (Same Laptop)</option>
-        <option value="cluster">Preview: Distributed Cluster (Multi-Laptop)</option>
+        <option value="single">Preset: Single Machine (Same Laptop)</option>
+        <option value="cluster">Preset: Distributed Cluster (Multi-Laptop)</option>
       </select>
+
+      <button id="toggleDeadNodeBtn" class="btn btn-danger" title="Simulate Node Kill/Revive">
+        <span>⚠ Toggle Node Failure</span>
+      </button>
 
       <button id="refreshBtn" class="btn" title="Refresh Live State">
         <span>🔄 Refresh</span>
@@ -585,7 +385,7 @@
             <span id="canvasModeBadge" class="status-badge status-local">Local Mode</span>
           </div>
           <div class="panel-controls">
-            <button id="resetCamBtn" class="btn" style="padding: 4px 10px; font-size: 0.75rem;">Reset Orbit</button>
+            <button id="resetCamBtn" class="btn" style="padding: 4px 10px; font-size: 0.75rem;">Reset Angle</button>
             <button id="toggleWireBtn" class="btn" style="padding: 4px 10px; font-size: 0.75rem;">Grid On/Off</button>
           </div>
         </div>
@@ -594,8 +394,8 @@
           <canvas id="clusterCanvas"></canvas>
           <div class="canvas-overlay-stats">
             <div>ORBIT: <span id="orbitAngleText" style="color: #fff;">0°</span></div>
-            <div>NODES: <span id="orbitNodeCount" style="color: #fff;">0</span></div>
-            <div>STATUS: <span style="color: var(--green);">HEALTHY</span></div>
+            <div>STATUS: <span id="orbitStatusText" style="color: var(--green);">HEALTHY</span></div>
+            <div>ACTIVE TASKS: <span id="orbitActiveTaskCount" style="color: var(--amber);">0</span></div>
           </div>
         </div>
       </div>
@@ -630,27 +430,36 @@
               </div>
             </div>
             <div style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.6; margin-top: 10px;">
-              <div>• <b>Role:</b> Coordination, Raft consensus, Task dispatching</div>
+              <div>• <b>Architecture:</b> 3D Server Rack • Raft Consensus</div>
               <div>• <b>gRPC Endpoint:</b> <span class="code-badge">localhost:50051</span></div>
-              <div>• <b>REST / Tomcat:</b> <span class="code-badge">http://localhost:8080</span></div>
-              <div>• <b>Metrics:</b> <span class="code-badge">http://localhost:9090/metrics</span></div>
+              <div>• <b>Tomcat Web UI:</b> <span class="code-badge">http://localhost:8080</span></div>
+              <div>• <b>Idle State:</b> Passive Orbit (No random packet spam)</div>
             </div>
           </div>
         </div>
 
+        <!-- Task Dispatcher & Work Split -->
         <div class="panel-title" style="margin-top: 10px;">
-          <span>🚀 Task Dispatcher (Live Demo)</span>
+          <span>🚀 Task Dispatcher &amp; Work Split</span>
         </div>
         <div>
           <div class="form-group">
-            <label class="form-label">Compute Range (Prime Search):</label>
+            <label class="form-label">Search Range [Start .. End]:</label>
             <div style="display: flex; gap: 8px;">
               <input type="number" id="taskStart" class="form-input" value="1" style="width: 50%;">
               <input type="number" id="taskEnd" class="form-input" value="50000" style="width: 50%;">
             </div>
           </div>
+          <div class="form-group">
+            <label class="form-label">Work Split Mode:</label>
+            <select id="splitModeSelect" class="form-input">
+              <option value="single">Single Task (Dispatched to Best Node)</option>
+              <option value="split2">Split Work across 2 Worker Nodes</option>
+              <option value="split3">Split Work across 3 Cluster Nodes</option>
+            </select>
+          </div>
           <button id="dispatchTaskBtn" class="btn btn-primary" style="width: 100%; justify-content: center;">
-            🚀 Dispatch Task to Cluster
+            🚀 Dispatch Work to Nodes
           </button>
         </div>
       </div>
@@ -672,6 +481,7 @@
           <thead>
             <tr>
               <th>Node ID</th>
+              <th>Device Model</th>
               <th>Hostname</th>
               <th>Network IP</th>
               <th>Topology</th>
@@ -679,7 +489,6 @@
               <th>Cores / RAM</th>
               <th>CPU Usage</th>
               <th>Memory Usage</th>
-              <th>Heartbeat</th>
             </tr>
           </thead>
           <tbody id="nodeTableBody">
@@ -698,7 +507,7 @@
       <div class="table-panel">
         <div class="panel-header">
           <div class="panel-title">
-            <span>📡 Cluster Event Log & Stream</span>
+            <span>📡 Cluster Event Log &amp; Stream</span>
           </div>
           <button id="clearLogBtn" class="btn" style="padding: 2px 8px; font-size: 0.72rem;">Clear</button>
         </div>
@@ -730,7 +539,7 @@
 
   </main>
 
-  <!-- 3D Cluster Visualizer Script (Vanilla HTML5 Canvas + WebGL Math) -->
+  <!-- 3D Cluster Visualizer Script -->
   <script>
     (function() {
       'use strict';
@@ -739,12 +548,17 @@
       let topologyData = null;
       let metricsData = null;
       let nodesList = [];
-      let selectedNode = null;
       let presentationMode = 'auto'; // 'auto', 'single', 'cluster'
       let rotationAngle = 0;
       let isDragging = false;
       let lastMouseX = 0;
       let showGrid = true;
+      let simulateDeadNode = false;
+
+      // Active Work Task Animation Lifecycle:
+      // phase: 'DISPATCH' (server -> node), 'PROCESSING' (node computing), 'RETURN' (node -> server), 'COMPLETE'
+      let activeWorkPackets = [];
+      let serverAbsorptionRipples = [];
 
       const canvas = document.getElementById('clusterCanvas');
       const ctx = canvas.getContext('2d');
@@ -769,6 +583,8 @@
           line.innerHTML = `<span class="terminal-muted">[${now}]</span> <span class="terminal-highlight">${msg}</span>`;
         } else if (type === 'error') {
           line.innerHTML = `<span class="terminal-muted">[${now}]</span> <span style="color: var(--red);">[ERROR] ${msg}</span>`;
+        } else if (type === 'success') {
+          line.innerHTML = `<span class="terminal-muted">[${now}]</span> <span style="color: var(--green); font-weight: bold;">[SUCCESS] ${msg}</span>`;
         } else {
           line.innerHTML = `<span class="terminal-muted">[${now}]</span> ${msg}`;
         }
@@ -788,9 +604,7 @@
             topologyData = await res.json();
             updateTopologyUI();
           }
-        } catch (e) {
-          // Graceful fallback for offline demo
-        }
+        } catch (e) {}
       }
 
       async function fetchMetrics() {
@@ -858,10 +672,35 @@
         document.getElementById('inspectHeapBar').style.width = `${Math.min(100, metricsData.heapUsedPercent)}%`;
 
         document.getElementById('inspectCpuText').textContent = `${metricsData.avgClusterCpu || 0.0}%`;
-        document.getElementById('inspectCpuBar').style.width = `${Math.min(100, metricsData.avgClusterCpu || 5)}%`;
+        document.getElementById('inspectCpuBar').style.width = `${Math.min(100, metricsData.avgClusterCpu || 8)}%`;
 
         document.getElementById('kpiAvgCpu').textContent = `${metricsData.avgClusterCpu || 0.0}%`;
         document.getElementById('kpiAvgMem').textContent = `${metricsData.avgClusterMemory || 0.0}%`;
+      }
+
+      function getEffectiveNodes() {
+        let displayNodes = [...nodesList];
+
+        if (displayNodes.length === 0 && presentationMode === 'cluster') {
+          displayNodes = [
+            { nodeId: 'node-dell-xps', hostname: 'Dell-XPS-15', ip: '192.168.1.42', status: 'ALIVE', isLocal: false, osName: 'Windows 11', cpuCores: 16, totalMemoryBytes: 34359738368, cpuUsage: 14.5, memoryUsage: 38.2, deviceType: 'windows' },
+            { nodeId: 'node-macbook-pro', hostname: 'MacBook-Pro-M2', ip: '192.168.1.88', status: 'ALIVE', isLocal: false, osName: 'macOS Darwin', cpuCores: 12, totalMemoryBytes: 17179869184, cpuUsage: 9.8, memoryUsage: 44.0, deviceType: 'mac' },
+            { nodeId: 'node-thinkpad-linux', hostname: 'ThinkPad-Ubuntu', ip: '192.168.1.105', status: 'ALIVE', isLocal: false, osName: 'Linux 6.8', cpuCores: 8, totalMemoryBytes: 17179869184, cpuUsage: 22.1, memoryUsage: 51.5, deviceType: 'linux' }
+          ];
+        } else if (displayNodes.length === 0) {
+          displayNodes = [
+            { nodeId: 'node-local-worker', hostname: 'localhost-worker', ip: '127.0.0.1', status: 'ALIVE', isLocal: true, osName: 'Windows 11', cpuCores: 8, totalMemoryBytes: 17179869184, cpuUsage: 11.2, memoryUsage: 35.0, deviceType: 'windows' },
+            { nodeId: 'node-linux-worker', hostname: 'edge-worker-02', ip: '192.168.1.55', status: 'ALIVE', isLocal: false, osName: 'Linux Ubuntu', cpuCores: 8, totalMemoryBytes: 17179869184, cpuUsage: 18.0, memoryUsage: 42.0, deviceType: 'linux' }
+          ];
+        }
+
+        // Apply Dead Node simulation toggle
+        if (simulateDeadNode && displayNodes.length > 1) {
+          displayNodes[1].status = 'DEAD';
+          displayNodes[1].isDead = true;
+        }
+
+        return displayNodes;
       }
 
       function updateNodesUI() {
@@ -870,21 +709,7 @@
         const aliveKpi = document.getElementById('kpiAliveNodes');
         const subKpi = document.getElementById('kpiNodeSub');
 
-        let displayNodes = [...nodesList];
-
-        // Presentation simulation overrides if no physical nodes connected
-        if (displayNodes.length === 0 && presentationMode === 'cluster') {
-          displayNodes = [
-            { nodeId: 'node-dell-xps', hostname: 'Lalith-Dell-XPS', ip: '192.168.1.42', status: 'ALIVE', isLocal: false, osName: 'Windows 11', cpuCores: 16, totalMemoryBytes: 34359738368, cpuUsage: 14.5, memoryUsage: 38.2, heartbeatAgeMs: 400 },
-            { nodeId: 'node-macbook-pro', hostname: 'MacBook-Pro-M2', ip: '192.168.1.88', status: 'ALIVE', isLocal: false, osName: 'macOS Darwin', cpuCores: 12, totalMemoryBytes: 17179869184, cpuUsage: 9.8, memoryUsage: 44.0, heartbeatAgeMs: 750 },
-            { nodeId: 'node-thinkpad-linux', hostname: 'ThinkPad-Ubuntu', ip: '192.168.1.105', status: 'ALIVE', isLocal: false, osName: 'Linux 6.8', cpuCores: 8, totalMemoryBytes: 17179869184, cpuUsage: 22.1, memoryUsage: 51.5, heartbeatAgeMs: 250 }
-          ];
-        } else if (displayNodes.length === 0 && presentationMode === 'single') {
-          displayNodes = [
-            { nodeId: 'node-local-worker', hostname: 'localhost-worker-1', ip: '127.0.0.1', status: 'ALIVE', isLocal: true, osName: 'Windows 11', cpuCores: 8, totalMemoryBytes: 17179869184, cpuUsage: 11.2, memoryUsage: 35.0, heartbeatAgeMs: 300 }
-          ];
-        }
-
+        const displayNodes = getEffectiveNodes();
         const aliveCount = displayNodes.filter(n => (n.status || '').toUpperCase() === 'ALIVE').length;
         const localCount = displayNodes.filter(n => n.isLocal || n.ip === '127.0.0.1').length;
         const remoteCount = displayNodes.length - localCount;
@@ -892,25 +717,30 @@
         aliveKpi.textContent = `${aliveCount} / ${displayNodes.length}`;
         subKpi.textContent = `${localCount} local, ${remoteCount} remote connected`;
         countLabel.textContent = `${displayNodes.length} nodes registered`;
-        document.getElementById('orbitNodeCount').textContent = displayNodes.length;
 
-        if (displayNodes.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 24px;">No nodes currently connected. Run <span class="code-badge">java -jar desktop-ui.jar --role=node</span> to connect a worker node.</td></tr>`;
-          return;
+        if (aliveCount < displayNodes.length) {
+          document.getElementById('orbitStatusText').textContent = 'DEGRADED (1 DEAD)';
+          document.getElementById('orbitStatusText').style.color = 'var(--red)';
+        } else {
+          document.getElementById('orbitStatusText').textContent = 'ALL HEALTHY';
+          document.getElementById('orbitStatusText').style.color = 'var(--green)';
         }
 
         tbody.innerHTML = displayNodes.map(n => {
+          const isDead = (n.status || '').toUpperCase() === 'DEAD';
           const isLoc = n.isLocal || n.ip === '127.0.0.1' || n.ip === 'localhost';
           const ramGb = n.totalMemoryBytes ? (n.totalMemoryBytes / (1024**3)).toFixed(1) + ' GB' : '16 GB';
           const cpuVal = n.cpuUsage != null ? n.cpuUsage.toFixed(1) + '%' : '12.0%';
           const memVal = n.memoryUsage != null ? n.memoryUsage.toFixed(1) + '%' : '35.0%';
+          const devIcon = n.deviceType === 'mac' ? '💻 MacBook' : (n.deviceType === 'linux' ? '🖥️ Linux Tower' : '💻 Windows PC');
           return `
-            <tr style="cursor: pointer;" onclick="selectInspectNode('${n.nodeId}')">
+            <tr>
               <td style="font-family: var(--font-mono); color: var(--cyan);">${n.nodeId}</td>
+              <td style="font-weight: 600;">${devIcon}</td>
               <td style="font-weight: 600;">${n.hostname || 'Unknown'}</td>
               <td style="font-family: var(--font-mono);">${n.ip || '127.0.0.1'}</td>
               <td><span class="status-badge ${isLoc ? 'status-local' : 'status-remote'}">${isLoc ? 'Localhost' : 'Remote Edge'}</span></td>
-              <td><span class="status-badge ${n.status === 'ALIVE' ? 'status-alive' : 'status-dead'}">${n.status}</span></td>
+              <td><span class="status-badge ${isDead ? 'status-dead' : 'status-alive'}">${isDead ? 'DEAD' : 'ALIVE'}</span></td>
               <td>${n.cpuCores || 8} cores / ${ramGb}</td>
               <td>
                 <div style="display: flex; align-items: center; gap: 8px;">
@@ -924,36 +754,79 @@
                   <div class="meter-bar" style="width: 50px;"><div class="meter-fill green" style="width: ${memVal};"></div></div>
                 </div>
               </td>
-              <td style="font-size: 0.75rem; color: var(--text-muted);">${n.heartbeatAgeMs ? n.heartbeatAgeMs + 'ms ago' : 'Fresh'}</td>
             </tr>
           `;
         }).join('');
       }
 
-      window.selectInspectNode = function(nodeId) {
-        logTerminal(`Selected node for detailed inspection: ${nodeId}`, 'highlight');
-      };
-
-      // ── Task Dispatcher ───────────────────────────────────────────────────
+      // ── Task Dispatcher with Work Split & Complete Lifecycle ───────────────
       document.getElementById('dispatchTaskBtn').addEventListener('click', async () => {
-        const start = document.getElementById('taskStart').value;
-        const end = document.getElementById('taskEnd').value;
-        logTerminal(`Dispatching prime-search task [${start}..${end}] to cluster...`, 'highlight');
+        const start = parseInt(document.getElementById('taskStart').value) || 1;
+        const end = parseInt(document.getElementById('taskEnd').value) || 50000;
+        const splitMode = document.getElementById('splitModeSelect').value;
 
-        try {
-          const res = await fetch(`/api/v1/tasks/demo?startRange=${start}&endRange=${end}`, { method: 'POST' });
-          if (res.ok) {
-            const result = await res.json();
-            logTerminal(`✅ Task scheduled: ${result.taskId} (State: ${result.state}) assigned to: ${result.assignedNode}`);
-          } else {
-            logTerminal(`Task queued locally for execution.`);
-          }
-        } catch (e) {
-          logTerminal(`Task created: demo-task-${Date.now()} assigned to scheduler.`);
+        const effectiveNodes = getEffectiveNodes().filter(n => (n.status || '').toUpperCase() === 'ALIVE');
+        if (effectiveNodes.length === 0) {
+          logTerminal('No ALIVE nodes available to accept work!', 'error');
+          return;
         }
+
+        let numSplits = 1;
+        if (splitMode === 'split2') numSplits = Math.min(2, effectiveNodes.length);
+        if (splitMode === 'split3') numSplits = Math.min(3, effectiveNodes.length);
+
+        logTerminal(`[DISPATCH] Server splitting work [${start}..${end}] across ${numSplits} worker node(s)...`, 'highlight');
+
+        const chunkSize = Math.floor((end - start + 1) / numSplits);
+        for (let i = 0; i < numSplits; i++) {
+          const cStart = start + i * chunkSize;
+          const cEnd = (i === numSplits - 1) ? end : cStart + chunkSize - 1;
+          const targetNode = effectiveNodes[i % effectiveNodes.length];
+
+          const taskId = `task-${Date.now().toString(36)}-${i+1}`;
+          const chunkLabel = numSplits > 1 ? `Chunk ${i+1}/${numSplits} [${cStart}..${cEnd}]` : `Range [${cStart}..${cEnd}]`;
+
+          // Launch packet animation with staggering
+          setTimeout(() => {
+            activeWorkPackets.push({
+              id: taskId,
+              nodeId: targetNode.nodeId,
+              node: targetNode,
+              label: chunkLabel,
+              rangeStart: cStart,
+              rangeEnd: cEnd,
+              phase: 'DISPATCH', // 'DISPATCH' -> 'PROCESSING' -> 'RETURN'
+              t: 0,
+              speed: 0.015,
+              computePct: 0
+            });
+            logTerminal(`⚡ Server dispatched ${chunkLabel} ➔ ${targetNode.hostname} (${targetNode.ip})`);
+          }, i * 350);
+        }
+
+        // Also call backend demo API
+        try {
+          fetch(`/api/v1/tasks/demo?startRange=${start}&endRange=${end}`, { method: 'POST' });
+        } catch (e) {}
       });
 
-      // ── Presentation Mode Dropdown ────────────────────────────────────────
+      // ── Node Failure Simulation Toggle ─────────────────────────────────────
+      document.getElementById('toggleDeadNodeBtn').addEventListener('click', () => {
+        simulateDeadNode = !simulateDeadNode;
+        const btn = document.getElementById('toggleDeadNodeBtn');
+        if (simulateDeadNode) {
+          btn.className = 'btn btn-warn';
+          btn.innerHTML = '<span>✔ Revive Dead Node</span>';
+          logTerminal('⚠ SIMULATION: Node [edge-worker-02] killed! Connection severed, failover initiated.', 'error');
+        } else {
+          btn.className = 'btn btn-danger';
+          btn.innerHTML = '<span>⚠ Toggle Node Failure</span>';
+          logTerminal('✔ SIMULATION: Node [edge-worker-02] recovered! Reconnected to Raft cluster.', 'success');
+        }
+        updateNodesUI();
+      });
+
+      // ── Other Controls ────────────────────────────────────────────────────
       document.getElementById('topologySelect').addEventListener('change', (e) => {
         presentationMode = e.target.value;
         logTerminal(`Switched Presentation Topology Mode: ${presentationMode.toUpperCase()}`, 'highlight');
@@ -962,25 +835,15 @@
       });
 
       document.getElementById('refreshBtn').addEventListener('click', () => {
-        fetchTopology();
-        fetchMetrics();
-        fetchNodes();
-        logTerminal(`Manual refresh executed.`);
+        fetchTopology(); fetchMetrics(); fetchNodes();
+        logTerminal('Live telemetry refreshed.');
       });
 
-      document.getElementById('resetCamBtn').addEventListener('click', () => {
-        rotationAngle = 0;
-      });
-
-      document.getElementById('toggleWireBtn').addEventListener('click', () => {
-        showGrid = !showGrid;
-      });
+      document.getElementById('resetCamBtn').addEventListener('click', () => { rotationAngle = 0; });
+      document.getElementById('toggleWireBtn').addEventListener('click', () => { showGrid = !showGrid; });
 
       // Canvas Dragging
-      canvas.addEventListener('mousedown', (e) => {
-        isDragging = true;
-        lastMouseX = e.clientX;
-      });
+      canvas.addEventListener('mousedown', (e) => { isDragging = true; lastMouseX = e.clientX; });
       window.addEventListener('mouseup', () => { isDragging = false; });
       window.addEventListener('mousemove', (e) => {
         if (!isDragging) return;
@@ -989,17 +852,189 @@
         lastMouseX = e.clientX;
       });
 
-      // ── 3D Visualizer Render Loop ─────────────────────────────────────────
-      let particles = [];
-      for (let i = 0; i < 40; i++) {
-        particles.push({
-          progress: Math.random(),
-          speed: 0.004 + Math.random() * 0.006,
-          targetNode: i % 4,
-          trail: []
+      // ── 3D Drawing Functions ──────────────────────────────────────────────
+
+      /** Draw Authentic 3D Server Rack Cabinet (Not a flat circle!) */
+      function draw3DServerRack(x, y, scale = 1) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(scale, scale);
+
+        const rw = 68;
+        const rh = 90;
+
+        // Ground shadow
+        ctx.beginPath();
+        ctx.ellipse(0, rh/2 + 8, rw/2 * 0.9, 9, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fill();
+
+        // Metallic Front Chassis
+        ctx.beginPath();
+        ctx.roundRect(-rw/2, -rh/2, rw, rh, [4, 4, 2, 2]);
+        ctx.fillStyle = '#080e1c';
+        ctx.strokeStyle = '#00d4ff';
+        ctx.lineWidth = 2;
+        ctx.shadowColor = '#00d4ff';
+        ctx.shadowBlur = 12;
+        ctx.fill(); ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // 3D Depth Right Face
+        ctx.beginPath();
+        ctx.moveTo(rw/2,      -rh/2);
+        ctx.lineTo(rw/2 + 16, -rh/2 - 12);
+        ctx.lineTo(rw/2 + 16,  rh/2 - 12);
+        ctx.lineTo(rw/2,       rh/2);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(0, 212, 255, 0.08)';
+        ctx.strokeStyle = 'rgba(0, 212, 255, 0.25)';
+        ctx.lineWidth = 1;
+        ctx.fill(); ctx.stroke();
+
+        // 3D Depth Top Face
+        ctx.beginPath();
+        ctx.moveTo(-rw/2,      -rh/2);
+        ctx.lineTo(-rw/2 + 16, -rh/2 - 12);
+        ctx.lineTo( rw/2 + 16, -rh/2 - 12);
+        ctx.lineTo( rw/2,      -rh/2);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(0, 212, 255, 0.16)';
+        ctx.strokeStyle = 'rgba(0, 212, 255, 0.35)';
+        ctx.fill(); ctx.stroke();
+
+        // 6 Server Blade Trays with Live Activity LEDs
+        for (let u = 0; u < 6; u++) {
+          const uy = -rh/2 + 7 + u * 12.5;
+          ctx.beginPath();
+          ctx.roundRect(-rw/2 + 4, uy, rw - 8, 10, 1.5);
+          ctx.fillStyle = '#0c1626';
+          ctx.strokeStyle = 'rgba(0, 212, 255, 0.2)';
+          ctx.lineWidth = 0.8;
+          ctx.fill(); ctx.stroke();
+
+          // Green/Cyan Activity LED
+          const ledOn = Math.sin(Date.now() * 0.006 + u) > -0.2;
+          ctx.beginPath();
+          ctx.arc(-rw/2 + 9, uy + 5, 2.2, 0, Math.PI * 2);
+          ctx.fillStyle = ledOn ? (u < 4 ? '#00ff88' : '#00d4ff') : 'rgba(0, 255, 136, 0.2)';
+          ctx.fill();
+
+          // Reading progress bars
+          const barW = (rw - 26) * (0.35 + 0.45 * Math.abs(Math.sin(Date.now() * 0.003 + u)));
+          ctx.fillStyle = 'rgba(0, 212, 255, 0.25)';
+          ctx.fillRect(-rw/2 + 16, uy + 3, barW, 4);
+        }
+
+        // Server Fan at Top
+        const fanX = rw/2 - 12;
+        const fanY = -rh/2 + 12;
+        ctx.save();
+        ctx.translate(fanX, fanY);
+        ctx.rotate(Date.now() * 0.008);
+        for (let b = 0; b < 4; b++) {
+          ctx.rotate(Math.PI / 2);
+          ctx.beginPath();
+          ctx.ellipse(0, -4, 1.5, 4, 0, 0, Math.PI);
+          ctx.fillStyle = 'rgba(0, 212, 255, 0.5)';
+          ctx.fill();
+        }
+        ctx.restore();
+
+        // Header Title
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 9px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('CONTROL PLANE', 0, rh/2 + 16);
+        ctx.fillStyle = '#00d4ff';
+        ctx.font = '8px monospace';
+        ctx.fillText('Raft Leader :50051', 0, rh/2 + 27);
+
+        // Ripples when absorbing results
+        serverAbsorptionRipples.forEach(rip => {
+          ctx.beginPath();
+          ctx.arc(0, 0, rip.r, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(0, 255, 136, ${rip.alpha})`;
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
         });
+
+        ctx.restore();
       }
 
+      /** Draw Authentic Device Models (Laptop, PC, Linux Tower) */
+      function drawDeviceModel(type, color, glow) {
+        if (type === 'mac' || type === 'laptop') {
+          // Open Laptop Model
+          const lw = 38, lh = 24;
+          ctx.beginPath();
+          ctx.roundRect(-lw/2, -lh/2 - 4, lw, lh, 2);
+          ctx.fillStyle = '#141c2c';
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5;
+          ctx.fill(); ctx.stroke();
+
+          // Screen glow
+          ctx.fillStyle = glow ? 'rgba(0, 212, 255, 0.25)' : 'rgba(0, 212, 255, 0.08)';
+          ctx.fillRect(-lw/2 + 2, -lh/2 - 2, lw - 4, lh - 4);
+
+          // Keyboard base
+          ctx.beginPath();
+          ctx.roundRect(-lw/2 - 2, lh/2 - 4, lw + 4, 7, [0, 0, 2, 2]);
+          ctx.fillStyle = '#0b111e';
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1;
+          ctx.fill(); ctx.stroke();
+
+        } else if (type === 'linux') {
+          // Linux Tower PC
+          const w = 26, h = 36;
+          ctx.beginPath();
+          ctx.roundRect(-w/2, -h/2, w, h, 3);
+          ctx.fillStyle = '#0a101d';
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5;
+          ctx.fill(); ctx.stroke();
+
+          // 3D side face
+          ctx.beginPath();
+          ctx.moveTo(w/2, -h/2);
+          ctx.lineTo(w/2 + 7, -h/2 - 5);
+          ctx.lineTo(w/2 + 7, h/2 - 5);
+          ctx.lineTo(w/2, h/2);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(0, 212, 255, 0.08)';
+          ctx.strokeStyle = 'rgba(0, 212, 255, 0.2)';
+          ctx.fill(); ctx.stroke();
+
+          // Terminal prompt
+          ctx.fillStyle = '#00ff88';
+          ctx.font = 'bold 7px monospace';
+          ctx.textAlign = 'left';
+          ctx.fillText('$_', -w/2 + 5, h/2 - 6);
+
+        } else {
+          // Windows PC Desktop Monitor
+          const mw = 36, mh = 24;
+          ctx.beginPath();
+          ctx.roundRect(-mw/2, -mh/2 - 8, mw, mh, 2);
+          ctx.fillStyle = '#111b2e';
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5;
+          ctx.fill(); ctx.stroke();
+
+          // Screen glow
+          ctx.fillStyle = glow ? 'rgba(0, 212, 255, 0.22)' : 'rgba(0, 212, 255, 0.06)';
+          ctx.fillRect(-mw/2 + 2, -mh/2 - 6, mw - 4, mh - 4);
+
+          // Stand
+          ctx.fillStyle = '#2A3550';
+          ctx.fillRect(-2, mh/2 - 8, 4, 6);
+          ctx.fillRect(-8, mh/2 - 2, 16, 3);
+        }
+      }
+
+      // ── Main Render Loop ──────────────────────────────────────────────────
       function draw3DScene() {
         const width = canvas.parentElement.clientWidth;
         const height = canvas.parentElement.clientHeight;
@@ -1008,23 +1043,23 @@
         const cx = width / 2;
         const cy = height / 2;
 
-        // Auto rotation
         if (!isDragging) {
-          rotationAngle += 0.003;
+          rotationAngle += 0.002;
         }
         document.getElementById('orbitAngleText').textContent = Math.round((rotationAngle * 180 / Math.PI) % 360) + '°';
+        document.getElementById('orbitActiveTaskCount').textContent = activeWorkPackets.length;
 
-        // 1. Draw 3D Perspective Grid
+        // 1. Perspective Grid
         if (showGrid) {
           ctx.save();
-          ctx.strokeStyle = 'rgba(0, 212, 255, 0.05)';
+          ctx.strokeStyle = 'rgba(0, 212, 255, 0.04)';
           ctx.lineWidth = 1;
           const gridSize = 14;
-          const spacing = 36;
+          const spacing = 38;
           for (let x = -gridSize; x <= gridSize; x++) {
             ctx.beginPath();
             ctx.moveTo(cx + x * spacing, cy + 90);
-            ctx.lineTo(cx + x * spacing * 2.2, height);
+            ctx.lineTo(cx + x * spacing * 2.3, height);
             ctx.stroke();
           }
           for (let y = 0; y <= 6; y++) {
@@ -1037,156 +1072,252 @@
           ctx.restore();
         }
 
-        // 2. Draw Orbit Ellipse Rings
+        // 2. Orbit Ellipse Ring
         ctx.save();
-        ctx.strokeStyle = 'rgba(0, 212, 255, 0.15)';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = 'rgba(0, 212, 255, 0.12)';
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
         ctx.ellipse(cx, cy, width * 0.35, height * 0.28, 0, 0, Math.PI * 2);
         ctx.stroke();
-
-        ctx.strokeStyle = 'rgba(139, 92, 246, 0.08)';
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, width * 0.38, height * 0.31, 0, 0, Math.PI * 2);
-        ctx.stroke();
         ctx.restore();
 
-        // 3. Determine Render Nodes
-        let renderNodes = [...nodesList];
-        if (renderNodes.length === 0 && presentationMode === 'cluster') {
-          renderNodes = [
-            { name: 'Dell XPS (Remote)', ip: '192.168.1.42', status: 'ALIVE', color: '#00ff88' },
-            { name: 'MacBook Pro (Remote)', ip: '192.168.1.88', status: 'ALIVE', color: '#8b5cf6' },
-            { name: 'ThinkPad Linux', ip: '192.168.1.105', status: 'ALIVE', color: '#00d4ff' }
-          ];
-        } else if (renderNodes.length === 0) {
-          renderNodes = [
-            { name: 'Local Worker 1', ip: '127.0.0.1', status: 'ALIVE', color: '#00d4ff' }
-          ];
-        }
+        // 3. Node Calculation
+        const rawNodes = getEffectiveNodes();
+        const aliveNodes = rawNodes.filter(n => (n.status || '').toUpperCase() === 'ALIVE');
+        const deadNodes = rawNodes.filter(n => (n.status || '').toUpperCase() === 'DEAD');
 
-        // Calculate 3D positions with z-sorting
-        const nodePositions = renderNodes.map((node, i) => {
-          const total = renderNodes.length;
-          const theta = rotationAngle + (i / total) * Math.PI * 2;
+        const nodeRenderList = [];
+
+        // Position alive nodes in synchronized orbit
+        aliveNodes.forEach((node, i) => {
+          const theta = rotationAngle + (i / Math.max(1, aliveNodes.length)) * Math.PI * 2;
           const rx = width * 0.35;
           const ry = height * 0.28;
           const nx = cx + Math.cos(theta) * rx;
           const ny = cy + Math.sin(theta) * ry;
-          const z = Math.sin(theta); // depth (-1 behind, +1 in front)
-          const scale = 0.8 + (z + 1) * 0.22; // scale from 0.8 to 1.24
-          return { node, x: nx, y: ny, z, scale, theta };
+          const z = Math.sin(theta);
+          const scale = 0.8 + (z + 1) * 0.22;
+          nodeRenderList.push({ node, x: nx, y: ny, z, scale, theta, isDead: false });
         });
 
-        // Sort by Z for proper 3D occlusion
-        nodePositions.sort((a, b) => a.z - b.z);
+        // Position dead nodes isolated / drifted outside active orbit
+        deadNodes.forEach((node, i) => {
+          const fixedTheta = Math.PI * 0.8 + (i * 0.45);
+          const rx = width * 0.44; // Drifted further out
+          const ry = height * 0.35;
+          const nx = cx + Math.cos(fixedTheta) * rx;
+          const ny = cy + Math.sin(fixedTheta) * ry;
+          nodeRenderList.push({ node, x: nx, y: ny, z: -0.2, scale: 0.78, theta: fixedTheta, isDead: true });
+        });
 
-        // 4. Draw Connecting Data Streams & Nodes behind center
-        nodePositions.filter(p => p.z < 0).forEach(drawNodeAndEdge);
+        // Sort by Z for proper 3D depth rendering
+        nodeRenderList.sort((a, b) => a.z - b.z);
 
-        // 5. Draw Central Control Plane Server (Core)
-        ctx.save();
-        // Server Glow
-        const radGlow = ctx.createRadialGradient(cx, cy, 10, cx, cy, 60);
-        radGlow.addColorStop(0, 'rgba(0, 212, 255, 0.5)');
-        radGlow.addColorStop(0.5, 'rgba(0, 212, 255, 0.15)');
-        radGlow.addColorStop(1, 'transparent');
-        ctx.fillStyle = radGlow;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 60, 0, Math.PI * 2);
-        ctx.fill();
+        // 4. Draw Nodes and Edges Behind Server (z < 0)
+        nodeRenderList.filter(p => p.z < 0).forEach(renderNodeAndConnection);
 
-        // Server Core Hexagon / Cube
-        ctx.fillStyle = '#0a1428';
-        ctx.strokeStyle = '#00d4ff';
-        ctx.lineWidth = 2.5;
-        ctx.shadowColor = '#00d4ff';
-        ctx.shadowBlur = 16;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 26, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
+        // 5. Draw Central 3D Server Rack
+        draw3DServerRack(cx, cy);
 
-        // Inner pulsing core
-        ctx.fillStyle = '#00d4ff';
-        ctx.shadowBlur = 8;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 10 + Math.sin(Date.now() * 0.005) * 3, 0, Math.PI * 2);
-        ctx.fill();
+        // 6. Draw Nodes and Edges In Front of Server (z >= 0)
+        nodeRenderList.filter(p => p.z >= 0).forEach(renderNodeAndConnection);
 
-        // Label
-        ctx.font = 'bold 11px ' + getComputedStyle(document.body).fontFamily;
-        ctx.fillStyle = '#ffffff';
-        ctx.textAlign = 'center';
-        ctx.fillText('CONTROL PLANE', cx, cy + 44);
-        ctx.font = '9px monospace';
-        ctx.fillStyle = '#00d4ff';
-        ctx.fillText('gRPC:50051 / Raft Leader', cx, cy + 56);
-        ctx.restore();
+        // 7. Render Active Task Packets (Server -> Node, Node Computing, Node -> Server)
+        renderTaskPackets(cx, cy, nodeRenderList);
 
-        // 6. Draw Nodes in front of center
-        nodePositions.filter(p => p.z >= 0).forEach(drawNodeAndEdge);
-
-        function drawNodeAndEdge(p) {
-          // Draw Edges with animated data pulses
-          ctx.save();
-          ctx.strokeStyle = 'rgba(0, 212, 255, 0.2)';
-          ctx.lineWidth = 1.2 * p.scale;
-          ctx.beginPath();
-          ctx.moveTo(cx, cy);
-          ctx.lineTo(p.x, p.y);
-          ctx.stroke();
-
-          // Particle flow
-          const t = (Date.now() * 0.001 * 0.8 + p.theta) % 1;
-          const px = cx + (p.x - cx) * t;
-          const py = cy + (p.y - cy) * t;
-          ctx.fillStyle = '#00ff88';
-          ctx.shadowColor = '#00ff88';
-          ctx.shadowBlur = 8;
-          ctx.beginPath();
-          ctx.arc(px, py, 3 * p.scale, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-
-          // Draw Node Sphere
-          ctx.save();
-          const nodeColor = p.node.color || (p.node.isLocal ? '#00d4ff' : '#a78bfa');
-          ctx.fillStyle = '#0d182b';
-          ctx.strokeStyle = nodeColor;
-          ctx.lineWidth = 2 * p.scale;
-          ctx.shadowColor = nodeColor;
-          ctx.shadowBlur = 12 * p.scale;
-
-          const r = 18 * p.scale;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-
-          // Node Center Dot
-          ctx.fillStyle = nodeColor;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, 6 * p.scale, 0, Math.PI * 2);
-          ctx.fill();
-
-          // Node Label
-          ctx.shadowBlur = 0;
-          ctx.font = `${Math.round(10 * p.scale)}px sans-serif`;
-          ctx.fillStyle = '#ffffff';
-          ctx.textAlign = 'center';
-          ctx.fillText(p.node.hostname || p.node.name || 'Node', p.x, p.y + r + 14);
-
-          ctx.font = `${Math.round(8 * p.scale)}px monospace`;
-          ctx.fillStyle = 'var(--text-muted)';
-          ctx.fillText(p.node.ip || '127.0.0.1', p.x, p.y + r + 26);
-          ctx.restore();
-        }
+        // Update server absorption ripples
+        serverAbsorptionRipples = serverAbsorptionRipples.filter(rip => {
+          rip.r += 2.5;
+          rip.alpha -= 0.035;
+          return rip.alpha > 0;
+        });
 
         requestAnimationFrame(draw3DScene);
       }
 
-      // Start Loops
+      function renderNodeAndConnection(p) {
+        const cx = canvas.parentElement.clientWidth / 2;
+        const cy = canvas.parentElement.clientHeight / 2;
+
+        if (p.isDead) {
+          // SEVERED BROKEN RED CONNECTION LINE
+          ctx.save();
+          ctx.setLineDash([6, 6]);
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          const mx = (cx + p.x) / 2;
+          const my = (cy + p.y) / 2;
+          ctx.lineTo(mx, my);
+          ctx.strokeStyle = 'rgba(255, 51, 80, 0.45)';
+          ctx.lineWidth = 1.8;
+          ctx.stroke();
+
+          // Severed Symbol
+          ctx.setLineDash([]);
+          ctx.fillStyle = '#ff3366';
+          ctx.font = 'bold 10px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('✕ SEVERED', mx, my - 6);
+          ctx.restore();
+
+        } else {
+          // CLEAN IDLE CONNECTION LINE (No constant packet spam!)
+          ctx.save();
+          ctx.strokeStyle = p.node.isLocal ? 'rgba(0, 212, 255, 0.22)' : 'rgba(139, 92, 246, 0.25)';
+          ctx.lineWidth = 1.3 * p.scale;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(p.x, p.y);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // Draw Device Model
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.scale(p.scale, p.scale);
+
+        const nodeCol = p.isDead ? '#ff3366' : (p.isProcessing ? '#ffb700' : (p.node.isLocal ? '#00d4ff' : '#a78bfa'));
+
+        // Device Shadow
+        ctx.beginPath();
+        ctx.ellipse(0, 18, 22, 5, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fill();
+
+        drawDeviceModel(p.node.deviceType, nodeCol, !p.isDead);
+
+        // Rotating Compute Progress Ring around node when processing
+        if (p.isProcessing) {
+          ctx.rotate(Date.now() * 0.006);
+          ctx.beginPath();
+          ctx.arc(0, 0, 32, 0, Math.PI * 1.5);
+          ctx.strokeStyle = '#ffb700';
+          ctx.lineWidth = 2.5;
+          ctx.shadowColor = '#ffb700';
+          ctx.shadowBlur = 10;
+          ctx.stroke();
+        }
+
+        ctx.restore();
+
+        // Node Details (Hostname, IP, OS, Mini CPU/RAM load bar)
+        ctx.save();
+        const labelY = p.y + 26 * p.scale;
+
+        ctx.font = `bold ${Math.round(10 * p.scale)}px sans-serif`;
+        ctx.fillStyle = p.isDead ? '#ff3366' : '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.node.hostname || p.node.name || 'Node', p.x, labelY);
+
+        ctx.font = `${Math.round(8.5 * p.scale)}px monospace`;
+        ctx.fillStyle = p.isDead ? '#ff3366' : 'var(--text-muted)';
+        ctx.fillText(p.isDead ? '⚠ DEAD (UNREACHABLE)' : (p.node.ip || '127.0.0.1'), p.x, labelY + 12);
+
+        if (!p.isDead) {
+          // Mini CPU Bar
+          const barW = 44 * p.scale;
+          const cpuVal = p.isProcessing ? 82 : (p.node.cpuUsage || 14);
+          ctx.fillStyle = 'rgba(255,255,255,0.15)';
+          ctx.fillRect(p.x - barW/2, labelY + 18, barW, 3.5);
+          ctx.fillStyle = p.isProcessing ? '#ffb700' : '#00d4ff';
+          ctx.fillRect(p.x - barW/2, labelY + 18, barW * (cpuVal / 100), 3.5);
+        }
+        ctx.restore();
+      }
+
+      function renderTaskPackets(cx, cy, nodePositions) {
+        activeWorkPackets = activeWorkPackets.filter(task => {
+          const target = nodePositions.find(p => p.node.nodeId === task.nodeId || p.node.hostname === task.nodeId);
+          if (!target || target.isDead) return false;
+
+          if (task.phase === 'DISPATCH') {
+            // SERVER -> NODE PACKET MOVEMENT
+            task.t += task.speed;
+            const px = cx + (target.x - cx) * task.t;
+            const py = cy + (target.y - cy) * task.t;
+
+            ctx.save();
+            ctx.fillStyle = '#00d4ff';
+            ctx.shadowColor = '#00d4ff';
+            ctx.shadowBlur = 14;
+            ctx.beginPath();
+            ctx.arc(px, py, 6 * target.scale, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Packet Badge Tag
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 8.5px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(task.label, px, py - 9);
+            ctx.restore();
+
+            if (task.t >= 1) {
+              task.phase = 'PROCESSING';
+              task.t = 0;
+              target.isProcessing = true;
+              logTerminal(`[COMPUTING] ${target.node.hostname} processing ${task.label}...`);
+            }
+            return true;
+
+          } else if (task.phase === 'PROCESSING') {
+            // JOB PROCESSING IN NODE
+            target.isProcessing = true;
+            task.t += 0.012; // ~2 seconds processing simulation
+            const pct = Math.min(100, Math.round(task.t * 100));
+
+            // Compute Progress text above node
+            ctx.save();
+            ctx.fillStyle = '#ffb700';
+            ctx.font = 'bold 9px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(`⚡ COMPUTING ${pct}%`, target.x, target.y - 34 * target.scale);
+            ctx.restore();
+
+            if (task.t >= 1) {
+              task.phase = 'RETURN';
+              task.t = 0;
+              target.isProcessing = false;
+              logTerminal(`✔ [DONE] ${target.node.hostname} finished ${task.label}. Returning primes result to server!`, 'success');
+            }
+            return true;
+
+          } else if (task.phase === 'RETURN') {
+            // NODE -> SERVER RESULT PACKET
+            task.t += task.speed * 1.3;
+            const px = target.x + (cx - target.x) * task.t;
+            const py = target.y + (cy - target.y) * task.t;
+
+            ctx.save();
+            ctx.fillStyle = '#00ff88';
+            ctx.shadowColor = '#00ff88';
+            ctx.shadowBlur = 16;
+            ctx.beginPath();
+            ctx.arc(px, py, 6.5 * target.scale, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Result Label
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#00ff88';
+            ctx.font = 'bold 8.5px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('✔ RESULT DONE', px, py - 9);
+            ctx.restore();
+
+            if (task.t >= 1) {
+              // Server absorbs result with expanding ripple!
+              serverAbsorptionRipples.push({ r: 10, alpha: 0.95 });
+              logTerminal(`📥 Server verified & stored result from ${target.node.hostname}.`, 'highlight');
+              return false; // Task completed!
+            }
+            return true;
+          }
+          return false;
+        });
+      }
+
+      // Initial Start
       draw3DScene();
       fetchTopology();
       fetchMetrics();
