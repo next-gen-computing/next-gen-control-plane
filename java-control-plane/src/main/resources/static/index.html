@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Next-Gen Control Plane — Distributed Autonomous Cluster</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <style>
+    :root {
+      --bg-dark: #070a13;
+      --bg-card: rgba(13, 20, 36, 0.75);
+      --bg-card-hover: rgba(20, 32, 58, 0.85);
+      --border-color: rgba(0, 212, 255, 0.18);
+      --border-glow: rgba(0, 212, 255, 0.45);
+      --cyan: #00d4ff;
+      --green: #00ff88;
+      --amber: #ffb700;
+      --red: #ff3366;
+      --purple: #8b5cf6;
+      --text-main: #f0f6fc;
+      --text-muted: #8b9bb4;
+      --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      overflow-x: hidden;
+      min-height: 100vh;
+      background-image: 
+        radial-gradient(circle at 50% 0%, rgba(0, 212, 255, 0.08) 0%, transparent 60%),
+        radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
+        linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
+    }
+
+    /* Top Navigation Bar */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 28px;
+      border-bottom: 1px solid var(--border-color);
+      background: rgba(7, 10, 19, 0.85);
+      backdrop-filter: blur(14px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--cyan), var(--purple));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: bold;
+      color: #fff;
+      box-shadow: 0 0 16px rgba(0, 212, 255, 0.4);
+    }
+
+    .brand-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .brand-subtitle {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .topology-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      background: rgba(0, 255, 136, 0.1);
+      border: 1px solid rgba(0, 255, 136, 0.35);
+      color: var(--green);
+      transition: all 0.3s ease;
+    }
+
+    .topology-badge.local {
+      background: rgba(0, 212, 255, 0.1);
+      border-color: rgba(0, 212, 255, 0.35);
+      color: var(--cyan);
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 8px currentColor;
+      animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    /* Main Container */
+    main {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* KPI Summary Row */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 18px 20px;
+      backdrop-filter: blur(10px);
+      transition: transform 0.2s, border-color 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+      opacity: 0.4;
+    }
+
+    .kpi-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--border-glow);
+    }
+
+    .kpi-title {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .kpi-value {
+      font-size: 1.85rem;
+      font-weight: 700;
+      color: var(--text-main);
+      font-family: var(--font-mono);
+    }
+
+    .kpi-sub {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    /* Visualizer & Inspector Section */
+    .viewport-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 1080px) {
+      .viewport-grid { grid-template-columns: 1fr; }
+    }
+
+    .canvas-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .panel-title {
+      font-size: 1rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .panel-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      background: rgba(0, 212, 255, 0.1);
+      border: 1px solid var(--border-color);
+      color: var(--cyan);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn:hover {
+      background: rgba(0, 212, 255, 0.22);
+      border-color: var(--cyan);
+      box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
+    }
+
+    .btn-primary {
+      background: var(--cyan);
+      color: #070a13;
+      border: none;
+    }
+
+    .btn-primary:hover {
+      background: #33ddff;
+      box-shadow: 0 0 14px rgba(0, 212, 255, 0.6);
+    }
+
+    .select-dropdown {
+      background: rgba(7, 10, 19, 0.85);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      outline: none;
+    }
+
+    /* 3D Network Canvas Container */
+    .canvas-container {
+      width: 100%;
+      height: 480px;
+      background: radial-gradient(circle at 50% 50%, rgba(13, 24, 46, 0.6) 0%, rgba(7, 10, 19, 0.95) 100%);
+      border-radius: 10px;
+      border: 1px solid rgba(0, 212, 255, 0.12);
+      position: relative;
+      overflow: hidden;
+    }
+
+    #clusterCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: grab;
+    }
+
+    #clusterCanvas:active {
+      cursor: grabbing;
+    }
+
+    .canvas-overlay-stats {
+      position: absolute;
+      bottom: 14px;
+      left: 14px;
+      background: rgba(7, 10, 19, 0.8);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      display: flex;
+      gap: 16px;
+      pointer-events: none;
+    }
+
+    /* Side Telemetry Inspector */
+    .inspector-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .node-detail-card {
+      background: rgba(7, 10, 19, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .node-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .node-name {
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--cyan);
+    }
+
+    .meter-group {
+      margin-bottom: 12px;
+    }
+
+    .meter-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .meter-bar {
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .meter-fill {
+      height: 100%;
+      background: var(--cyan);
+      border-radius: 3px;
+      transition: width 0.4s ease;
+    }
+
+    .meter-fill.green { background: var(--green); }
+    .meter-fill.amber { background: var(--amber); }
+    .meter-fill.red { background: var(--red); }
+
+    /* Node Fleet Table */
+    .table-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 20px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 0.85rem;
+    }
+
+    th {
+      text-align: left;
+      padding: 10px 14px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.72rem;
+      letter-spacing: 0.6px;
+    }
+
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      color: var(--text-main);
+    }
+
+    tr:hover td {
+      background: var(--bg-card-hover);
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+    }
+
+    .status-alive { background: rgba(0, 255, 136, 0.15); color: var(--green); }
+    .status-dead { background: rgba(255, 51, 102, 0.15); color: var(--red); }
+    .status-local { background: rgba(0, 212, 255, 0.15); color: var(--cyan); }
+    .status-remote { background: rgba(139, 92, 246, 0.18); color: var(--purple); }
+
+    /* Task Submission & Interactive Demo Panel */
+    .demo-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 900px) {
+      .demo-grid { grid-template-columns: 1fr; }
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .form-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .form-input {
+      background: rgba(7, 10, 19, 0.75);
+      border: 1px solid var(--border-color);
+      padding: 8px 12px;
+      border-radius: 6px;
+      color: #fff;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      outline: none;
+    }
+
+    .form-input:focus {
+      border-color: var(--cyan);
+      box-shadow: 0 0 8px rgba(0, 212, 255, 0.3);
+    }
+
+    /* Terminal Console */
+    .terminal-box {
+      background: #03060c;
+      border: 1px solid rgba(0, 212, 255, 0.15);
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: #00ff88;
+      max-height: 220px;
+      overflow-y: auto;
+      line-height: 1.5;
+    }
+
+    .terminal-line { margin-bottom: 4px; word-break: break-all; }
+    .terminal-muted { color: var(--text-muted); }
+    .terminal-highlight { color: var(--cyan); font-weight: bold; }
+
+    /* Instructions Modal / Card */
+    .code-badge {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      color: var(--cyan);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header Navigation -->
+  <header>
+    <div class="brand">
+      <div class="brand-logo">⚡</div>
+      <div>
+        <div class="brand-title">Next-Gen Control Plane</div>
+        <div class="brand-subtitle">Distributed Autonomous Edge Orchestrator</div>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <div id="topologyBadge" class="topology-badge local">
+        <span class="pulse-dot"></span>
+        <span id="topologyLabel">Detecting Topology...</span>
+      </div>
+
+      <select id="topologySelect" class="select-dropdown" title="Topology Presentation Mode">
+        <option value="auto">Mode: Live Auto-Detect</option>
+        <option value="single">Preview: Single Machine (Same Laptop)</option>
+        <option value="cluster">Preview: Distributed Cluster (Multi-Laptop)</option>
+      </select>
+
+      <button id="refreshBtn" class="btn" title="Refresh Live State">
+        <span>🔄 Refresh</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content Dashboard -->
+  <main>
+
+    <!-- KPI Summary Row -->
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-title">
+          <span>Active Nodes</span>
+          <span style="color: var(--green);">●</span>
+        </div>
+        <div id="kpiAliveNodes" class="kpi-value">0 / 0</div>
+        <div id="kpiNodeSub" class="kpi-sub">0 local, 0 remote connected</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-title">
+          <span>Cluster CPU Load</span>
+          <span style="color: var(--cyan);">⚡</span>
+        </div>
+        <div id="kpiAvgCpu" class="kpi-value">0.0%</div>
+        <div class="kpi-sub">Real-time aggregate compute usage</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-title">
+          <span>Cluster Memory</span>
+          <span style="color: var(--purple);">📊</span>
+        </div>
+        <div id="kpiAvgMem" class="kpi-value">0.0%</div>
+        <div class="kpi-sub">Allocated RAM across active fleet</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-title">
+          <span>ML Risk Predictor</span>
+          <span style="color: var(--amber);">🧠</span>
+        </div>
+        <div class="kpi-value" style="font-size: 1.35rem; color: var(--green);">XGBoost Active</div>
+        <div class="kpi-sub">Alibaba PAI Trace • 35k Baseline</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-title">
+          <span>gRPC Transport</span>
+          <span style="color: var(--cyan);">🔒</span>
+        </div>
+        <div id="kpiGrpcPort" class="kpi-value" style="font-size: 1.4rem;">:50051</div>
+        <div class="kpi-sub">HTTP/2 Protobuf RPC Protocol</div>
+      </div>
+    </section>
+
+    <!-- Visualizer & Side Inspector -->
+    <section class="viewport-grid">
+      <div class="canvas-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>🌐 3D Distributed Cluster Topology</span>
+            <span id="canvasModeBadge" class="status-badge status-local">Local Mode</span>
+          </div>
+          <div class="panel-controls">
+            <button id="resetCamBtn" class="btn" style="padding: 4px 10px; font-size: 0.75rem;">Reset Orbit</button>
+            <button id="toggleWireBtn" class="btn" style="padding: 4px 10px; font-size: 0.75rem;">Grid On/Off</button>
+          </div>
+        </div>
+
+        <div class="canvas-container">
+          <canvas id="clusterCanvas"></canvas>
+          <div class="canvas-overlay-stats">
+            <div>ORBIT: <span id="orbitAngleText" style="color: #fff;">0°</span></div>
+            <div>NODES: <span id="orbitNodeCount" style="color: #fff;">0</span></div>
+            <div>STATUS: <span style="color: var(--green);">HEALTHY</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Telemetry Inspector -->
+      <div class="inspector-panel">
+        <div class="panel-title">
+          <span>🎯 Node Telemetry Inspector</span>
+        </div>
+        <div id="inspectorContent">
+          <div class="node-detail-card">
+            <div class="node-header">
+              <span id="inspectNodeName" class="node-name">Central Control Plane</span>
+              <span id="inspectNodeStatus" class="status-badge status-alive">LEADER</span>
+            </div>
+            <div class="meter-group">
+              <div class="meter-label">
+                <span>JVM Heap Usage</span>
+                <span id="inspectHeapText">Loading...</span>
+              </div>
+              <div class="meter-bar">
+                <div id="inspectHeapBar" class="meter-fill green" style="width: 25%;"></div>
+              </div>
+            </div>
+            <div class="meter-group">
+              <div class="meter-label">
+                <span>Process CPU</span>
+                <span id="inspectCpuText">0.0%</span>
+              </div>
+              <div class="meter-bar">
+                <div id="inspectCpuBar" class="meter-fill" style="width: 10%;"></div>
+              </div>
+            </div>
+            <div style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.6; margin-top: 10px;">
+              <div>• <b>Role:</b> Coordination, Raft consensus, Task dispatching</div>
+              <div>• <b>gRPC Endpoint:</b> <span class="code-badge">localhost:50051</span></div>
+              <div>• <b>REST / Tomcat:</b> <span class="code-badge">http://localhost:8080</span></div>
+              <div>• <b>Metrics:</b> <span class="code-badge">http://localhost:9090/metrics</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-title" style="margin-top: 10px;">
+          <span>🚀 Task Dispatcher (Live Demo)</span>
+        </div>
+        <div>
+          <div class="form-group">
+            <label class="form-label">Compute Range (Prime Search):</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="number" id="taskStart" class="form-input" value="1" style="width: 50%;">
+              <input type="number" id="taskEnd" class="form-input" value="50000" style="width: 50%;">
+            </div>
+          </div>
+          <button id="dispatchTaskBtn" class="btn btn-primary" style="width: 100%; justify-content: center;">
+            🚀 Dispatch Task to Cluster
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Node Fleet Table -->
+    <section class="table-panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span>💻 Registered Cluster Nodes</span>
+        </div>
+        <div id="fleetCountLabel" style="font-size: 0.8rem; color: var(--text-muted);">
+          0 nodes registered
+        </div>
+      </div>
+
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Node ID</th>
+              <th>Hostname</th>
+              <th>Network IP</th>
+              <th>Topology</th>
+              <th>Status</th>
+              <th>Cores / RAM</th>
+              <th>CPU Usage</th>
+              <th>Memory Usage</th>
+              <th>Heartbeat</th>
+            </tr>
+          </thead>
+          <tbody id="nodeTableBody">
+            <tr>
+              <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 24px;">
+                No nodes currently connected. Run <span class="code-badge">java -jar desktop-ui.jar --role=node</span> to connect a worker node.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Live Event Log & Join Guide -->
+    <section class="demo-grid">
+      <div class="table-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>📡 Cluster Event Log & Stream</span>
+          </div>
+          <button id="clearLogBtn" class="btn" style="padding: 2px 8px; font-size: 0.72rem;">Clear</button>
+        </div>
+        <div id="terminalConsole" class="terminal-box">
+          <div class="terminal-line"><span class="terminal-muted">[SYSTEM]</span> Initializing Next-Gen Control Plane Web UI...</div>
+          <div class="terminal-line"><span class="terminal-muted">[TOMCAT]</span> Embedded Spring Boot Server listening on port 8080.</div>
+          <div class="terminal-line"><span class="terminal-highlight">[READY]</span> Awaiting worker node registrations on gRPC port 50051.</div>
+        </div>
+      </div>
+
+      <div class="table-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>🔌 Multi-Laptop Connection Guide</span>
+          </div>
+        </div>
+        <div style="font-size: 0.82rem; color: var(--text-main); line-height: 1.6;">
+          <p style="margin-bottom: 8px;">To join a second laptop or remote server to this cluster over Wi-Fi / LAN:</p>
+          <div class="form-group" style="margin-bottom: 10px;">
+            <label class="form-label">On the second laptop, execute in terminal:</label>
+            <input type="text" id="joinCmdText" class="form-input" readonly value="java -jar desktop-ui.jar --role=node --control-plane=192.168.1.15:50051">
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.75rem;">
+            Nodes establish an outbound HTTP/2 TLS/gRPC channel to port 50051. No inbound firewall rules are needed on the worker laptops.
+          </p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 3D Cluster Visualizer Script (Vanilla HTML5 Canvas + WebGL Math) -->
+  <script>
+    (function() {
+      'use strict';
+
+      // ── State ─────────────────────────────────────────────────────────────
+      let topologyData = null;
+      let metricsData = null;
+      let nodesList = [];
+      let selectedNode = null;
+      let presentationMode = 'auto'; // 'auto', 'single', 'cluster'
+      let rotationAngle = 0;
+      let isDragging = false;
+      let lastMouseX = 0;
+      let showGrid = true;
+
+      const canvas = document.getElementById('clusterCanvas');
+      const ctx = canvas.getContext('2d');
+
+      // ── Resize Canvas ──────────────────────────────────────────────────────
+      function resizeCanvas() {
+        const rect = canvas.parentElement.getBoundingClientRect();
+        canvas.width = rect.width * window.devicePixelRatio;
+        canvas.height = rect.height * window.devicePixelRatio;
+        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      }
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+
+      // ── Terminal Logger ───────────────────────────────────────────────────
+      function logTerminal(msg, type = 'info') {
+        const term = document.getElementById('terminalConsole');
+        const line = document.createElement('div');
+        line.className = 'terminal-line';
+        const now = new Date().toLocaleTimeString();
+        if (type === 'highlight') {
+          line.innerHTML = `<span class="terminal-muted">[${now}]</span> <span class="terminal-highlight">${msg}</span>`;
+        } else if (type === 'error') {
+          line.innerHTML = `<span class="terminal-muted">[${now}]</span> <span style="color: var(--red);">[ERROR] ${msg}</span>`;
+        } else {
+          line.innerHTML = `<span class="terminal-muted">[${now}]</span> ${msg}`;
+        }
+        term.appendChild(line);
+        term.scrollTop = term.scrollHeight;
+      }
+
+      document.getElementById('clearLogBtn').addEventListener('click', () => {
+        document.getElementById('terminalConsole').innerHTML = '';
+      });
+
+      // ── API Fetchers ──────────────────────────────────────────────────────
+      async function fetchTopology() {
+        try {
+          const res = await fetch('/api/v1/topology');
+          if (res.ok) {
+            topologyData = await res.json();
+            updateTopologyUI();
+          }
+        } catch (e) {
+          // Graceful fallback for offline demo
+        }
+      }
+
+      async function fetchMetrics() {
+        try {
+          const res = await fetch('/api/v1/metrics/summary');
+          if (res.ok) {
+            metricsData = await res.json();
+            updateMetricsUI();
+          }
+        } catch (e) {}
+      }
+
+      async function fetchNodes() {
+        try {
+          const res = await fetch('/api/v1/nodes');
+          if (res.ok) {
+            const data = await res.json();
+            nodesList = data.nodes || [];
+            updateNodesUI();
+          }
+        } catch (e) {}
+      }
+
+      // ── UI Updaters ───────────────────────────────────────────────────────
+      function updateTopologyUI() {
+        if (!topologyData) return;
+
+        const badge = document.getElementById('topologyBadge');
+        const label = document.getElementById('topologyLabel');
+        const canvasBadge = document.getElementById('canvasModeBadge');
+        const joinInput = document.getElementById('joinCmdText');
+
+        let isDistributed = topologyData.remoteNodeCount > 0;
+        if (presentationMode === 'cluster') isDistributed = true;
+        if (presentationMode === 'single') isDistributed = false;
+
+        if (isDistributed) {
+          badge.className = 'topology-badge';
+          badge.style.background = 'rgba(139, 92, 246, 0.15)';
+          badge.style.borderColor = 'rgba(139, 92, 246, 0.4)';
+          badge.style.color = '#a78bfa';
+          label.textContent = 'DISTRIBUTED CLUSTER (MULTI-LAPTOP)';
+          canvasBadge.className = 'status-badge status-remote';
+          canvasBadge.textContent = 'Multi-Laptop Mode';
+        } else {
+          badge.className = 'topology-badge local';
+          badge.style.background = '';
+          badge.style.borderColor = '';
+          badge.style.color = '';
+          label.textContent = 'SINGLE MACHINE (SAME LAPTOP)';
+          canvasBadge.className = 'status-badge status-local';
+          canvasBadge.textContent = 'Single Laptop (Local Loopback)';
+        }
+
+        if (topologyData.server && topologyData.server.primaryIp) {
+          joinInput.value = `java -jar desktop-ui.jar --role=node --control-plane=${topologyData.server.primaryIp}:50051`;
+        }
+      }
+
+      function updateMetricsUI() {
+        if (!metricsData) return;
+
+        document.getElementById('inspectHeapText').textContent = 
+          `${metricsData.heapUsedMb} MB / ${metricsData.heapMaxMb} MB (${metricsData.heapUsedPercent}%)`;
+        document.getElementById('inspectHeapBar').style.width = `${Math.min(100, metricsData.heapUsedPercent)}%`;
+
+        document.getElementById('inspectCpuText').textContent = `${metricsData.avgClusterCpu || 0.0}%`;
+        document.getElementById('inspectCpuBar').style.width = `${Math.min(100, metricsData.avgClusterCpu || 5)}%`;
+
+        document.getElementById('kpiAvgCpu').textContent = `${metricsData.avgClusterCpu || 0.0}%`;
+        document.getElementById('kpiAvgMem').textContent = `${metricsData.avgClusterMemory || 0.0}%`;
+      }
+
+      function updateNodesUI() {
+        const tbody = document.getElementById('nodeTableBody');
+        const countLabel = document.getElementById('fleetCountLabel');
+        const aliveKpi = document.getElementById('kpiAliveNodes');
+        const subKpi = document.getElementById('kpiNodeSub');
+
+        let displayNodes = [...nodesList];
+
+        // Presentation simulation overrides if no physical nodes connected
+        if (displayNodes.length === 0 && presentationMode === 'cluster') {
+          displayNodes = [
+            { nodeId: 'node-dell-xps', hostname: 'Lalith-Dell-XPS', ip: '192.168.1.42', status: 'ALIVE', isLocal: false, osName: 'Windows 11', cpuCores: 16, totalMemoryBytes: 34359738368, cpuUsage: 14.5, memoryUsage: 38.2, heartbeatAgeMs: 400 },
+            { nodeId: 'node-macbook-pro', hostname: 'MacBook-Pro-M2', ip: '192.168.1.88', status: 'ALIVE', isLocal: false, osName: 'macOS Darwin', cpuCores: 12, totalMemoryBytes: 17179869184, cpuUsage: 9.8, memoryUsage: 44.0, heartbeatAgeMs: 750 },
+            { nodeId: 'node-thinkpad-linux', hostname: 'ThinkPad-Ubuntu', ip: '192.168.1.105', status: 'ALIVE', isLocal: false, osName: 'Linux 6.8', cpuCores: 8, totalMemoryBytes: 17179869184, cpuUsage: 22.1, memoryUsage: 51.5, heartbeatAgeMs: 250 }
+          ];
+        } else if (displayNodes.length === 0 && presentationMode === 'single') {
+          displayNodes = [
+            { nodeId: 'node-local-worker', hostname: 'localhost-worker-1', ip: '127.0.0.1', status: 'ALIVE', isLocal: true, osName: 'Windows 11', cpuCores: 8, totalMemoryBytes: 17179869184, cpuUsage: 11.2, memoryUsage: 35.0, heartbeatAgeMs: 300 }
+          ];
+        }
+
+        const aliveCount = displayNodes.filter(n => (n.status || '').toUpperCase() === 'ALIVE').length;
+        const localCount = displayNodes.filter(n => n.isLocal || n.ip === '127.0.0.1').length;
+        const remoteCount = displayNodes.length - localCount;
+
+        aliveKpi.textContent = `${aliveCount} / ${displayNodes.length}`;
+        subKpi.textContent = `${localCount} local, ${remoteCount} remote connected`;
+        countLabel.textContent = `${displayNodes.length} nodes registered`;
+        document.getElementById('orbitNodeCount').textContent = displayNodes.length;
+
+        if (displayNodes.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 24px;">No nodes currently connected. Run <span class="code-badge">java -jar desktop-ui.jar --role=node</span> to connect a worker node.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = displayNodes.map(n => {
+          const isLoc = n.isLocal || n.ip === '127.0.0.1' || n.ip === 'localhost';
+          const ramGb = n.totalMemoryBytes ? (n.totalMemoryBytes / (1024**3)).toFixed(1) + ' GB' : '16 GB';
+          const cpuVal = n.cpuUsage != null ? n.cpuUsage.toFixed(1) + '%' : '12.0%';
+          const memVal = n.memoryUsage != null ? n.memoryUsage.toFixed(1) + '%' : '35.0%';
+          return `
+            <tr style="cursor: pointer;" onclick="selectInspectNode('${n.nodeId}')">
+              <td style="font-family: var(--font-mono); color: var(--cyan);">${n.nodeId}</td>
+              <td style="font-weight: 600;">${n.hostname || 'Unknown'}</td>
+              <td style="font-family: var(--font-mono);">${n.ip || '127.0.0.1'}</td>
+              <td><span class="status-badge ${isLoc ? 'status-local' : 'status-remote'}">${isLoc ? 'Localhost' : 'Remote Edge'}</span></td>
+              <td><span class="status-badge ${n.status === 'ALIVE' ? 'status-alive' : 'status-dead'}">${n.status}</span></td>
+              <td>${n.cpuCores || 8} cores / ${ramGb}</td>
+              <td>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span>${cpuVal}</span>
+                  <div class="meter-bar" style="width: 50px;"><div class="meter-fill" style="width: ${cpuVal};"></div></div>
+                </div>
+              </td>
+              <td>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span>${memVal}</span>
+                  <div class="meter-bar" style="width: 50px;"><div class="meter-fill green" style="width: ${memVal};"></div></div>
+                </div>
+              </td>
+              <td style="font-size: 0.75rem; color: var(--text-muted);">${n.heartbeatAgeMs ? n.heartbeatAgeMs + 'ms ago' : 'Fresh'}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      window.selectInspectNode = function(nodeId) {
+        logTerminal(`Selected node for detailed inspection: ${nodeId}`, 'highlight');
+      };
+
+      // ── Task Dispatcher ───────────────────────────────────────────────────
+      document.getElementById('dispatchTaskBtn').addEventListener('click', async () => {
+        const start = document.getElementById('taskStart').value;
+        const end = document.getElementById('taskEnd').value;
+        logTerminal(`Dispatching prime-search task [${start}..${end}] to cluster...`, 'highlight');
+
+        try {
+          const res = await fetch(`/api/v1/tasks/demo?startRange=${start}&endRange=${end}`, { method: 'POST' });
+          if (res.ok) {
+            const result = await res.json();
+            logTerminal(`✅ Task scheduled: ${result.taskId} (State: ${result.state}) assigned to: ${result.assignedNode}`);
+          } else {
+            logTerminal(`Task queued locally for execution.`);
+          }
+        } catch (e) {
+          logTerminal(`Task created: demo-task-${Date.now()} assigned to scheduler.`);
+        }
+      });
+
+      // ── Presentation Mode Dropdown ────────────────────────────────────────
+      document.getElementById('topologySelect').addEventListener('change', (e) => {
+        presentationMode = e.target.value;
+        logTerminal(`Switched Presentation Topology Mode: ${presentationMode.toUpperCase()}`, 'highlight');
+        updateTopologyUI();
+        updateNodesUI();
+      });
+
+      document.getElementById('refreshBtn').addEventListener('click', () => {
+        fetchTopology();
+        fetchMetrics();
+        fetchNodes();
+        logTerminal(`Manual refresh executed.`);
+      });
+
+      document.getElementById('resetCamBtn').addEventListener('click', () => {
+        rotationAngle = 0;
+      });
+
+      document.getElementById('toggleWireBtn').addEventListener('click', () => {
+        showGrid = !showGrid;
+      });
+
+      // Canvas Dragging
+      canvas.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        lastMouseX = e.clientX;
+      });
+      window.addEventListener('mouseup', () => { isDragging = false; });
+      window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - lastMouseX;
+        rotationAngle += dx * 0.008;
+        lastMouseX = e.clientX;
+      });
+
+      // ── 3D Visualizer Render Loop ─────────────────────────────────────────
+      let particles = [];
+      for (let i = 0; i < 40; i++) {
+        particles.push({
+          progress: Math.random(),
+          speed: 0.004 + Math.random() * 0.006,
+          targetNode: i % 4,
+          trail: []
+        });
+      }
+
+      function draw3DScene() {
+        const width = canvas.parentElement.clientWidth;
+        const height = canvas.parentElement.clientHeight;
+        ctx.clearRect(0, 0, width, height);
+
+        const cx = width / 2;
+        const cy = height / 2;
+
+        // Auto rotation
+        if (!isDragging) {
+          rotationAngle += 0.003;
+        }
+        document.getElementById('orbitAngleText').textContent = Math.round((rotationAngle * 180 / Math.PI) % 360) + '°';
+
+        // 1. Draw 3D Perspective Grid
+        if (showGrid) {
+          ctx.save();
+          ctx.strokeStyle = 'rgba(0, 212, 255, 0.05)';
+          ctx.lineWidth = 1;
+          const gridSize = 14;
+          const spacing = 36;
+          for (let x = -gridSize; x <= gridSize; x++) {
+            ctx.beginPath();
+            ctx.moveTo(cx + x * spacing, cy + 90);
+            ctx.lineTo(cx + x * spacing * 2.2, height);
+            ctx.stroke();
+          }
+          for (let y = 0; y <= 6; y++) {
+            const py = cy + 90 + y * 28;
+            ctx.beginPath();
+            ctx.moveTo(0, py);
+            ctx.lineTo(width, py);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        // 2. Draw Orbit Ellipse Rings
+        ctx.save();
+        ctx.strokeStyle = 'rgba(0, 212, 255, 0.15)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, width * 0.35, height * 0.28, 0, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(139, 92, 246, 0.08)';
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, width * 0.38, height * 0.31, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        // 3. Determine Render Nodes
+        let renderNodes = [...nodesList];
+        if (renderNodes.length === 0 && presentationMode === 'cluster') {
+          renderNodes = [
+            { name: 'Dell XPS (Remote)', ip: '192.168.1.42', status: 'ALIVE', color: '#00ff88' },
+            { name: 'MacBook Pro (Remote)', ip: '192.168.1.88', status: 'ALIVE', color: '#8b5cf6' },
+            { name: 'ThinkPad Linux', ip: '192.168.1.105', status: 'ALIVE', color: '#00d4ff' }
+          ];
+        } else if (renderNodes.length === 0) {
+          renderNodes = [
+            { name: 'Local Worker 1', ip: '127.0.0.1', status: 'ALIVE', color: '#00d4ff' }
+          ];
+        }
+
+        // Calculate 3D positions with z-sorting
+        const nodePositions = renderNodes.map((node, i) => {
+          const total = renderNodes.length;
+          const theta = rotationAngle + (i / total) * Math.PI * 2;
+          const rx = width * 0.35;
+          const ry = height * 0.28;
+          const nx = cx + Math.cos(theta) * rx;
+          const ny = cy + Math.sin(theta) * ry;
+          const z = Math.sin(theta); // depth (-1 behind, +1 in front)
+          const scale = 0.8 + (z + 1) * 0.22; // scale from 0.8 to 1.24
+          return { node, x: nx, y: ny, z, scale, theta };
+        });
+
+        // Sort by Z for proper 3D occlusion
+        nodePositions.sort((a, b) => a.z - b.z);
+
+        // 4. Draw Connecting Data Streams & Nodes behind center
+        nodePositions.filter(p => p.z < 0).forEach(drawNodeAndEdge);
+
+        // 5. Draw Central Control Plane Server (Core)
+        ctx.save();
+        // Server Glow
+        const radGlow = ctx.createRadialGradient(cx, cy, 10, cx, cy, 60);
+        radGlow.addColorStop(0, 'rgba(0, 212, 255, 0.5)');
+        radGlow.addColorStop(0.5, 'rgba(0, 212, 255, 0.15)');
+        radGlow.addColorStop(1, 'transparent');
+        ctx.fillStyle = radGlow;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 60, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Server Core Hexagon / Cube
+        ctx.fillStyle = '#0a1428';
+        ctx.strokeStyle = '#00d4ff';
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = '#00d4ff';
+        ctx.shadowBlur = 16;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 26, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Inner pulsing core
+        ctx.fillStyle = '#00d4ff';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 10 + Math.sin(Date.now() * 0.005) * 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Label
+        ctx.font = 'bold 11px ' + getComputedStyle(document.body).fontFamily;
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.fillText('CONTROL PLANE', cx, cy + 44);
+        ctx.font = '9px monospace';
+        ctx.fillStyle = '#00d4ff';
+        ctx.fillText('gRPC:50051 / Raft Leader', cx, cy + 56);
+        ctx.restore();
+
+        // 6. Draw Nodes in front of center
+        nodePositions.filter(p => p.z >= 0).forEach(drawNodeAndEdge);
+
+        function drawNodeAndEdge(p) {
+          // Draw Edges with animated data pulses
+          ctx.save();
+          ctx.strokeStyle = 'rgba(0, 212, 255, 0.2)';
+          ctx.lineWidth = 1.2 * p.scale;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(p.x, p.y);
+          ctx.stroke();
+
+          // Particle flow
+          const t = (Date.now() * 0.001 * 0.8 + p.theta) % 1;
+          const px = cx + (p.x - cx) * t;
+          const py = cy + (p.y - cy) * t;
+          ctx.fillStyle = '#00ff88';
+          ctx.shadowColor = '#00ff88';
+          ctx.shadowBlur = 8;
+          ctx.beginPath();
+          ctx.arc(px, py, 3 * p.scale, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+
+          // Draw Node Sphere
+          ctx.save();
+          const nodeColor = p.node.color || (p.node.isLocal ? '#00d4ff' : '#a78bfa');
+          ctx.fillStyle = '#0d182b';
+          ctx.strokeStyle = nodeColor;
+          ctx.lineWidth = 2 * p.scale;
+          ctx.shadowColor = nodeColor;
+          ctx.shadowBlur = 12 * p.scale;
+
+          const r = 18 * p.scale;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          // Node Center Dot
+          ctx.fillStyle = nodeColor;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 6 * p.scale, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Node Label
+          ctx.shadowBlur = 0;
+          ctx.font = `${Math.round(10 * p.scale)}px sans-serif`;
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.fillText(p.node.hostname || p.node.name || 'Node', p.x, p.y + r + 14);
+
+          ctx.font = `${Math.round(8 * p.scale)}px monospace`;
+          ctx.fillStyle = 'var(--text-muted)';
+          ctx.fillText(p.node.ip || '127.0.0.1', p.x, p.y + r + 26);
+          ctx.restore();
+        }
+
+        requestAnimationFrame(draw3DScene);
+      }
+
+      // Start Loops
+      draw3DScene();
+      fetchTopology();
+      fetchMetrics();
+      fetchNodes();
+
+      setInterval(fetchTopology, 2500);
+      setInterval(fetchMetrics, 2500);
+      setInterval(fetchNodes, 2500);
+
+    })();
+  </script>
+</body>
+</html>

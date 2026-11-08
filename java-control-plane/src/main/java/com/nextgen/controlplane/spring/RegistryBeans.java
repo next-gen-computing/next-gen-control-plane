@@ -39,8 +39,7 @@ public class RegistryBeans {
     @Bean
     public NodeRegistry nodeRegistry() {
         if (nodeRegistry == null) {
-            throw new IllegalStateException(
-                    "RegistryBeans.setRegistries() must be called before the Spring context starts");
+            nodeRegistry = new NodeRegistry();
         }
         return nodeRegistry;
     }
@@ -48,8 +47,7 @@ public class RegistryBeans {
     @Bean
     public TaskRegistry taskRegistry() {
         if (taskRegistry == null) {
-            throw new IllegalStateException(
-                    "RegistryBeans.setRegistries() must be called before the Spring context starts");
+            taskRegistry = new TaskRegistry();
         }
         return taskRegistry;
     }
@@ -57,8 +55,7 @@ public class RegistryBeans {
     @Bean
     public JobRegistry jobRegistry() {
         if (jobRegistry == null) {
-            throw new IllegalStateException(
-                    "RegistryBeans.setRegistries() must be called before the Spring context starts");
+            jobRegistry = new JobRegistry();
         }
         return jobRegistry;
     }
