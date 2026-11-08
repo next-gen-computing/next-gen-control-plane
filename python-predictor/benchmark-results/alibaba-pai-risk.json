@@ -1,0 +1,68 @@
+{
+  "source": {
+    "path": "alibaba_risk_examples_large_enriched.jsonl",
+    "rows": 300000,
+    "distinct_machines": 1644,
+    "label_semantics": "Alibaba PAI workload status: Failed/Interrupted=1, Terminated=0",
+    "memory_semantics": "estimated concurrent worker average / machine capacity; not instantaneous telemetry",
+    "forecast_note": "LSTM metrics omitted: irregular trace intervals are not represented in the current model input"
+  },
+  "protocol": {
+    "machine_holdout_fraction": 0.2,
+    "seed": 42,
+    "risk_xgboost": {
+      "estimators": 100,
+      "max_depth": 4,
+      "learning_rate": 0.1,
+      "seed": 42
+    },
+    "machine_bootstrap_resamples": 200
+  },
+  "environment": {
+    "python": "3.14.6",
+    "numpy": "2.5.1",
+    "xgboost": "3.4.0",
+    "platform": "Windows-11-10.0.26300-SP0"
+  },
+  "risk_classifier": {
+    "train_examples": 244636,
+    "validation_examples": 55364,
+    "train_machines": 1315,
+    "validation_machines": 329,
+    "majority_and_chance_baselines": {
+      "positive_prevalence": 0.48535149194422367,
+      "majority_class_accuracy": 0.5146485080557763,
+      "chance_roc_auc": 0.5,
+      "random_ranking_average_precision": 0.48535149194422367,
+      "constant_prevalence_brier_score": 0.24978542121173986
+    },
+    "validation_metrics": {
+      "roc_auc": 0.6631951259181781,
+      "average_precision": 0.6263325482009525,
+      "accuracy_at_0_5": 0.617711870529586,
+      "precision_at_0_5": 0.6176883095454171,
+      "recall_at_0_5": 0.557255033307283,
+      "f1_at_0_5": 0.5859174769628079,
+      "brier_score": 0.22962905767222513,
+      "expected_calibration_error_10_bins": 0.01784778815916134,
+      "confusion_at_0_5": {
+        "true_positive": 14974,
+        "false_positive": 9268,
+        "false_negative": 11897,
+        "true_negative": 19225
+      }
+    },
+    "machine_bootstrap_95_percent_intervals": {
+      "resamples_requested": 200,
+      "resamples_used": 200,
+      "roc_auc": {
+        "lower_95": 0.6512835325597276,
+        "upper_95": 0.6757902212341202
+      },
+      "average_precision": {
+        "lower_95": 0.610801847458241,
+        "upper_95": 0.6484617597751249
+      }
+    }
+  }
+}

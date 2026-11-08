@@ -129,6 +129,7 @@ public class LocalUiServer {
                 () -> role, () -> serverId, themeService, monitoringService,
                 taskExecutionService, jobExecutionService, connectionManager));
         server.createContext("/api/feedback", new FeedbackRouteHandler());
+        server.createContext("/api/dashboard/ws", new DashboardWebSocketHandler());
 
         nodesStream = new NodesStreamHandler(monitoringService, POLL_INTERVAL_MS);
         server.createContext("/api/nodes/stream", nodesStream);

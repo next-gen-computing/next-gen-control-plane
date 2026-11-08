@@ -1,32 +1,34 @@
 #!/usr/bin/env python3
-"""
-End-to-end scenario against a running `docker compose` stack.
+"""End-to-end checks against a running server and externally managed real agents.
 
-Scenario, asserted rather than eyeballed:
-  1. three nodes join and report real (non-zero, changing) metrics
-  2. tasks distribute across all three
-  3. a node is killed and is marked SUSPECTED_DEAD within the timeout window
-  4. work reroutes away from it
-  5. the node rejoins and is re-integrated with no duplicate entry
-  6. Prometheus has scraped every component
+The base Compose stack starts only the server, predictor, and Prometheus. Start the
+expected node agents separately, then run this script. Optional node-loss checks
+need explicit stop/start commands, for example:
 
-Run:
-    docker compose up --build -d
-    python scripts/e2e-test.py
+        python scripts/e2e-test.py --expected-nodes 3 --victim-node-id node3 \
+            --stop-command "ssh worker3 sudo systemctl stop nextgen-agent" \
+            --start-command "ssh worker3 sudo systemctl start nextgen-agent"
 
-STATUS: this script is committed but has NOT been executed. The Docker daemon was
-unavailable in the environment where it was written, so its assertions are
-unverified. The equivalent guarantees ARE verified by the JVM test suite --
-see KillAndReconnectIntegrationTest and MutualTlsEndToEndTest, which run the same
-scenarios over a real gRPC transport.
+Without a victim and commands, registration, metrics, task execution, and Prometheus
+checks still run; node-loss and rejoin checks are reported as skipped.
 """
 
+import argparse
 import json
+import os
 import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+import uuid
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import grpc
+import control_plane_pb2 as pb2
+import control_plane_pb2_grpc as pb2_grpc
 
 API = "http://localhost:8085/api/nodes"
 PROMETHEUS = "http://localhost:9464"
@@ -56,7 +58,7 @@ def fetch(url: str, timeout: int = 5):
 
 
 def api(timeout: int = 5):
-    return fetch(API, timeout)
+    return fetch(args.dashboard_url, timeout)
 
 
 def wait_for(predicate, seconds: int, poll: float = 1.0):
@@ -68,22 +70,46 @@ def wait_for(predicate, seconds: int, poll: float = 1.0):
             last = predicate()
             if last:
                 return last
-        except (urllib.error.URLError, OSError, json.JSONDecodeError):
+        except (urllib.error.URLError, OSError, json.JSONDecodeError, grpc.RpcError):
             pass
         time.sleep(poll)
     return last
 
 
-def compose(*args: str) -> int:
-    return subprocess.run(["docker", "compose", *args], check=False).returncode
+def run_node_command(command: str, node_id: str) -> bool:
+    rendered = command.replace("{node_id}", node_id)
+    process = None
+    try:
+        process = subprocess.Popen(rendered, shell=True, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL)
+        exit_code = process.wait(timeout=30)
+        if exit_code != 0:
+            print(f"  command for {node_id} exited with status {exit_code}")
+        return exit_code == 0
+    except subprocess.TimeoutExpired as error:
+        if process is not None:
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                               check=False, timeout=10, capture_output=True)
+            else:
+                process.kill()
+                process.wait(timeout=5)
+        print(f"  command failed for {node_id}: {error}")
+        return False
+    except OSError as error:
+        print(f"  command failed for {node_id}: {error}")
+        return False
 
 
 # ── 1. Nodes join ────────────────────────────────────────────────────────────
 
 def test_nodes_join():
     print("\n[1] Nodes register and report real metrics")
-    payload = wait_for(
-        lambda: (d := api()) if len(d.get("nodes", [])) >= EXPECTED_NODES else None, 90)
+    def expected_nodes_registered():
+        data = api()
+        return data if len(data.get("nodes", [])) >= EXPECTED_NODES else None
+
+    payload = wait_for(expected_nodes_registered, 90)
     if not check(payload is not None and len(payload.get("nodes", [])) >= EXPECTED_NODES,
                  f"{EXPECTED_NODES} nodes registered"):
         return None
@@ -117,96 +143,185 @@ def test_metrics_change():
 
 # ── 3. Task distribution ─────────────────────────────────────────────────────
 
-def submit_tasks(count: int):
-    """Submits tasks through the gRPC API via the monitor helper."""
-    result = subprocess.run(
-        [sys.executable, "scripts/integration-test.py", "--tasks-only", str(count)],
-        capture_output=True, text=True, check=False)
-    return result.stdout
+def submit_tasks(count: int, forbidden_node: str | None = None) -> list[str]:
+    """Submits and verifies real prime-count tasks through the control-plane API."""
+    channel = grpc.insecure_channel(args.control_plane)
+    stub = pb2_grpc.ControlPlaneServiceStub(channel)
+    assigned_nodes = []
+    try:
+        for index in range(count):
+            start = 2 + index * 1000
+            for attempt in range(3):
+                task_id = f"e2e-{uuid.uuid4().hex}"
+                response = stub.SubmitTask(pb2.TaskRequest(
+                    task_id=task_id,
+                    payload=json.dumps({"range_start": start, "range_end": start + 1000}),
+                    kind=pb2.TASK_KIND_PRIME_COUNT_RANGE,
+                ), timeout=10)
+                node_id = response.assigned_node
+
+                if node_id != "NONE" and response.result.startswith("FAILED"):
+                    try:
+                        error = stub.GetTaskStatus(
+                            pb2.TaskStatusRequest(task_id=task_id), timeout=5).error.lower()
+                    except grpc.RpcError:
+                        error = ""
+                    if "no open task channel" in error and attempt < 2:
+                        print(f"  task channel for {node_id} is still opening; retrying")
+                        continue
+
+                accepted = node_id != "NONE" and not response.result.startswith("FAILED")
+                check(accepted, f"task {task_id} accepted by {node_id}: {response.result}")
+                if not accepted:
+                    break
+
+                assigned_nodes.append(node_id)
+                if forbidden_node:
+                    check(node_id != forbidden_node,
+                          f"task {task_id} was not assigned to unavailable node {forbidden_node}")
+
+                def terminal_status():
+                    status = stub.GetTaskStatus(pb2.TaskStatusRequest(task_id=task_id), timeout=5)
+                    return status if status.state in (pb2.TASK_STATE_COMPLETED,
+                                                       pb2.TASK_STATE_FAILED) else None
+
+                status = wait_for(terminal_status, 60)
+                if (status is not None and status.state == pb2.TASK_STATE_FAILED
+                        and "no open task channel" in status.error.lower() and attempt < 2):
+                    print(f"  task channel for {node_id} closed during dispatch; retrying")
+                    continue
+
+                completed = status is not None and status.state == pb2.TASK_STATE_COMPLETED
+                try:
+                    result = json.loads(status.result_json) if completed else {}
+                except (TypeError, json.JSONDecodeError):
+                    result = {}
+                check(completed and isinstance(result.get("prime_count"), int),
+                      f"task {task_id} completed on {node_id} with a real prime-count result")
+                break
+    finally:
+        channel.close()
+    return assigned_nodes
 
 
 def test_task_distribution():
     print("\n[3] Tasks distribute across nodes")
-    output = submit_tasks(9)
-    assigned = {line.split("->")[-1].strip()
-                for line in output.splitlines() if "->" in line}
-    check(len(assigned) >= 2,
+    assigned = set(submit_tasks(args.expected_nodes * 3))
+    check(len(assigned) >= min(2, args.expected_nodes),
           f"tasks spread across {len(assigned)} nodes")
 
 
 # ── 4/5. Kill and rejoin ─────────────────────────────────────────────────────
 
 def test_kill_and_rejoin():
+    if not args.victim_node_id:
+        print("\n[4/5] Skipped node-loss checks; pass --victim-node-id and stop/start commands to enable")
+        return
+
     print("\n[4] A killed node is marked dead and stops receiving work")
     before = api()
-    victim = "node3"
+    victim = args.victim_node_id
 
-    if compose("stop", victim) != 0:
-        check(False, f"could not stop {victim}")
+    if not args.stop_command or not run_node_command(args.stop_command, victim):
+        check(False, f"could not stop {victim}; configure --stop-command")
         return
 
-    payload = wait_for(
-        lambda: (d := api()) if any(n["nodeId"] == victim and n["status"] == "SUSPECTED_DEAD"
-                                    for n in d["nodes"]) else None,
-        DEATH_WINDOW_SECONDS)
-    dead = payload and any(n["nodeId"] == victim and n["status"] == "SUSPECTED_DEAD"
-                           for n in payload["nodes"])
-    check(bool(dead), f"{victim} marked SUSPECTED_DEAD within {DEATH_WINDOW_SECONDS}s")
+    dead = False
+    try:
+        def victim_is_dead():
+            data = api()
+            return data if any(n["nodeId"] == victim and n["status"] == "SUSPECTED_DEAD"
+                               for n in data["nodes"]) else None
 
-    check(len(payload["nodes"]) == len(before["nodes"]),
-          "the dead node is still listed (an operator must be able to see it)")
+        payload = wait_for(victim_is_dead, DEATH_WINDOW_SECONDS)
+        dead = bool(payload and any(n["nodeId"] == victim and n["status"] == "SUSPECTED_DEAD"
+                                    for n in payload["nodes"]))
+        check(dead, f"{victim} marked SUSPECTED_DEAD within {DEATH_WINDOW_SECONDS}s")
 
-    output = submit_tasks(9)
-    assigned = {line.split("->")[-1].strip()
-                for line in output.splitlines() if "->" in line}
-    check(victim not in assigned, f"no work routed to {victim} after it died")
+        if dead:
+            check(len(payload["nodes"]) == len(before["nodes"]),
+                  "the dead node is still listed (an operator must be able to see it)")
+            assigned = submit_tasks(max(6, args.expected_nodes * 2), forbidden_node=victim)
+            check(victim not in assigned, f"no work routed to {victim} after it died")
+    finally:
+        restarted = bool(args.start_command) and run_node_command(args.start_command, victim)
+        check(restarted, f"restart command completed for {victim}")
+
+    if not dead or not restarted:
+        return
 
     print("\n[5] The node rejoins cleanly")
-    if compose("start", victim) != 0:
-        check(False, f"could not restart {victim}")
-        return
+    def victim_is_alive():
+        data = api()
+        return data if any(n["nodeId"] == victim and n["status"] == "ALIVE"
+                           for n in data["nodes"]) else None
 
-    payload = wait_for(
-        lambda: (d := api()) if any(n["nodeId"] == victim and n["status"] == "ALIVE"
-                                    for n in d["nodes"]) else None, 60)
+    payload = wait_for(victim_is_alive, 60)
     revived = payload and any(n["nodeId"] == victim and n["status"] == "ALIVE"
                               for n in payload["nodes"])
     check(bool(revived), f"{victim} is ALIVE again")
+    if not revived:
+        return
 
     ids = [n["nodeId"] for n in payload["nodes"]]
     check(len(ids) == len(set(ids)), "no duplicate entry was created on rejoin")
     check(len(ids) == EXPECTED_NODES, f"exactly {EXPECTED_NODES} nodes, no zombies")
 
-    output = submit_tasks(9)
-    assigned = {line.split("->")[-1].strip()
-                for line in output.splitlines() if "->" in line}
+    assigned = submit_tasks(max(6, args.expected_nodes * 2))
     check(victim in assigned, f"{victim} is back in the scheduling rotation")
 
 
 # ── 6. Prometheus ────────────────────────────────────────────────────────────
 
 def test_prometheus():
+    if args.skip_prometheus:
+        print("\n[6] Skipped Prometheus checks by request")
+        return
+
     print("\n[6] Prometheus has scraped every component")
-    targets = wait_for(lambda: fetch(f"{PROMETHEUS}/api/v1/targets"), 60)
+    targets = wait_for(lambda: fetch(f"{args.prometheus_url}/api/v1/targets"), 60)
     if not check(targets is not None, "Prometheus is reachable"):
         return
 
     active = targets["data"]["activeTargets"]
     up = {t["labels"].get("job") for t in active if t["health"] == "up"}
-    for job in ("control-plane", "node-agents", "predictor"):
+    for job in ("control-plane", "predictor", "prometheus"):
         check(job in up, f"job '{job}' is up")
 
-    # The charts read these series; if they are absent the charts have nothing real
-    # to draw and must show "no data" rather than inventing a line.
-    for metric in ("node_cpu_usage", "controlplane_active_nodes",
-                   "node_heartbeat_rtt_seconds_count"):
-        result = fetch(f"{PROMETHEUS}/api/v1/query?query={metric}")
+    # Agents are outbound-only and cannot be scraped directly through arbitrary NATs.
+    # Verify control-plane metrics that aggregate real heartbeat activity instead.
+    for metric in ("controlplane_active_nodes", "controlplane_heartbeats_total",
+                   "controlplane_heartbeat_interarrival_seconds_count"):
+        query = urllib.parse.urlencode({"query": metric})
+        result = fetch(f"{args.prometheus_url}/api/v1/query?{query}")
         check(len(result["data"]["result"]) > 0, f"series '{metric}' has data")
 
 
 def main():
+    global args, EXPECTED_NODES
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--control-plane", default="localhost:50051")
+    parser.add_argument("--dashboard-url", default=API)
+    parser.add_argument("--prometheus-url", default=PROMETHEUS)
+    parser.add_argument("--skip-prometheus", action="store_true",
+                        help="skip Prometheus checks when validating a local cluster without it")
+    parser.add_argument("--expected-nodes", type=int, default=EXPECTED_NODES)
+    parser.add_argument("--victim-node-id")
+    parser.add_argument("--stop-command",
+                        help="shell command to stop the victim; use {node_id} as a placeholder")
+    parser.add_argument("--start-command",
+                        help="shell command to restart the victim; use {node_id} as a placeholder")
+    args = parser.parse_args()
+    EXPECTED_NODES = args.expected_nodes
+    if EXPECTED_NODES < 1:
+        parser.error("--expected-nodes must be at least 1")
+    if bool(args.stop_command) != bool(args.start_command):
+        parser.error("--stop-command and --start-command must be provided together")
+    if args.victim_node_id and not args.stop_command:
+        parser.error("node-loss checks require both --stop-command and --start-command")
+
     print("=" * 62)
-    print("  Next-Gen Control Plane - end-to-end scenario")
+    print("  Next-Gen Control Plane - live-cluster end-to-end scenario")
     print("=" * 62)
 
     if not test_nodes_join():

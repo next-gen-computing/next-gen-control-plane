@@ -1,96 +1,140 @@
 /* ═══════════════════════════════════════════════════════════════
-   Design tokens — colour values only.
+   Design tokens — Next-Gen Control Plane v2 — Fable-inspired dark system.
 
-   Mirrors desktop-ui/src/main/resources/styles/dark.css and light.css
-   token-for-token (same names minus the leading dash, same values).
-   Every token defined under .theme-dark MUST also be defined under
-   .theme-light, and vice versa — base.css styles every component
-   purely in terms of these. A ThemeTokenParityTest-equivalent check
-   for this file is added in the same phase real components start
-   consuming these tokens.
-
-   Chart series colours are NOT here — see js/palette.js, which
-   mirrors view/theme/Palette.java for the same reason that file gives:
-   a series colour follows the entity (the node), not the theme.
+   Premium dark-first UI with cosmic teal/indigo/violet accent palette.
+   Every --ng-* token MUST be defined in BOTH .theme-dark and .theme-light.
    ═══════════════════════════════════════════════════════════════ */
 
 :root.theme-dark {
-    --ng-bg:             #0B0F19;
-    --ng-surface:        #131C2E;
-    --ng-surface-raised: #1E293B;
-    --ng-input:          #1E293B;
-    --ng-border:         rgba(255, 255, 255, 0.09);
-    --ng-hover:          rgba(255, 255, 255, 0.05);
-    --ng-track:          rgba(255, 255, 255, 0.10);
+    /* ── Backgrounds ── */
+    --ng-bg:             #050810;
+    --ng-surface:        #0A0F1E;
+    --ng-surface-raised: #0F1628;
+    --ng-surface-high:   #161E35;
+    --ng-input:          #0F1628;
+    --ng-border:         rgba(99, 179, 237, 0.10);
+    --ng-hover:          rgba(99, 179, 237, 0.06);
+    --ng-track:          rgba(255, 255, 255, 0.08);
 
-    --ng-text:           #F8FAFC;
-    --ng-text-muted:     #94A3B8;
-    --ng-text-subtle:    #64748B;
+    /* ── Text ── */
+    --ng-text:           #E8F4FD;
+    --ng-text-muted:     #8BAFC8;
+    --ng-text-subtle:    #4A6B87;
 
-    /* A punchier, more "brand" blue than the previous default — deliberately not Docker's own exact
-       hex, just the same family, per this project's own "similar in feel, not copied" rule. */
-    --ng-accent:         #2F7FFF;
-    --ng-accent-strong:  #1C63E8;
-    --ng-accent-soft:    rgba(47, 127, 255, 0.16);
-    --ng-on-accent:      #FFFFFF;
+    /* ── Primary accent: electric teal/cyan ── */
+    --ng-accent:         #00D4FF;
+    --ng-accent-strong:  #0096CC;
+    --ng-accent-soft:    rgba(0, 212, 255, 0.12);
+    --ng-accent-glow:    rgba(0, 212, 255, 0.25);
+    --ng-on-accent:      #000D18;
 
-    /* Sidebar/topbar/statusbar are a shade darker than --ng-surface — Docker Desktop's own layout
-       cue for "structural chrome" vs. "content surface," so a card never gets confused with the
-       shell around it even before reading anything. */
-    --ng-chrome-bg:      #0E1424;
-    --ng-chrome-border:  rgba(255, 255, 255, 0.07);
+    /* ── Secondary accent: violet/indigo ── */
+    --ng-accent2:        #7C3AED;
+    --ng-accent2-soft:   rgba(124, 58, 237, 0.15);
+    --ng-accent2-glow:   rgba(124, 58, 237, 0.30);
 
-    --ng-gridline:       rgba(255, 255, 255, 0.06);
-    --ng-axis:           rgba(255, 255, 255, 0.14);
+    /* ── Tertiary: neon green for healthy ── */
+    --ng-accent3:        #00FF88;
+    --ng-accent3-soft:   rgba(0, 255, 136, 0.10);
 
-    --ng-scrollbar:       rgba(148, 163, 184, 0.28);
-    --ng-scrollbar-hover: rgba(148, 163, 184, 0.48);
+    /* ── Chrome (sidebar/topbar/statusbar) ── */
+    --ng-chrome-bg:      #03060F;
+    --ng-chrome-border:  rgba(0, 212, 255, 0.08);
 
-    --ng-warn-surface:   rgba(250, 178, 25, 0.12);
-    --ng-danger-surface: rgba(208, 59, 59, 0.14);
+    /* ── Glass / neumorphism ── */
+    --ng-relief-shadow:    rgba(0, 0, 0, 0.6);
+    --ng-relief-highlight: rgba(0, 212, 255, 0.04);
+    --ng-glass-surface:    rgba(10, 15, 30, 0.72);
+    --ng-glass-border:     rgba(0, 212, 255, 0.14);
+    --ng-screen-glow:      rgba(0, 212, 255, 0.08);
+    --ng-screen-glow-cool: rgba(124, 58, 237, 0.06);
+    --ng-input-surface:    rgba(3, 6, 15, 0.50);
+    --ng-input-border:     rgba(99, 179, 237, 0.18);
+
+    /* ── Charts ── */
+    --ng-gridline:       rgba(99, 179, 237, 0.05);
+    --ng-axis:           rgba(99, 179, 237, 0.12);
+
+    /* ── Scrollbars ── */
+    --ng-scrollbar:       rgba(0, 212, 255, 0.18);
+    --ng-scrollbar-hover: rgba(0, 212, 255, 0.36);
+
+    /* ── Semantic surfaces ── */
+    --ng-warn-surface:   rgba(255, 170, 0, 0.10);
+    --ng-danger-surface: rgba(255, 50, 80, 0.12);
+    --ng-success-surface: rgba(0, 255, 136, 0.08);
+
+    /* ── Network animation ── */
+    --ng-net-node:       rgba(0, 212, 255, 0.85);
+    --ng-net-edge:       rgba(0, 212, 255, 0.18);
+    --ng-net-pulse:      rgba(0, 212, 255, 0.6);
+    --ng-net-server:     rgba(124, 58, 237, 0.90);
 }
 
 :root.theme-light {
-    --ng-bg:             #F1F5F9;
+    --ng-bg:             #EEF3FA;
     --ng-surface:        #FFFFFF;
-    --ng-surface-raised: #F8FAFC;
-    --ng-input:          #F1F5F9;
-    --ng-border:         rgba(15, 23, 42, 0.10);
-    --ng-hover:          rgba(15, 23, 42, 0.04);
-    --ng-track:          rgba(15, 23, 42, 0.09);
+    --ng-surface-raised: #F5F8FE;
+    --ng-surface-high:   #EBF0FA;
+    --ng-input:          #F0F4FA;
+    --ng-border:         rgba(15, 40, 80, 0.10);
+    --ng-hover:          rgba(0, 120, 200, 0.05);
+    --ng-track:          rgba(15, 40, 80, 0.09);
 
-    --ng-text:           #0F172A;
-    --ng-text-muted:     #475569;
-    --ng-text-subtle:    #64748B;
+    --ng-text:           #0B1A2E;
+    --ng-text-muted:     #3D6080;
+    --ng-text-subtle:    #7A99B8;
 
-    --ng-accent:         #2264EB;
-    --ng-accent-strong:  #174CC2;
-    --ng-accent-soft:    rgba(34, 100, 235, 0.12);
+    --ng-accent:         #0072CC;
+    --ng-accent-strong:  #0056A0;
+    --ng-accent-soft:    rgba(0, 114, 204, 0.10);
+    --ng-accent-glow:    rgba(0, 114, 204, 0.20);
     --ng-on-accent:      #FFFFFF;
 
-    --ng-chrome-bg:      #E8EEF7;
-    --ng-chrome-border:  rgba(15, 23, 42, 0.08);
+    --ng-accent2:        #6025C2;
+    --ng-accent2-soft:   rgba(96, 37, 194, 0.10);
+    --ng-accent2-glow:   rgba(96, 37, 194, 0.20);
 
-    --ng-gridline:       rgba(15, 23, 42, 0.07);
-    --ng-axis:           rgba(15, 23, 42, 0.18);
+    --ng-accent3:        #00A060;
+    --ng-accent3-soft:   rgba(0, 160, 96, 0.10);
 
-    --ng-scrollbar:       rgba(71, 85, 105, 0.28);
-    --ng-scrollbar-hover: rgba(71, 85, 105, 0.48);
+    --ng-chrome-bg:      #E2EAF6;
+    --ng-chrome-border:  rgba(15, 40, 80, 0.08);
 
-    --ng-warn-surface:   rgba(250, 178, 25, 0.16);
-    --ng-danger-surface: rgba(208, 59, 59, 0.10);
+    --ng-relief-shadow:    rgba(71, 100, 140, 0.14);
+    --ng-relief-highlight: rgba(255, 255, 255, 0.96);
+    --ng-glass-surface:    rgba(255, 255, 255, 0.86);
+    --ng-glass-border:     rgba(255, 255, 255, 0.80);
+    --ng-screen-glow:      rgba(0, 114, 204, 0.07);
+    --ng-screen-glow-cool: rgba(96, 37, 194, 0.05);
+    --ng-input-surface:    rgba(240, 244, 250, 0.90);
+    --ng-input-border:     rgba(60, 100, 150, 0.18);
+
+    --ng-gridline:       rgba(15, 40, 80, 0.06);
+    --ng-axis:           rgba(15, 40, 80, 0.16);
+
+    --ng-scrollbar:       rgba(60, 100, 150, 0.24);
+    --ng-scrollbar-hover: rgba(60, 100, 150, 0.44);
+
+    --ng-warn-surface:   rgba(240, 140, 0, 0.12);
+    --ng-danger-surface: rgba(200, 30, 50, 0.10);
+    --ng-success-surface: rgba(0, 160, 96, 0.08);
+
+    --ng-net-node:       rgba(0, 100, 200, 0.75);
+    --ng-net-edge:       rgba(0, 100, 200, 0.14);
+    --ng-net-pulse:      rgba(0, 100, 200, 0.5);
+    --ng-net-server:     rgba(96, 37, 194, 0.80);
 }
 
-/* Status colours are fixed and never themed — mirrors Palette.java's
-   STATUS_GOOD/WARNING/SERIOUS/CRITICAL/UNKNOWN constants exactly. */
+/* ── Fixed status colours — never themed ── */
 :root {
-    --ng-status-good:     #0CA30C;
-    --ng-status-warning:  #FAB219;
-    --ng-status-serious:  #EC835A;
-    --ng-status-critical: #D03B3B;
-    --ng-status-unknown:  #898781;
+    --ng-status-good:     #00CC6A;
+    --ng-status-warning:  #FFAA00;
+    --ng-status-serious:  #FF6B35;
+    --ng-status-critical: #FF3250;
+    --ng-status-unknown:  #6B7B9E;
 
-    /* Typography scale (px): 11/12/13/15/18/22/30/34 */
+    /* Typography scale */
     --ng-font-size-2xs: 11px;
     --ng-font-size-xs:  12px;
     --ng-font-size-sm:  13px;
@@ -98,28 +142,34 @@
     --ng-font-size-lg:  18px;
     --ng-font-size-xl:  22px;
     --ng-font-size-2xl: 30px;
-    --ng-font-size-3xl: 34px;
+    --ng-font-size-3xl: 36px;
 
-    /* Spacing scale (px): 4/8/12/16/24/32 */
+    /* Spacing scale */
     --ng-space-1: 4px;
     --ng-space-2: 8px;
     --ng-space-3: 12px;
     --ng-space-4: 16px;
     --ng-space-5: 24px;
     --ng-space-6: 32px;
+    --ng-space-7: 48px;
 
-    /* Radius scale (px): 8/12/16 */
+    /* Radius scale */
+    --ng-radius-xs: 4px;
     --ng-radius-sm: 8px;
     --ng-radius-md: 12px;
     --ng-radius-lg: 16px;
+    --ng-radius-xl: 24px;
 
-    /* Animation timings, ported literally from their Java Duration constants. */
-    --ng-motion-fast:    160ms;
-    --ng-motion-base:    220ms;
-    --ng-motion-card:    260ms;
-    --ng-motion-exit:    200ms;
-    --ng-motion-enter:   300ms;
+    /* Animation timings */
+    --ng-motion-fast:    140ms;
+    --ng-motion-base:    200ms;
+    --ng-motion-card:    280ms;
+    --ng-motion-exit:    180ms;
+    --ng-motion-enter:   320ms;
+    --ng-motion-slow:    500ms;
 
+    /* Fonts */
     --ng-font-body: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
-    --ng-font-mono: 'JetBrains Mono', 'Consolas', monospace;
+    --ng-font-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+    --ng-font-display: 'Inter', system-ui, sans-serif;
 }

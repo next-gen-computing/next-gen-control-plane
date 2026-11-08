@@ -194,7 +194,7 @@ class AutoRetrainer:
         os.makedirs(model_dir, exist_ok=True)
 
         if self.model_type == "xgboost":
-            booster = train_xgboost(X_norm[train_idx], labels[train_idx])
+            booster = train_xgboost(X_norm[train_idx], labels[train_idx], seed=self.seed)
             train_acc = xgboost_accuracy(X_norm[train_idx], labels[train_idx], booster)
             val_acc = xgboost_accuracy(X_norm[val_idx], labels[val_idx], booster)
             # Must end in .json — xgboost's save_model picks its serialization format from the file

@@ -1,8 +1,6 @@
 // Stage RR: a Task-Manager-style cluster monitor. Cluster-wide tiles, one expandable card per node
-// (live CPU/memory/battery/predictive-risk/RTT plus that node's real running tasks and containers —
-// server-side lookups already exist for all of it, see ClusterTasksMonitoringService/
-// DockerResourcesMonitoringService/NodeMonitoringService), and the cluster-wide performance charts
-// below. Real data only throughout — an unavailable reading renders "n/a", never a substituted number.
+// (live CPU/memory/battery/predictive-risk/RTT plus that node's real running tasks and containers).
+// Real data only — unavailable readings render "n/a", never substituted.
 window.NG = window.NG || {};
 NG.views = NG.views || {};
 
@@ -10,20 +8,29 @@ NG.views.monitoring = {
     mount(container) {
         container.innerHTML = `
             <div class="ng-page">
-                <h1 class="ng-page-title">Monitoring</h1>
-                <p class="ng-page-subtitle">Live cluster telemetry — every node's real resources, and every real task and container running on it</p>
+                <div class="ng-page-header ng-animate-fade-in">
+                    <div class="ng-page-header-left">
+                        <h1 class="ng-page-title">Monitoring</h1>
+                        <p class="ng-page-subtitle">Live cluster telemetry — every node's real resources and running tasks</p>
+                    </div>
+                </div>
                 <div class="ng-page-scroll">
                     <div class="ng-page-content">
-                        <div class="ng-stat-row" id="ng-tiles"></div>
+                        <div class="ng-stat-row ng-animate-fade-in ng-stagger-1" id="ng-tiles"></div>
 
-                        <h2 class="ng-section-heading">Nodes</h2>
+                        <div class="ng-section-heading ng-animate-fade-in ng-stagger-2">
+                            🖥️ Node Detail
+                        </div>
                         <div id="ng-node-grid"></div>
                         <div class="ng-empty-state" id="ng-node-empty">
+                            <div class="ng-empty-state-icon">📡</div>
                             <div class="ng-empty-state-body">No nodes connected yet</div>
                         </div>
 
-                        <h2 class="ng-section-heading">Cluster Performance</h2>
-                        <div class="ng-chart-row">
+                        <div class="ng-section-heading ng-animate-fade-in ng-stagger-3">
+                            📈 Cluster Performance
+                        </div>
+                        <div class="ng-chart-row ng-animate-fade-in ng-stagger-3">
                             <div class="ng-chart-card" id="ng-cpu-chart"></div>
                             <div class="ng-chart-card" id="ng-mem-chart"></div>
                         </div>
@@ -136,7 +143,7 @@ NG.views.monitoring = {
                     ? `<span style="color:${NG.palette.STATUS_CRITICAL};font-weight:600">⚠ AT RISK</span>${n.riskReasons && n.riskReasons.length ? ` <span style="opacity:0.7;font-size:var(--ng-font-size-2xs)">(${n.riskReasons[0]})</span>` : ''}`
                     : `<span style="opacity:0.7">risk ${(n.riskScore * 100).toFixed(0)}%</span>`;
 
-                return `<div class="ng-card ng-monitor-node-card" style="margin-bottom:10px" data-node-id="${n.id}">
+                return `<div class="ng-card ng-monitor-node-card ng-animate-fade-in" style="margin-bottom:10px" data-node-id="${n.id}">
                     <div class="ng-row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
                         <span>
                             <span class="ng-status-dot" style="width:9px;height:9px;border-radius:50%;background:${statusColor};display:inline-block;margin-right:8px"></span>

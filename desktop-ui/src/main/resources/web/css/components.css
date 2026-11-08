@@ -1,5 +1,12 @@
-/* Component styles for the onboarding screens (role-selection, server-setup, node-join). Structural
-   values only come from tokens.css custom properties — see base.css's header comment. */
+/* ═══════════════════════════════════════════════════════════════
+   components.css — reusable UI components (onboarding screens,
+   forms, buttons, cards, auth). Structural only — all colour from
+   --ng-* tokens.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ══════════════════════════════════════
+   SCREEN (full-page centred layouts)
+   ══════════════════════════════════════ */
 
 .ng-screen {
     position: relative;
@@ -9,71 +16,139 @@
     justify-content: center;
     overflow: hidden;
     padding: var(--ng-space-6);
+    background:
+        radial-gradient(ellipse 60% 50% at 20% 30%, var(--ng-screen-glow), transparent),
+        radial-gradient(ellipse 50% 60% at 80% 70%, var(--ng-screen-glow-cool), transparent),
+        var(--ng-bg);
+}
+
+.ng-screen::before {
+    content: '';
+    position: absolute;
+    inset: 6% 10%;
+    border: 1px solid var(--ng-glass-border);
+    opacity: 0.25;
+    border-radius: 28px;
+    pointer-events: none;
 }
 
 .ng-screen-content {
     position: relative;
     z-index: 1;
     width: 100%;
-    max-width: 720px;
+    max-width: 780px;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: var(--ng-space-5);
+    animation: ng-scale-in var(--ng-motion-enter) ease both;
 }
 
-.ng-brand {
-    text-align: center;
+/* ══════════════════════════════════════
+   BRAND MARK (onboarding header)
+   ══════════════════════════════════════ */
+
+.ng-brand { text-align: center; }
+
+.ng-brand-mark {
+    width: 64px;
+    height: 64px;
+    border-radius: var(--ng-radius-lg);
+    background: linear-gradient(135deg, var(--ng-accent), var(--ng-accent2));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 26px;
+    color: var(--ng-on-accent);
+    margin: 0 auto var(--ng-space-3);
+    box-shadow: 0 0 48px var(--ng-accent-glow), 0 12px 32px rgba(0,0,0,0.4);
+    animation: ng-border-glow 3s ease-in-out infinite;
 }
 
 .ng-brand-title {
     font-size: var(--ng-font-size-3xl);
-    font-weight: 700;
+    font-weight: 800;
     margin: 0 0 var(--ng-space-1);
-    background: linear-gradient(90deg, var(--ng-accent), var(--ng-accent-strong));
+    background: linear-gradient(90deg, var(--ng-accent), var(--ng-accent2), var(--ng-accent));
+    background-size: 200% auto;
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+    animation: ng-shimmer 4s linear infinite;
 }
 
 .ng-brand-subtitle {
     color: var(--ng-text-muted);
     font-size: var(--ng-font-size-md);
     margin: 0;
+    font-weight: 400;
 }
+
+/* ══════════════════════════════════════
+   ROLE SELECTION GRID
+   ══════════════════════════════════════ */
 
 .ng-role-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: var(--ng-space-4);
     width: 100%;
 }
 
 .ng-role-card {
     position: relative;
-    background: var(--ng-surface);
-    border: 1px solid var(--ng-border);
-    border-radius: var(--ng-radius-lg);
-    padding: var(--ng-space-5);
+    background: var(--ng-glass-surface);
+    border: 1px solid var(--ng-glass-border);
+    border-radius: var(--ng-radius-xl);
+    padding: var(--ng-space-6);
     cursor: pointer;
     text-align: left;
     color: var(--ng-text);
     display: flex;
     flex-direction: column;
-    gap: var(--ng-space-2);
+    gap: var(--ng-space-3);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    box-shadow:
+        0 0 0 1px rgba(0, 212, 255, 0.06) inset,
+        0 24px 48px rgba(0,0,0,0.5),
+        0 0 80px rgba(0, 212, 255, 0.04);
+    transition: transform var(--ng-motion-base) ease,
+                border-color var(--ng-motion-base) ease,
+                box-shadow var(--ng-motion-base) ease;
+    overflow: hidden;
+}
+
+.ng-role-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(0,212,255,0.06), transparent);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--ng-motion-base) ease;
 }
 
 .ng-role-card:hover {
-    border-color: var(--ng-accent);
+    border-color: rgba(0, 212, 255, 0.4);
+    transform: translateY(-3px);
+    box-shadow:
+        0 0 0 1px rgba(0, 212, 255, 0.20) inset,
+        0 32px 64px rgba(0,0,0,0.6),
+        0 0 40px rgba(0, 212, 255, 0.12);
 }
 
+.ng-role-card:hover::after { opacity: 1; }
+
 .ng-role-card-icon {
-    font-size: var(--ng-font-size-2xl);
+    font-size: 32px;
+    line-height: 1;
 }
 
 .ng-role-card-title {
     font-size: var(--ng-font-size-lg);
-    font-weight: 600;
+    font-weight: 700;
     margin: 0;
 }
 
@@ -81,18 +156,40 @@
     color: var(--ng-text-muted);
     font-size: var(--ng-font-size-sm);
     margin: 0;
+    line-height: 1.6;
 }
+
+/* ══════════════════════════════════════
+   GLASS CARD
+   ══════════════════════════════════════ */
 
 .ng-card {
     width: 100%;
-    background: var(--ng-surface);
-    border: 1px solid var(--ng-border);
+    background: var(--ng-glass-surface);
+    border: 1px solid var(--ng-glass-border);
     border-radius: var(--ng-radius-lg);
     padding: var(--ng-space-5);
     display: flex;
     flex-direction: column;
     gap: var(--ng-space-4);
+    box-shadow:
+        0 0 0 1px rgba(0, 212, 255, 0.04) inset,
+        0 16px 40px rgba(0,0,0,0.4);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
 }
+
+.ng-card-hero {
+    border-color: rgba(0, 212, 255, 0.20);
+    box-shadow:
+        0 0 0 1px rgba(0, 212, 255, 0.10) inset,
+        0 0 60px rgba(0, 212, 255, 0.06),
+        0 24px 56px rgba(0,0,0,0.5);
+}
+
+/* ══════════════════════════════════════
+   FORM ELEMENTS
+   ══════════════════════════════════════ */
 
 .ng-field {
     display: flex;
@@ -102,29 +199,164 @@
 
 .ng-field label {
     font-size: var(--ng-font-size-xs);
+    font-weight: 500;
     color: var(--ng-text-muted);
+    letter-spacing: 0.03em;
 }
 
 .ng-input {
-    background: var(--ng-input);
-    border: 1px solid var(--ng-border);
+    background: var(--ng-input-surface);
+    border: 1px solid var(--ng-input-border);
     border-radius: var(--ng-radius-sm);
-    padding: var(--ng-space-3);
+    padding: var(--ng-space-3) var(--ng-space-4);
     color: var(--ng-text);
     font-size: var(--ng-font-size-sm);
     font-family: var(--ng-font-body);
+    transition:
+        border-color var(--ng-motion-fast) ease,
+        box-shadow   var(--ng-motion-fast) ease;
+    width: 100%;
+}
+
+.ng-input::placeholder { color: var(--ng-text-subtle); }
+
+.ng-input:hover {
+    border-color: rgba(0, 212, 255, 0.30);
 }
 
 .ng-input:focus {
     outline: none;
     border-color: var(--ng-accent);
+    box-shadow: 0 0 0 3px var(--ng-accent-soft);
 }
+
+/* ══════════════════════════════════════
+   BUTTONS
+   ══════════════════════════════════════ */
+
+.ng-button {
+    appearance: none;
+    border: none;
+    border-radius: var(--ng-radius-sm);
+    padding: var(--ng-space-3) var(--ng-space-5);
+    font-size: var(--ng-font-size-sm);
+    font-weight: 600;
+    font-family: var(--ng-font-body);
+    cursor: pointer;
+    transition:
+        transform  var(--ng-motion-fast) ease,
+        box-shadow var(--ng-motion-base) ease,
+        opacity    var(--ng-motion-fast) ease,
+        background var(--ng-motion-fast) ease;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ng-space-2);
+}
+
+.ng-button:active  { transform: scale(0.97); }
+.ng-button:disabled { opacity: 0.45; cursor: default; pointer-events: none; }
+
+.ng-button-primary {
+    background: linear-gradient(135deg, var(--ng-accent), var(--ng-accent-strong));
+    color: var(--ng-on-accent);
+    box-shadow: 0 0 24px var(--ng-accent-glow), 0 4px 16px rgba(0,0,0,0.3);
+}
+
+.ng-button-primary:hover:not(:disabled) {
+    box-shadow: 0 0 40px var(--ng-accent-glow), 0 8px 24px rgba(0,0,0,0.4);
+    transform: translateY(-1px);
+}
+
+.ng-button-secondary {
+    background: var(--ng-glass-surface);
+    color: var(--ng-text-muted);
+    border: 1px solid var(--ng-border);
+    backdrop-filter: blur(8px);
+}
+
+.ng-button-secondary:hover:not(:disabled) {
+    color: var(--ng-text);
+    border-color: var(--ng-accent);
+    box-shadow: 0 0 16px rgba(0, 212, 255, 0.10);
+}
+
+.ng-button-ghost {
+    background: transparent;
+    color: var(--ng-accent);
+    border: 1px solid var(--ng-accent-soft);
+}
+
+.ng-button-ghost:hover:not(:disabled) {
+    background: var(--ng-accent-soft);
+}
+
+.ng-button-danger {
+    background: linear-gradient(135deg, #ff3250, #cc1835);
+    color: #fff;
+    box-shadow: 0 0 24px rgba(255,50,80,0.25), 0 4px 16px rgba(0,0,0,0.3);
+}
+
+.ng-link-button {
+    background: none;
+    border: none;
+    color: var(--ng-accent);
+    font-size: var(--ng-font-size-xs);
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+    font-family: var(--ng-font-body);
+    transition: color var(--ng-motion-fast) ease;
+}
+
+.ng-link-button:hover { color: var(--ng-accent-strong); }
+
+/* ══════════════════════════════════════
+   STATUS & HELPER
+   ══════════════════════════════════════ */
+
+.ng-status-message {
+    font-size: var(--ng-font-size-xs);
+    padding: var(--ng-space-2) var(--ng-space-3);
+    border-radius: var(--ng-radius-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--ng-space-2);
+    border-left: 3px solid transparent;
+}
+
+.ng-status-message.error {
+    background: var(--ng-danger-surface);
+    border-left-color: var(--ng-status-critical);
+    color: var(--ng-text);
+}
+
+.ng-status-message.info {
+    background: var(--ng-accent-soft);
+    border-left-color: var(--ng-accent);
+    color: var(--ng-text);
+}
+
+.ng-status-message.success {
+    background: var(--ng-success-surface);
+    border-left-color: var(--ng-status-good);
+    color: var(--ng-text);
+}
+
+/* ══════════════════════════════════════
+   MISC LAYOUT HELPERS
+   ══════════════════════════════════════ */
 
 .ng-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: var(--ng-space-3);
+}
+
+.ng-inline-helper-row {
+    display: flex;
+    align-items: center;
+    gap: var(--ng-space-2);
 }
 
 .ng-meta-row {
@@ -136,84 +368,12 @@
     border-bottom: 1px solid var(--ng-border);
 }
 
-.ng-meta-row:last-child {
-    border-bottom: none;
-}
+.ng-meta-row:last-child { border-bottom: none; }
+.ng-meta-value { color: var(--ng-text); font-family: var(--ng-font-mono); }
 
-.ng-meta-value {
-    color: var(--ng-text);
-    font-family: var(--ng-font-mono);
-}
-
-.ng-button {
-    appearance: none;
-    border: none;
-    border-radius: var(--ng-radius-sm);
-    padding: var(--ng-space-3) var(--ng-space-5);
-    font-size: var(--ng-font-size-sm);
-    font-weight: 600;
-    cursor: pointer;
-    transition: transform 120ms ease, box-shadow 200ms ease, opacity 150ms ease;
-}
-
-.ng-button:active {
-    transform: scale(0.98);
-}
-
-.ng-button:disabled {
-    opacity: 0.6;
-    cursor: default;
-}
-
-.ng-button-primary {
-    background: linear-gradient(90deg, var(--ng-accent), var(--ng-accent-strong));
-    color: var(--ng-on-accent);
-    box-shadow: 0 8px 24px -8px var(--ng-accent-soft);
-}
-
-.ng-button-primary:hover:not(:disabled) {
-    box-shadow: 0 12px 32px -8px var(--ng-accent-soft);
-}
-
-.ng-button-secondary {
-    background: transparent;
-    color: var(--ng-text-muted);
-    border: 1px solid var(--ng-border);
-}
-
-.ng-button-secondary:hover {
-    color: var(--ng-text);
-    border-color: var(--ng-accent);
-}
-
-.ng-link-button {
-    background: none;
-    border: none;
-    color: var(--ng-accent);
-    font-size: var(--ng-font-size-xs);
-    cursor: pointer;
-    padding: 0;
-    text-align: left;
-}
-
-.ng-status-message {
-    font-size: var(--ng-font-size-xs);
-    padding: var(--ng-space-2) var(--ng-space-3);
-    border-radius: var(--ng-radius-sm);
-    display: flex;
-    align-items: center;
-    gap: var(--ng-space-2);
-}
-
-.ng-status-message.error {
-    background: var(--ng-danger-surface);
-    color: var(--ng-text);
-}
-
-.ng-status-message.info {
-    background: var(--ng-accent-soft);
-    color: var(--ng-text);
-}
+/* ══════════════════════════════════════
+   COLLAPSIBLE
+   ══════════════════════════════════════ */
 
 .ng-collapsible-toggle {
     background: none;
@@ -223,6 +383,7 @@
     cursor: pointer;
     padding: 0;
     text-align: left;
+    font-family: var(--ng-font-body);
 }
 
 .ng-collapsible-body {
@@ -233,50 +394,101 @@
     border-top: 1px solid var(--ng-border);
 }
 
-.ng-collapsible-body.is-open {
-    display: flex;
-}
+.ng-collapsible-body.is-open { display: flex; }
+
+/* ══════════════════════════════════════
+   SPINNER
+   ══════════════════════════════════════ */
 
 .ng-spinner {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
     border: 2px solid var(--ng-border);
     border-top-color: var(--ng-accent);
     animation: ng-spin 700ms linear infinite;
+    flex-shrink: 0;
 }
 
-@keyframes ng-spin {
-    to { transform: rotate(360deg); }
+.ng-spinner-lg {
+    width: 28px;
+    height: 28px;
+    border-width: 3px;
 }
 
-/* ── Connection banner (mounted once, present on every screen from Phase 3 onward) ── */
+/* ══════════════════════════════════════
+   CONNECTION BANNER
+   ══════════════════════════════════════ */
 
 .ng-connection-banner {
     display: flex;
     align-items: center;
     gap: var(--ng-space-2);
-    padding: var(--ng-space-2) var(--ng-space-4);
-    font-size: var(--ng-font-size-xs);
+    padding: 6px var(--ng-space-4);
+    font-size: var(--ng-font-size-2xs);
     color: var(--ng-text-muted);
+    background: rgba(0, 212, 255, 0.03);
     border-bottom: 1px solid var(--ng-border);
 }
 
 .ng-connection-dot {
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     background: var(--ng-status-unknown);
+    position: relative;
 }
 
-/* ── Account: login / signup / switcher ── */
+.ng-connection-dot.connected {
+    background: var(--ng-status-good);
+}
+
+.ng-connection-dot.connected::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    background: var(--ng-status-good);
+    animation: ng-pulse-ring 1.8s ease-out infinite;
+}
+
+/* ══════════════════════════════════════
+   AVATAR
+   ══════════════════════════════════════ */
+
+.ng-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: linear-gradient(135deg, var(--ng-accent-soft), var(--ng-accent2-soft));
+    border: 1px solid var(--ng-glass-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: var(--ng-accent);
+    font-size: var(--ng-font-size-sm);
+    flex-shrink: 0;
+}
+
+.ng-avatar-lg {
+    width: 64px;
+    height: 64px;
+    font-size: var(--ng-font-size-xl);
+}
+
+/* ══════════════════════════════════════
+   AUTH SCREENS
+   ══════════════════════════════════════ */
 
 .ng-auth-tabs {
     display: flex;
-    gap: var(--ng-space-1);
-    background: var(--ng-input);
+    gap: 3px;
+    background: rgba(0,0,0,0.3);
     border-radius: var(--ng-radius-sm);
-    padding: 4px;
+    border: 1px solid var(--ng-border);
+    padding: 3px;
 }
 
 .ng-auth-tab {
@@ -287,16 +499,17 @@
     color: var(--ng-text-muted);
     font-size: var(--ng-font-size-sm);
     font-weight: 600;
+    font-family: var(--ng-font-body);
     padding: var(--ng-space-2) var(--ng-space-3);
     border-radius: calc(var(--ng-radius-sm) - 2px);
     cursor: pointer;
-    transition: background 150ms ease, color 150ms ease;
+    transition: background var(--ng-motion-fast) ease, color var(--ng-motion-fast) ease;
 }
 
 .ng-auth-tab.is-active {
-    background: var(--ng-surface);
-    color: var(--ng-text);
-    box-shadow: 0 1px 4px -1px rgba(0, 0, 0, 0.3);
+    background: var(--ng-glass-surface);
+    color: var(--ng-accent);
+    box-shadow: 0 0 12px rgba(0, 212, 255, 0.15);
 }
 
 .ng-button-github {
@@ -305,12 +518,14 @@
     justify-content: center;
     gap: var(--ng-space-2);
     width: 100%;
-    background: #24292f;
-    color: #fff;
+    background: #21262d;
+    color: #e6edf3;
+    border: 1px solid #30363d;
 }
 
 .ng-button-github:hover:not(:disabled) {
-    background: #32383f;
+    background: #30363d;
+    border-color: #8b949e;
 }
 
 .ng-button-github svg {
@@ -336,27 +551,6 @@
     flex: 1;
     height: 1px;
     background: var(--ng-border);
-}
-
-.ng-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    object-fit: cover;
-    background: var(--ng-accent-soft);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    color: var(--ng-accent-strong);
-    font-size: var(--ng-font-size-md);
-    flex-shrink: 0;
-}
-
-.ng-avatar-lg {
-    width: 64px;
-    height: 64px;
-    font-size: var(--ng-font-size-xl);
 }
 
 .ng-account-row {
@@ -393,12 +587,12 @@
     font-family: var(--ng-font-mono);
     font-size: var(--ng-font-size-2xl);
     font-weight: 700;
-    letter-spacing: 0.15em;
-    background: var(--ng-input);
-    border: 1px dashed var(--ng-border);
+    letter-spacing: 0.20em;
+    background: var(--ng-input-surface);
+    border: 1px dashed rgba(0, 212, 255, 0.25);
     border-radius: var(--ng-radius-sm);
     padding: var(--ng-space-4);
-    color: var(--ng-accent-strong);
+    color: var(--ng-accent);
     user-select: all;
 }
 
@@ -416,10 +610,72 @@
     border: 1px solid var(--ng-border);
     border-radius: var(--ng-radius-sm);
     cursor: pointer;
-    background: var(--ng-surface);
+    background: var(--ng-glass-surface);
     text-align: left;
+    transition: border-color var(--ng-motion-fast) ease, box-shadow var(--ng-motion-fast) ease;
 }
 
 .ng-account-switch-item:hover {
     border-color: var(--ng-accent);
+    box-shadow: 0 0 12px rgba(0, 212, 255, 0.10);
 }
+
+/* ══════════════════════════════════════
+   BADGE / PILL
+   ══════════════════════════════════════ */
+
+.ng-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px var(--ng-space-2);
+    border-radius: 99px;
+    font-size: var(--ng-font-size-2xs);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+}
+
+.ng-badge-good     { background: var(--ng-success-surface);  color: var(--ng-status-good);     border: 1px solid rgba(0, 204, 106, 0.25); }
+.ng-badge-warn     { background: var(--ng-warn-surface);     color: var(--ng-status-warning);  border: 1px solid rgba(255,170,0,0.25); }
+.ng-badge-critical { background: var(--ng-danger-surface);   color: var(--ng-status-critical); border: 1px solid rgba(255,50,80,0.25); }
+.ng-badge-unknown  { background: rgba(107,123,158,0.12);     color: var(--ng-status-unknown);  border: 1px solid rgba(107,123,158,0.25); }
+.ng-badge-accent   { background: var(--ng-accent-soft);      color: var(--ng-accent);          border: 1px solid rgba(0,212,255,0.25); }
+
+/* ══════════════════════════════════════
+   DIVIDER
+   ══════════════════════════════════════ */
+
+.ng-divider {
+    height: 1px;
+    background: var(--ng-border);
+    margin: var(--ng-space-2) 0;
+}
+
+/* ══════════════════════════════════════
+   TOOLTIP
+   ══════════════════════════════════════ */
+
+[data-tooltip] {
+    position: relative;
+}
+
+[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--ng-surface-high);
+    border: 1px solid var(--ng-border);
+    color: var(--ng-text);
+    font-size: var(--ng-font-size-2xs);
+    padding: 4px 8px;
+    border-radius: var(--ng-radius-xs);
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ng-motion-fast) ease;
+    z-index: 999;
+}
+
+[data-tooltip]:hover::after { opacity: 1; }

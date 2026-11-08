@@ -1,0 +1,108 @@
+# =============================================================================
+# docker-compose.full-stack.yml
+# Next-Gen Control Plane — complete stack: Postgres + Spring gRPC + Next.js UI
+#
+# Usage:
+#   docker compose -f docker-compose.full-stack.yml up -d
+#
+# Services:
+#   db         — PostgreSQL 16 (Flyway migrations run on first java-cp startup)
+#   java-cp    — gRPC control plane + Spring Boot REST API (port 50051 + 8080)
+#   web-ui     — Next.js frontend dashboard (port 3000)
+#   prometheus — metrics scraping (port 9090)  [optional]
+# =============================================================================
+
+version: "3.9"
+
+volumes:
+  postgres_data:
+  nextgen_data:
+  nextgen_pki:
+
+networks:
+  nextgen:
+    driver: bridge
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB:       nextgen
+      POSTGRES_USER:     nextgen
+      POSTGRES_PASSWORD: nextgen_secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks: [nextgen]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nextgen -d nextgen"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Java Control Plane (gRPC + Spring REST API) ─────────────────────────────
+  java-cp:
+    build:
+      context: .
+      dockerfile: java-control-plane/Dockerfile
+    environment:
+      ROLE:                       server
+      GRPC_PORT:                  "50051"
+      DASHBOARD_PORT:             "8085"
+      METRICS_PORT:               "9091"
+      # Spring Boot / DB
+      SPRING_DATASOURCE_URL:      jdbc:postgresql://db:5432/nextgen
+      SPRING_DATASOURCE_USERNAME: nextgen
+      SPRING_DATASOURCE_PASSWORD: nextgen_secret
+      # TLS
+      TLS_ENABLED:                "false"
+      # Data dirs
+      NEXTGEN_DATA_DIR:           /data
+    volumes:
+      - nextgen_data:/data
+      - nextgen_pki:/pki
+    ports:
+      - "50051:50051"   # gRPC
+      - "8080:8080"     # Spring REST API + WebSocket
+      - "8085:8085"     # Legacy dashboard JSON API
+      - "9091:9091"     # Prometheus metrics
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [nextgen]
+    restart: unless-stopped
+
+  # ── Next.js Web UI ──────────────────────────────────────────────────────────
+  web-ui:
+    build:
+      context: ./web-ui
+      dockerfile: Dockerfile
+    environment:
+      NEXT_PUBLIC_API_BASE: http://java-cp:8080
+      NEXT_PUBLIC_WS_BASE:  ws://java-cp:8080
+      NODE_ENV:             production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - java-cp
+    networks: [nextgen]
+    restart: unless-stopped
+
+  # ── Prometheus (optional metrics scraping) ───────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.54.0
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    networks: [nextgen]
+    restart: unless-stopped
+    profiles: [monitoring]   # only starts with: docker compose --profile monitoring up

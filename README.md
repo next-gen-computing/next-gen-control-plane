@@ -141,11 +141,14 @@ risk-scoring path degrades to — see XGBoost below.
 ### XGBoost failure-risk classification — opt-in
 Real gradient-boosted trees (the raw `xgboost.Booster` API), trained by
 `python-predictor/train_risk_model.py --model-type xgboost` (the default model type) on real outcome
-data — `risk_outcomes.jsonl`/`risk_snapshots.jsonl`, written as nodes actually die or get swept. Served
-by `predictor_service.py`, consumed Java-side by `MLRiskScorer implements RiskScorer` — a thin gRPC
-client that **always falls back to `RuleBasedRiskScorer` whenever the model isn't actually trained**,
-never fabricating a score. Opt-in: set `ML_RISK_SCORER_ENABLED=true` **and** actually run training at
-least once — every response honestly reports `model_trained=false` until then.
+data — `risk_outcomes.jsonl`/`risk_snapshots.jsonl`, written as nodes actually die or get swept. The
+repository includes a trained XGBoost baseline; a fresh predictor image seeds its model volume with
+that artifact, so `GetPrediction` can report `model_trained=true` immediately. Java-side use remains
+opt-in: set `ML_RISK_SCORER_ENABLED=true` to select `MLRiskScorer`; otherwise the server continues to
+use `RuleBasedRiskScorer`. The ML scorer always falls back to the rule-based scorer if the model is
+missing/untrained or the predictor is unavailable. To adapt the model to a deployment, enable
+`RISK_SNAPSHOT_LOGGING_ENABLED=true`, accumulate real outcome and snapshot data, and run
+`train_risk_model.py` against those files.
 
 **Auto-retrain (`python-predictor/auto_retrain.py`) — opt-in, off by default.** Training is normally an
 operator-run step (`train_risk_model.py`) precisely because an unattended retrain on live data could
@@ -163,8 +166,10 @@ actually tested against.
 ### LSTM load forecasting — opt-in
 `torch.nn.LSTM` (`python-predictor/load_forecast_model.py`), forecasting CPU/memory 5 minutes ahead
 from the raw per-timestep telemetry sequence — a genuinely different input from the XGBoost classifier
-above, which only ever sees collapsed trend scalars. Requires `RISK_SNAPSHOT_LOGGING_ENABLED=true` to
-collect training data and a manual run of `train_load_forecast_model.py`. `MLRiskScorer` folds a
+above, which only ever sees collapsed trend scalars. No trained LSTM artifact is bundled: enable
+`RISK_SNAPSHOT_LOGGING_ENABLED=true`, collect enough snapshots to cover the forecast horizon, and run
+`train_load_forecast_model.py`. Until then the service honestly reports `load_model_trained=false`.
+`MLRiskScorer` folds a
 crossed-threshold forecast into its score as one bounded, additive signal — it composes with the
 XGBoost score, never replaces or dominates it.
 
@@ -341,9 +346,15 @@ entirely, here's how to generate **real** ones yourself:
 
 - **Test suite health** — the actual, current pass counts and coverage percentages (see
   [Testing](#-testing) below) are real and reproducible right now: `mvn clean install` / `mvn test`.
-- **Classifier accuracy** — once real risk data has accumulated, `train_risk_model.py`'s own
-  `trainAccuracy`/`validationAccuracy` output (printed to stdout, also written into `risk_model.json`'s
-  metadata) is a real number from your own cluster's data, not a claimed one.
+- **Classifier evaluation** — `python python-predictor/benchmark_alibaba_trace.py \
+  --output python-predictor/benchmark-results/alibaba-pai-risk.json` regenerates the
+  machine-held-out report in
+  [alibaba-pai-risk.json](python-predictor/benchmark-results/alibaba-pai-risk.json). On the documented
+  Windows/Python 3.14/XGBoost 3.4 environment, its 329-machine holdout measured ROC-AUC 0.6632 and
+  average precision 0.6263 (95% machine-bootstrap interval 0.6108–0.6485), above the 51.5% majority
+  accuracy baseline, for Alibaba workload outcomes (not this project's node failures). This is a
+  stricter, separate protocol from the stored model's 76.27% example-level validation accuracy.
+  `train_risk_model.py` also reports its own train/validation accuracy when training on deployment data.
 - **Raft timing** — `RaftSafetyInvariantTest` and the rest of the Phase A suite report real, measured
   election/replication timings on whatever machine runs them; there is no synthetic "30 trials" figure
   standing in for them.
@@ -399,6 +410,66 @@ large undertaking that doesn't bear on the predictive-scheduling claim:**
   approximated as something it isn't.
 
 ## Quick Start
+
+### Run on multiple laptops on the same Wi-Fi
+
+Yes. One laptop hosts the control plane and the other laptops join as worker nodes. All laptops must
+be on the same Wi-Fi network or phone hotspot, and the router must not have client/AP isolation
+enabled. These steps are for Windows PowerShell; on macOS/Linux, allow TCP port 50051 in the host's
+firewall instead.
+
+**On every laptop:** clone this repository and install JDK 21 and Maven. Open PowerShell at the
+repository root (the folder containing `pom.xml`) and build the desktop app and its required modules:
+
+```powershell
+mvn -pl desktop-ui -am install -DskipTests
+```
+
+The desktop module also needs Maven Toolchains configured for JDK 21; see
+[Build & Launch](#-desktop-application) if `mvn javafx:run` reports a missing JDK 21 toolchain.
+
+**On the server laptop:** in PowerShell, from the repository root, launch the app:
+
+```powershell
+cd .\desktop-ui
+mvn javafx:run
+```
+
+Choose **Server** and select **Native**. Before clicking **Launch Server**, copy the LAN address
+shown on Server Setup (for example, `192.168.1.42:50051`); launching navigates to the dashboard. Then
+click **Launch Server** and keep the app running. Do not use `localhost` or `127.0.0.1` on the other
+laptops; those addresses point back to each node itself.
+
+**On the server laptop only:** open a second PowerShell window **as Administrator** and allow the
+control-plane gRPC port through Windows Defender Firewall:
+
+```powershell
+New-NetFirewallRule -DisplayName "NextGen Control Plane" -Direction Inbound -Protocol TCP -LocalPort 50051 -Action Allow
+```
+
+**On each worker laptop:** open PowerShell at that laptop's repository root and run:
+
+```powershell
+cd .\desktop-ui
+mvn javafx:run
+```
+
+Choose **Node**, enter the server laptop's LAN address (or its displayed `NGX-...` Server ID), leave
+the enrolment token blank for a trusted private Wi-Fi network, and click **Connect**. Repeat on every
+worker laptop. On a worker, optionally verify the network path first by running this from PowerShell
+and replacing the sample IP with the server's LAN IP:
+
+```powershell
+Test-NetConnection 192.168.1.42 -Port 50051
+```
+
+The result should show `TcpTestSucceeded : True`. If it is false, check that both devices are on the
+same non-isolated Wi-Fi, that the server app is still running, and that the firewall rule was created
+on the server. For laptops on different networks, use the [internet/mTLS setup](#-running-across-the-internet)
+instead; a private LAN address is not routable across the internet.
+
+Once nodes connect, submit work and inspect results using
+[Tasks, results, and readings](#tasks-results-and-readings).
 
 ### 1. Start the server
 
@@ -508,6 +579,25 @@ java -jar target/desktop-ui-1.0-SNAPSHOT.jar
 - **Predictor Placeholder** — shows `N/A` until PredictorService is running, and also when the node's
   telemetry is stale (a prediction from a known-stale reading would look more certain than it is).
 
+### Tasks, results, and readings
+
+- Open **Tasks** in the desktop app while connected to the server. Enter a start and end value under
+  **Single task** and select **Submit task**, or enter a range and sub-task count under **Job** and
+  select **Submit job**. The current task workload is prime counting over the entered range.
+- Node placement is automatic: the control plane scheduler selects available healthy nodes. The UI
+  does not currently let you pin a task to a specific node. A job is split into sub-tasks and may be
+  distributed across multiple eligible nodes.
+- The **Tasks** page shows each task's state, assigned node, and result; the **Jobs** section shows
+  aggregate job progress and combined result. **History** keeps this device's submissions and
+  outcomes across app restarts.
+- Open **Monitoring** for live per-node CPU and memory utilization, battery/power state, heartbeat
+  round-trip time, risk status, running tasks, and containers. Its **Cluster Performance** charts
+  show recent CPU and memory samples; open **Nodes** for a row-oriented overview. Unavailable or
+  stale readings are shown as `n/a`, not as fabricated measurements.
+- For arbitrary applications or Docker Compose services, use the `nx` CLI's `up` command described in
+  [Executing a Project on the Cluster](#-executing-a-project-on-the-cluster-the-nx-cli); the Tasks
+  form is for the built-in prime-count workload.
+
 ### Local CLI
 
 > **Most people want the [Desktop Application](#-desktop-application) instead.** This section starts
@@ -564,28 +654,30 @@ curl http://localhost:9091/metrics   # Predictor
 # 1. Start the cluster
 docker compose up --build -d
 
-# 2. Wait ~15 seconds for nodes to register
+# 2. If you started real node agents separately, wait for them to register.
+#    The base Compose stack intentionally does not create simulated agents.
 
 # 3. Run the test
 pip install grpcio grpcio-tools protobuf
 python scripts/integration-test.py
 ```
 
-The test verifies:
-- ✅ 3 nodes register successfully
-- ✅ Heartbeats flow with real OS metrics
-- ✅ Tasks get round-robin scheduled
-- ✅ Predictor returns expected values
+The smoke test verifies the server-only deployment: control-plane and predictor gRPC endpoints respond,
+the empty cluster is reported honestly, submitting work with no alive nodes fails cleanly, and the
+dashboard API returns valid JSON. It does not verify node registration or task execution.
 
-`scripts/e2e-test.py` runs the fuller scenario against a live compose stack: nodes join, tasks
-distribute, a node is killed and asserted `SUSPECTED_DEAD` within the timeout window, work reroutes
-away from it, it rejoins without a duplicate entry, and Prometheus is confirmed to have scraped every
-component.
+For live cluster checks, start real agents outside Compose and run `scripts/e2e-test.py` with the
+expected node count. It submits real prime-count RPCs and waits for completed results. To include
+failure/rejoin checks, pass `--victim-node-id`, `--stop-command`, and `--start-command`; the commands
+must control that external node and may use `{node_id}` as a placeholder. Prometheus checks cover its
+actual targets (control plane, predictor, and Prometheus); physical agents are outbound-only and are
+not direct scrape targets.
 
-> **Status of the Python scripts.** Both are committed but were **not executed** during the work that
-> produced them — the Docker daemon was unavailable, and the pinned `grpcio==1.68.0` publishes no
-> wheels for the Python 3.14 on that machine. Their assertions are therefore unverified. The same
-> guarantees *are* verified by the JVM suite over a real gRPC transport: see
+> **Validation status.** The live E2E script passed 64/64 checks against a local control plane and
+> three real agent processes, including node failure, task rerouting, restart, and clean rejoin.
+> Prometheus was explicitly skipped in that run. The Docker Compose smoke test and Docker-container
+> workload path still require a working Docker daemon. The same registration/failure/rejoin guarantees
+> are also covered by the JVM suite over real in-process gRPC: see
 > `KillAndReconnectIntegrationTest` (registration, death within the window, rerouting, clean rejoin,
 > control-plane restart recovery, a 20-node run) and `MutualTlsEndToEndTest` (enrolment, rejection
 > without a certificate, rejection of a foreign CA, revocation on an open channel).
@@ -676,8 +768,9 @@ compatibility checks behind each pin.
   above and `ARCHITECTURE.md`'s Consensus & replication section.
 - **Phase-5** ✅ — ML-based predictive scheduling.
   Real gradient-boosted trees (XGBoost) for failure-risk classification and an LSTM for load
-  forecasting, both opt-in and both honestly reporting `model_trained=false` until an operator
-  actually trains them on real accumulated data. See
+  forecasting. The bundled XGBoost baseline is trained; using it in Java remains opt-in, and
+  deployment-specific retraining requires real accumulated data. No LSTM weights are bundled, so load
+  forecasts remain honestly untrained until the operator trains that model. See
   [Algorithms & Predictive Intelligence](#-algorithms--predictive-intelligence) above.
 
 ---
@@ -710,8 +803,8 @@ display):
 | `java-control-plane` | 555 | Control plane, node agent, Raft, security/mTLS, task/job dispatch, Docker orchestration, alerting |
 | `desktop-ui` | 207 | Local HTTP server, gRPC clients, monitoring services, account system |
 | `cli` | 34 | Compose-file parsing, argument handling |
-| `python-predictor` | 78 | Feature engineering, XGBoost/LSTM training and serving, import scripts |
-| **Total** | **874** | 0 mocked assertions on any mechanism under test |
+| `python-predictor` | 84 | Feature engineering, XGBoost/LSTM training and serving, benchmark metrics, import scripts |
+| **Total** | **880** | 0 mocked assertions on any mechanism under test |
 
 `java-control-plane` and `desktop-ui` both **enforce** a 60% instruction minimum via the JaCoCo `check`
 goal; the build fails below it. The previous gate was a bundle-wide 10% that *included* the generated

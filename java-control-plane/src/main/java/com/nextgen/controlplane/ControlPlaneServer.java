@@ -383,6 +383,18 @@ public class ControlPlaneServer {
         printLanIps();
         LOG.info("══════════════════════════════════════════════════");
 
+        // ── Spring Boot REST API + DB + WebSocket ─────────────────────────────
+        // Share the live in-memory registries with the Spring context so controllers
+        // can serve real data without a second, independently-empty copy.
+        // Started AFTER the gRPC server is up so node registrations can already arrive
+        // while Spring's embedded Tomcat is still initializing.
+        com.nextgen.controlplane.spring.RegistryBeans.setRegistries(
+                registry, taskRegistry, jobRegistry);
+        com.nextgen.controlplane.spring.ControlPlaneSpringApp.startSpringContext(new String[0]);
+        LOG.info("  🌍 REST API running on http://localhost:8080/api/v1");
+        LOG.info("  🔌 WebSocket (STOMP) at  ws://localhost:8080/ws");
+        LOG.info("══════════════════════════════════════════════════");
+
         // Graceful shutdown hook
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             LOG.info("Shutting down ControlPlane server...");
@@ -404,6 +416,7 @@ public class ControlPlaneServer {
         // Block main thread until server terminates
         grpcServer.awaitTermination();
     }
+
 
     /** Every live Raft collaborator {@code start()} needs a handle to later (shutdown, leadership
      * listener) — bundled so each can be assigned exactly once (a ternary, not a reassigned local),

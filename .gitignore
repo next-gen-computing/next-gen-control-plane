@@ -60,7 +60,10 @@ pki/
 
 # ── Stage G: trained models and training data ──────
 # Machine/data-derived artifacts, not source — regenerate locally via train_risk_model.py.
-python-predictor/model/
+# The baseline models are checked in for Docker image initialization and integration tests.
+python-predictor/model/*
+!python-predictor/model/risk_model.json
+!python-predictor/model/xgboost_booster.json
 .pytest_cache/
 # Generated --external JSONL training examples produced by the import_*.py scripts — real but
 # regenerable from the (also-gitignored) datasets/ sources; not this project's data to redistribute.

@@ -89,8 +89,9 @@ and its Desktop Application walkthrough for the full, current feature list and s
 that's the maintained description. In short: account/login, a Docker-Desktop-style dashboard, node and
 task/job management (including submitting real distributed Docker-Compose jobs via the same code path
 the `nx` CLI uses), live monitoring via SSE, a Containers/Images/Volumes/Networks view backed by real
-per-node Docker inventory, and settings. Predictor responses honestly report `model_trained=false`
-until an operator has actually run training at least once — never a fabricated prediction.
+per-node Docker inventory, and settings. The predictor image includes the trained XGBoost baseline;
+Java-side ML scoring remains off by default, and deployment-specific retraining uses real accumulated
+data. No LSTM weights are bundled, so load forecasts remain honestly untrained until trained.
 
 ### Entry Points
 
@@ -135,28 +136,176 @@ ROLE=server PREDICTOR_HOST=localhost java -jar target/control-plane-1.0-SNAPSHOT
 
 ### Step 3: Start NodeAgent(s)
 
-Terminal 1 (Node 1):
+Open a **new terminal at the repository root** for each node process. For a single node, use:
 
 **PowerShell:**
 ```powershell
-$env:ROLE="agent"; $env:NODE_ID="node1"; $env:CONTROL_PLANE_HOST="localhost"
-java -jar java-control-plane/target/control-plane-1.0-SNAPSHOT-all.jar
+$env:ROLE="agent"
+$env:CONTROL_PLANE_HOST="localhost"
+$env:TLS_ENABLED="false"
+$env:NODE_ID="local-worker-1"
+$env:NODE_METRICS_PORT="9191"
+java -jar .\java-control-plane\target\control-plane-1.0-SNAPSHOT-all.jar
 ```
 
 **Bash:**
 ```bash
-ROLE=agent NODE_ID=node1 CONTROL_PLANE_HOST=localhost \
-  java -jar java-control-plane/target/control-plane-1.0-SNAPSHOT-all.jar
+ROLE=agent CONTROL_PLANE_HOST=localhost TLS_ENABLED=false NODE_ID=local-worker-1 NODE_METRICS_PORT=9191 \
+  java -jar ./java-control-plane/target/control-plane-1.0-SNAPSHOT-all.jar
 ```
 
 **Expected output:**
 ```
 🖥  NodeAgent 'node1' starting...
 Hostname: your-host, IP: 192.168.x.x
-📊 Prometheus metrics on port 9090
+📊 Prometheus metrics on port 9191
 ✅ Registered with ControlPlane: status=REGISTERED
 💓 Heartbeat #1: cpu=12.3%, mem=45.6% → OK
 ```
+
+### One laptop: one server and multiple worker processes
+
+This is a local development/scheduling smoke test. It runs **one real control-plane JVM and multiple
+real NodeAgent JVMs** on the same laptop; workers are not Docker containers. Use separate PowerShell
+terminals, all opened at the repository root. This confirms task dispatch and result reporting, but it
+does not simulate separate machines: every worker reads the same host CPU/memory and shares the same
+hardware/network failure domain. Docker is not required for the prime-count task below. A predictor is
+also optional; the server can complete tasks without one.
+
+**1. Build once**, from the repository root (the folder containing the root `pom.xml`):
+
+```powershell
+mvn -pl java-control-plane -am package -DskipTests
+```
+
+**2. Start the server** in PowerShell terminal 1, from the repository root. Leave it running:
+
+```powershell
+$env:ROLE="server"
+$env:PREDICTOR_HOST="localhost"
+$env:TLS_ENABLED="false"
+$env:METRICS_PORT="9090"
+java -jar .\java-control-plane\target\control-plane-1.0-SNAPSHOT-all.jar
+```
+
+Wait for `ControlPlane gRPC server RUNNING on port 50051` before starting workers.
+
+**3. Start worker 1** in PowerShell terminal 2, also from the repository root. Leave it running:
+
+```powershell
+$env:ROLE="agent"
+$env:CONTROL_PLANE_HOST="localhost"
+$env:TLS_ENABLED="false"
+$env:NODE_ID="local-worker-1"
+$env:NODE_METRICS_PORT="9191"
+java -jar .\java-control-plane\target\control-plane-1.0-SNAPSHOT-all.jar
+```
+
+**4. Start worker 2** in PowerShell terminal 3. It must have a different node ID and metrics port:
+
+```powershell
+$env:ROLE="agent"
+$env:CONTROL_PLANE_HOST="localhost"
+$env:TLS_ENABLED="false"
+$env:NODE_ID="local-worker-2"
+$env:NODE_METRICS_PORT="9192"
+java -jar .\java-control-plane\target\control-plane-1.0-SNAPSHOT-all.jar
+```
+
+Each worker process registers itself, opens its own outbound task channel, and sends heartbeats. The
+separate `NODE_METRICS_PORT` values avoid both agents competing for the same Prometheus listener; the
+control plane uses port 9090. To stop a foreground process, press `Ctrl+C` in its terminal.
+
+**5. Submit and verify a distributed job** from a fourth PowerShell terminal at the repository root.
+The Python gRPC client and the generated stubs under `scripts/` are used only as a test client; if
+needed, install the small client dependencies with `python -m pip install grpcio protobuf`.
+The following command submits `[2, 10000)` as four contiguous prime-count subtasks, waits for the
+terminal job snapshot, prints each assigned worker and result, and fails if both workers were not used:
+
+```powershell
+@'
+import json, sys, time
+sys.path.insert(0, 'scripts')
+import grpc
+import control_plane_pb2 as pb2
+import control_plane_pb2_grpc as pb2_grpc
+
+channel = grpc.insecure_channel('localhost:50051')
+stub = pb2_grpc.ControlPlaneServiceStub(channel)
+job_id = 'local-smoke-' + str(int(time.time()))
+try:
+  nodes = stub.GetNodes(pb2.Empty(), timeout=5).nodes
+  for node in nodes:
+    print(f'NODE={node.node_id} STATUS={pb2.NodeStatus.Name(node.status)}')
+  if len(nodes) < 2:
+    raise SystemExit('Start at least two registered workers before submitting')
+
+  accepted = stub.SubmitJob(pb2.JobRequest(
+    job_id=job_id,
+    kind=pb2.TASK_KIND_PRIME_COUNT_RANGE,
+    payload_json=json.dumps({'range_start': 2, 'range_end': 10000}),
+    sub_task_count=4), timeout=10)
+  print(f'SUBMIT job_id={accepted.job_id} result={accepted.result}')
+
+  final = None
+  for _ in range(100):
+    final = stub.GetJobStatus(pb2.JobStatusRequest(job_id=job_id), timeout=5)
+    if final.state in (pb2.JOB_STATE_COMPLETED,
+               pb2.JOB_STATE_PARTIAL_FAILURE,
+               pb2.JOB_STATE_FAILED):
+      break
+  print(f'JOB_STATE={pb2.JobState.Name(final.state)} '
+      f'completed={final.completed_count}/{final.sub_task_count} '
+      f'failed={final.failed_count}')
+  print('COMBINED_RESULT=' + final.combined_result_json)
+
+  assigned = set()
+  for task_id in final.task_ids:
+    task = stub.GetTaskStatus(pb2.TaskStatusRequest(task_id=task_id), timeout=5)
+    assigned.add(task.assigned_node)
+    print(f'TASK={task.task_id} STATE={pb2.TaskState.Name(task.state)} '
+        f'NODE={task.assigned_node} RESULT={task.result_json} ERROR={task.error}')
+  print('WORKERS_USED=' + ','.join(sorted(assigned)))
+  if final.state != pb2.JOB_STATE_COMPLETED or final.completed_count != final.sub_task_count:
+    raise SystemExit('Job did not complete successfully')
+  if len(assigned) < 2:
+    raise SystemExit('Scheduler did not use both workers')
+finally:
+  channel.close()
+'@ | python -
+```
+
+**Scheduling and result flow:** `SubmitJob` validates the request and splits the half-open numeric range
+into contiguous sub-ranges. The control plane creates one task per sub-range and dispatches tasks to
+registered, alive nodes over each node's already-open `TaskChannel`; workers do not listen for
+inbound task connections. Each node's `PrimeRangeCounterExecutor` reports a terminal result event,
+`TaskRegistry` records the state/result/assigned node, and `JobCoordinator` reduces successful
+subtask results into the combined prime count. `SubmitJob` is only an acceptance response, not the
+final answer; query `GetJobStatus` for the aggregate and `GetTaskStatus` for per-worker snapshots.
+This is the same scheduler/worker execution path used by the desktop **Tasks** screen.
+
+**Verified local output snapshot** (the generated job ID changes on each run):
+
+```text
+REGISTERED_NODES=2
+NODE=local-worker-1 STATUS=NODE_STATUS_ALIVE
+NODE=local-worker-2 STATUS=NODE_STATUS_ALIVE
+SUBMIT job_id=local-smoke-1791424152 result=ACCEPTED — 4 sub-task(s) dispatched
+JOB_STATE=JOB_STATE_COMPLETED completed=4/4 failed=0
+COMBINED_RESULT={"prime_count":1229,"sub_task_count":4,"completed_count":4,"failed_count":0}
+TASK=local-smoke-1791424152-0 STATE=TASK_STATE_COMPLETED NODE=local-worker-1 RESULT={"range_start":2,"range_end":2502,"prime_count":367}
+TASK=local-smoke-1791424152-1 STATE=TASK_STATE_COMPLETED NODE=local-worker-2 RESULT={"range_start":2502,"range_end":5002,"prime_count":302}
+TASK=local-smoke-1791424152-2 STATE=TASK_STATE_COMPLETED NODE=local-worker-1 RESULT={"range_start":5002,"range_end":7501,"prime_count":281}
+TASK=local-smoke-1791424152-3 STATE=TASK_STATE_COMPLETED NODE=local-worker-2 RESULT={"range_start":7501,"range_end":10000,"prime_count":279}
+WORKERS_USED=local-worker-1,local-worker-2
+```
+
+The captured node snapshot also contained real, fresh readings (both local processes read the same
+machine): `STATUS=NODE_STATUS_ALIVE`, `CPU=99.8% CPU_STALE=False`, and
+`MEMORY=88.5% MEMORY_STALE=False`. Those utilization values vary with machine load; stale/unavailable
+readings must be treated as unavailable, not interpreted as zero. The desktop app's **Nodes** and
+**Monitoring** pages show the same registered-node status and telemetry, while **Tasks** shows task
+states, assignments, and results.
 
 ### Step 3b: Submit a real distributed job with the `nx` CLI
 
@@ -278,7 +427,7 @@ cd ../desktop-ui && mvn clean test
 # cli (34 tests)
 cd ../cli && mvn clean test
 
-# python-predictor (78 tests)
+# python-predictor (84 tests)
 cd ../python-predictor && pip install -r requirements.txt pytest && pytest tests/ -v
 ```
 

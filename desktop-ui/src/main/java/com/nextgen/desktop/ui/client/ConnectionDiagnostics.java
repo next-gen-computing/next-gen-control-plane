@@ -1,5 +1,7 @@
 package com.nextgen.desktop.ui.client;
 
+import com.nextgen.desktop.ui.util.ServerIdCodec;
+
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
@@ -83,6 +85,11 @@ public final class ConnectionDiagnostics {
     /** Splits {@code "host:port"} or bare {@code "host"}, defaulting the port when omitted. */
     public static HostPort parseAddress(String input, int defaultPort) {
         String trimmed = input == null ? "" : input.trim();
+        if (ServerIdCodec.isValid(trimmed)) {
+            var decoded = ServerIdCodec.decode(trimmed);
+            return new HostPort(decoded.getIp(), decoded.getPort());
+        }
+
         int colon = trimmed.lastIndexOf(':');
         // Guard against bare IPv6 literals like "::1", which contain colons that aren't a port
         // separator; this app never needs to accept a bracketed "[::1]:port" form, so a plain

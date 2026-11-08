@@ -164,7 +164,7 @@ def accuracy(X: np.ndarray, y: np.ndarray, weights: np.ndarray, bias: float) -> 
 
 
 def train_xgboost(X: np.ndarray, y: np.ndarray, n_estimators: int = 100, max_depth: int = 4,
-                  learning_rate: float = 0.1) -> xgb.Booster:
+                  learning_rate: float = 0.1, seed: int = 0) -> xgb.Booster:
     """Real gradient-boosted trees via xgboost's raw Booster API — deliberately not the sklearn wrapper,
     since this project has no scikit-learn dependency and the raw API avoids adding one. Standardized
     features aren't strictly necessary for trees, but reusing the same standardized X the
@@ -177,6 +177,7 @@ def train_xgboost(X: np.ndarray, y: np.ndarray, n_estimators: int = 100, max_dep
         "max_depth": max_depth,
         "eta": learning_rate,
         "eval_metric": "logloss",
+        "seed": seed,
     }
     return xgb.train(params, dtrain, num_boost_round=n_estimators)
 
@@ -250,7 +251,7 @@ def main(argv: list[str] | None = None) -> int:
         booster = train_xgboost(
             X_norm[train_idx], labels[train_idx],
             n_estimators=args.xgb_n_estimators, max_depth=args.xgb_max_depth,
-            learning_rate=args.xgb_learning_rate)
+            learning_rate=args.xgb_learning_rate, seed=args.seed)
         train_acc = xgboost_accuracy(X_norm[train_idx], labels[train_idx], booster)
         val_acc = xgboost_accuracy(X_norm[val_idx], labels[val_idx], booster)
 

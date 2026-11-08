@@ -97,6 +97,14 @@ class ConnectionDiagnosticsTest {
     }
 
     @Test
+    void serverIdFormatsAreDecodedToLanAddresses() {
+        var hostPort = ConnectionDiagnostics.parseAddress("NGX-C0A8-0164", 50051);
+
+        assertEquals("192.168.1.100", hostPort.host());
+        assertEquals(50051, hostPort.port());
+    }
+
+    @Test
     void aTrailingColonWithNoDigitsFallsBackToTheWholeStringAsHostname() {
         // ":" with nothing parseable after it is not a valid port, so the whole input is treated as
         // the hostname rather than silently producing a mangled address.

@@ -161,6 +161,30 @@ class LocalUiServerTest {
     }
 
     @Test
+    void dashboardWebSocketUpgradeSucceeds() throws Exception {
+        LocalUiServer s = startedServer();
+
+        try (java.net.Socket socket = new java.net.Socket("127.0.0.1", s.getPort())) {
+            socket.getOutputStream().write((
+                    "GET /api/dashboard/ws HTTP/1.1\r\n" +
+                    "Host: 127.0.0.1\r\n" +
+                    "Upgrade: websocket\r\n" +
+                    "Connection: Upgrade\r\n" +
+                    "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+                    "Sec-WebSocket-Version: 13\r\n\r\n"
+            ).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            socket.getOutputStream().flush();
+
+            byte[] responseBytes = new byte[2048]; int read = socket.getInputStream().read(responseBytes);
+            String response = new String(responseBytes, 0, Math.max(0, read), java.nio.charset.StandardCharsets.UTF_8);
+            assertTrue(response.startsWith("HTTP/1.1 101"), response);
+            assertTrue(response.toLowerCase().contains("upgrade: websocket"), response);
+            assertTrue(response.toLowerCase().contains("connection: upgrade"), response);
+            assertTrue(response.toLowerCase().contains("sec-websocket-accept:"), response);
+        }
+    }
+
+    @Test
     void stopIsIdempotentAndSafeBeforeStart() {
         GrpcConnectionManager connectionManager = new GrpcConnectionManager();
         DesktopHistoryStore historyStore = new DesktopHistoryStore();

@@ -6,20 +6,13 @@ was checked against real files at the paths given; nothing here is copied from a
 re-verification. Where an earlier planning document in this project's history said something was "not
 yet built," that claim was re-checked against the current source and corrected if it had since shipped.
 
-**Update, same day:** Phases 0–2 below are now done — see "Status" markers inline. Summary of what
-changed: found and fixed the two real causes of the CI failure blocking the merge (a Phase-1-era
-integration test asserting a fake-node architecture that no longer exists, and a `torch` install in CI
-that skipped the CPU-only wheel index the Dockerfile uses); closed a real CI coverage gap (`desktop-ui`,
-`cli`, and the predictor's pytest suite were never run in CI at all — only `java-control-plane` was);
-found and fixed a genuine bug while running the full suite locally (`TaskExecutionService.shutdown()`
-never waited for in-flight work, a real race, not just test flakiness — caught by a Windows temp-dir
-cleanup failure); found and fixed a standing repo-hygiene bug (`dependency-reduced-pom.xml` was added to
-`.gitignore` in an earlier commit but never actually untracked, so it silently showed as "modified" on
-every build since); fixed the two stale ARCHITECTURE.md claims; and confirmed the in-progress cluster
-monitor (Stage RR) compiles and its full test suite passes. All 865 tests across all four modules
-(546 + 207 + 34 + 78) pass locally. **Not yet done: none of this is pushed or committed to `main` — see
-the bottom of this file for exactly what's staged and why the push/merge step is intentionally paused
-for explicit confirmation.**
+**Status update (2026-10-07):** the feature branch and its follow-up commits are now merged into `main`
+by PR #9 (`60d05f2`); the feature tip is an ancestor of `main`. The original merge blocker and the
+"uncommitted cluster monitor" notes below are historical, not current tasks. This pass found a stale
+E2E script (it still assumes Compose starts agents), a missing packaged risk-model default in fresh
+predictor volumes, and an unreproducible paper-benchmark claim. Current build/test results must be read
+from the latest completed run; the test counts printed in older sections are snapshots, not a pass
+claim for every subsequent checkout.
 
 ---
 
@@ -32,25 +25,27 @@ networking, container-orchestration baseline hygiene (resource limits, health ch
 load-balanced replicas, rolling updates), and a large bug-hardening pass driven by live end-to-end
 testing plus three independent code audits — has actually been built, tested, and documented.
 
-There is exactly **one structural problem that matters more than any individual bug**: none of it has
-been merged into `main`. Everything described in this document exists only on
-`feature/predictive-scheduling-and-docker-orchestration`, 23 commits ahead of `main` with `main` itself
-unchanged since the branch split off. On top of that, there is a further, currently **uncommitted**
-change set in the working tree (a Task-Manager-style cluster monitor) that isn't even part of those 23
-commits yet.
+The major feature branch is already merged into `main`. The current work is validation and output
+readiness, not branch integration.
 
-**Priority order, in one sentence each:**
-1. Get the 23-commit branch merged to `main` — find out why the last attempt failed and fix it.
-2. Finish, test, and commit the in-progress cluster-monitor work sitting uncommitted right now.
-3. Fix two small but real documentation-accuracy bugs (ARCHITECTURE.md describes two features as unbuilt
-   that have actually shipped).
-4. Work the CHANGELOG's own four-item "Planned" backlog in priority order.
-5. Everything else in this document is either a deliberate, already-documented scope boundary (not a
-   bug) or a nice-to-have with no urgency.
+**Current priority order:**
+1. Complete and keep the E2E validation aligned with real, externally managed nodes.
+2. Make the bundled trained risk model available to a new predictor deployment while retaining the
+   existing opt-in defaults.
+3. Run the full Java and Python suites to completion and perform a Docker-backed smoke test.
+4. Train and validate the LSTM with usable snapshot data; produce reproducible research metrics before
+   repeating the paper's historical numbers.
+5. Schedule independent-host PKI, WebSockets, multi-region, and WAN-onboarding changes separately; they
+   are broader design work, not prerequisites for the current acceptance checks.
 
 ---
 
-## 2. Critical blocker: nothing is merged to `main`
+## 2. Historical blocker: feature branch merge (resolved)
+
+As of 2026-10-07, local `main` and `origin/main` point to merge commit `60d05f2` (PR #9). The feature
+branch tip `ed5abf6` is an ancestor of `main`; `git rev-list --left-right --count main...feature/...`
+reports `1 0`. The remainder of this section records the merge-blocker investigation as it stood before
+PR #9 landed. Its push/PR actions are complete and must not be treated as current work.
 
 ```
 git log main..feature/predictive-scheduling-and-docker-orchestration --oneline | wc -l   →  23
@@ -66,7 +61,7 @@ main failed" on GitHub Actions). This environment has no `gh` CLI installed, so 
 GitHub.com could not be checked directly; that still has to be confirmed by hand at
 `https://github.com/<owner>/next-gen-control-plane/pulls` and in the Actions tab once pushed.
 
-**Status: root-caused and fixed locally, not yet pushed.** Two real, independent causes were found by
+**Historical status at audit time: root-caused and fixed locally, not yet pushed.** Two real, independent causes were found by
 reading `.github/workflows/ci.yml` and reproducing its steps locally, not by guessing:
 
 1. **`scripts/integration-test.py`** (run by the `integration-test` job) was still the original Phase-1
@@ -93,11 +88,9 @@ either — both added as real CI coverage that didn't exist before. All four mod
 locally against the fixed workflow's exact steps and are green (see the update note at the top of this
 file).
 
-**Action needed from here:** review the diff, then push and open/update the PR — at that point GitHub's
-own Actions run becomes the authoritative confirmation this audit's local reproduction can't fully
-replace (a GitHub-hosted `ubuntu-latest` runner may still surface something a local Windows checkout
-can't, e.g. Docker-in-Docker specifics for the `integration-test` job). This step was deliberately left
-for explicit confirmation rather than done automatically — see the bottom of this file.
+**Historical action (completed):** PR #9 has since merged these changes to `main`. GitHub Actions on the
+merged revision remains the CI authority; this audit does not claim a new Actions run was checked in
+this follow-up.
 
 ---
 
@@ -135,10 +128,12 @@ item below.
 | 20 real CVE fixes in dependencies | Shipped | grpc, protobuf, jackson, bouncycastle, Python protobuf — each verified against `api.osv.dev` |
 | Large live-testing + 3-audit hardening pass | Shipped | see full list in §4 below |
 
-**Test suite:** 865 automated tests, 0 failures, across `java-control-plane` (546), `desktop-ui` (207),
-`cli` (34), `python-predictor` (78) — this figure was directly measured earlier in this session against
-this exact repository state (including the currently-uncommitted Stage RR files) via real `mvn`/`pytest`
-runs, not estimated.
+**Test suite at the original audit snapshot:** 865 automated tests (546 + 207 + 34 + 78) passed. A later
+documentation update records 874 tests. In this follow-up, Surefire reports show 555 control-plane
+tests (4 skipped, 0 failures/errors), 207 desktop tests, and 34 CLI tests; pytest passes 84 Python tests.
+That is 880 tests total, with four skipped and no failures/errors. The Maven reactor's final summary line
+was not captured, so the Java results are reported from the complete per-suite Surefire XML reports and
+the produced jars rather than a claimed top-level `BUILD SUCCESS`.
 
 ---
 
@@ -327,7 +322,27 @@ conversation, not a resurrection of old assumptions.
 
 ---
 
-## 10. Recommended plan, in order
+## 10. Current recommended plan (2026-10-07)
+
+1. Restore trustworthy E2E validation: use real external agents, submit actual `PRIME_COUNT_RANGE` RPCs,
+   poll their results, and test node loss/rejoin only when explicit stop/start commands are supplied.
+   Keep the Compose integration smoke test scoped to the server-only stack.
+2. Make the bundled XGBoost model available in new predictor volumes while keeping Java ML scoring and
+   snapshot collection default-off. The local model-load smoke check passes; Docker volume seeding still
+   needs verification on a running Docker engine. Do not train an LSTM from the irregular Alibaba trace;
+   collect regularly sampled live snapshots first.
+3. The local process-cluster E2E passed 64/64, including failure/reroute/rejoin; Prometheus and Docker
+   workload paths remain unverified until the Docker engine is available. The predictor suite passes 84.
+4. A reproducible machine-held-out Alibaba risk benchmark is now checked in (329 held-out machines,
+   ROC-AUC 0.6632, 95% machine-bootstrap CI [0.6513, 0.6758]); it evaluates workload outcomes, not node
+   failures. The draft paper's other ROC-AUC/MTTR/RMSE/trial-count claims still need their own protocols.
+5. Design independent-host PKI, WebSockets, multi-region behavior, and WAN-first onboarding separately;
+   none is a prerequisite for the above acceptance checks.
+
+The phases below preserve the previous audit's history; their “pending merge” status is superseded by
+PR #9 and must not be read as current state.
+
+### Historical plan at audit time (superseded)
 
 ### Phase 0 — Unblock the merge — root cause found and fixed, push/merge intentionally paused
 Done: both real CI failure causes found and fixed locally (§2), `desktop-ui`/`cli`/predictor-pytest CI
@@ -363,7 +378,24 @@ a UI-only change — no backend work needed.
 
 ---
 
-## 11. Exactly what's committed locally, and what's intentionally still waiting
+## 11. Historical branch status at audit time (superseded)
+
+Current Git verification: local `main` and `origin/main` are at `60d05f2`; feature tip `ed5abf6` is an
+ancestor (PR #9). The worktree was clean before the current follow-up edits. Current follow-up edits are
+uncommitted.
+
+The full module suites report 555 Java control-plane tests (4 skipped, 0 failures/errors), 207 desktop
+tests, 34 CLI tests, and 84 Python tests (880 total; 4 skipped, 0 failures/errors). The local real-agent
+E2E run passed 64/64 checks for registration, changing heartbeats, task completion/distribution, node
+failure, rerouting, restart, and rejoin; Prometheus was explicitly skipped. The bundled-model smoke
+check loaded XGBoost and returned `model_trained=true` with 300,000 examples. The checked-in risk benchmark
+was run twice with identical JSON output. `docker compose config -q`,
+script compilation/help, and `git diff --check` passed. Docker Desktop's Linux engine is unavailable,
+so image build, volume seeding, Compose smoke, Docker task, and Prometheus runtime checks remain open.
+The Maven reactor produced all module jars and Surefire reports, but its terminal summary was not
+captured; no GitHub Actions result was queried.
+
+The rest of this section records the former branch status and is retained only as historical context.
 
 Everything in Phases 0–2 above is committed to the local `feature/predictive-scheduling-and-docker-
 orchestration` branch, as separate, real, individually-verifiable commits (not one giant squash) — a

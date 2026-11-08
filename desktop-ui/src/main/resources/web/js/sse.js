@@ -39,3 +39,49 @@ NG.sse = {
         };
     }
 };
+
+NG.ws = {
+    /**
+     * @param path e.g. "/api/dashboard/ws"
+     * @param onMessage called with the parsed JSON payload of every frame
+     * @returns a close() function — call it when the owning screen is torn down
+     */
+    subscribe(path, onMessage) {
+        if (!window.WebSocket) {
+            return NG.sse.subscribe(path, onMessage);
+        }
+
+        let socket = null;
+        let closed = false;
+
+        function connect() {
+            if (closed) return;
+            const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+            socket = new WebSocket(protocol + '://' + location.host + path);
+            socket.onmessage = (event) => {
+                try {
+                    onMessage(JSON.parse(event.data));
+                } catch (e) {
+                    console.error('Malformed WebSocket frame on', path, e);
+                }
+            };
+            socket.onerror = () => {
+                if (!closed) {
+                    setTimeout(connect, 1000);
+                }
+            };
+            socket.onclose = () => {
+                if (!closed) {
+                    setTimeout(connect, 1000);
+                }
+            };
+        }
+
+        connect();
+
+        return () => {
+            closed = true;
+            if (socket) socket.close();
+        };
+    }
+};
