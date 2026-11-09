@@ -99,6 +99,8 @@
         <protobuf.plugin.version>0.6.1</protobuf.plugin.version>
         <javafx.plugin.version>0.0.8</javafx.plugin.version>
         <os.plugin.version>1.7.1</os.plugin.version>
+        <skipTests>false</skipTests>
+        <jacoco.skip>${skipTests}</jacoco.skip>
     </properties>
 
     <dependencyManagement>

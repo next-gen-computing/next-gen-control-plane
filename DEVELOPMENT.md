@@ -21,7 +21,7 @@ what the project actually does and how each piece works.
 
 ```bash
 # Clone repository
-git clone https://github.com/YOUR_USERNAME/next-gen-control-plane.git
+git clone https://github.com/next-gen-computing/next-gen-control-plane.git
 cd next-gen-control-plane
 
 # Start everything (Docker mode on server laptop)
