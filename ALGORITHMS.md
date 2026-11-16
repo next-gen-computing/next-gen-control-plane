@@ -13,9 +13,7 @@ Each entry follows the same structure:
 - **Status** — on by default, or an explicit opt-in env var.
 - **Evidence** — the test(s) that verify it, and any real measured number.
 
-See [README.md](README.md#-algorithms--predictive-intelligence) for the shorter, summary version of
-this same material, and [ARCHITECTURE.md](ARCHITECTURE.md) for the surrounding system design (trust
-model, connectivity, consensus replication boundaries) that these algorithms run inside of.
+See [README.md](README.md#-core-algorithms) for the summary version of this material, [BENCHMARKS.md](BENCHMARKS.md) for empirical chaos benchmarks and MTTR measurements, and [ARCHITECTURE.md](ARCHITECTURE.md) for the surrounding system design (trust model, connectivity, consensus replication boundaries).
 
 ---
 

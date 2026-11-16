@@ -42,10 +42,7 @@ Both roles are the **same desktop application**; which side of this diagram you'
 at launch, not a different build. A node can be any machine on any network, running any of the three
 desktop platforms — nothing about the protocol or the registry cares where a node physically is.
 
-The control plane still serves a small `/api/nodes` JSON endpoint on the dashboard port for anyone
-who wants to build their own frontend against it, but the bundled static web dashboard that used to
-ship in this repo has been removed entirely — the desktop app is the one maintained interface for
-both roles.
+The control plane exposes a rich multi-protocol interface: high-throughput gRPC on port `50051`, Spring Boot 3 REST and WebSocket APIs on port `8080`, and a lightweight JSON endpoint on port `8085`. Operator management is provided via two production interfaces: the modern **Next.js 16 + React 19 Web Dashboard** (`web-ui`, port `3000`) and the native **JavaFX 21 Desktop Application** (`desktop-ui`). For multi-node deployment topologies, see [DEPLOYMENT.md](DEPLOYMENT.md); for empirical resilience benchmarks, see [BENCHMARKS.md](BENCHMARKS.md).
 
 ---
 

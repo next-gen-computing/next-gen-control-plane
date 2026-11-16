@@ -5,19 +5,34 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
+import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.List;
 
 /**
- * Spring MVC configuration: CORS (dev-mode allow-all), JSON defaults.
- *
- * <p>In production you would restrict origins to the known frontend host.
- * For now the allow-all policy mirrors what DashboardApiHandler already emits
- * via its manual {@code Access-Control-Allow-Origin: *} headers.
+ * Spring MVC configuration: CORS (dev-mode allow-all), static web UI resource mapping.
  */
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
+
+    @Override
+    public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        registry.addResourceHandler("/**")
+                .addResourceLocations("classpath:/static/");
+    }
+
+    @Override
+    public void addViewControllers(ViewControllerRegistry registry) {
+        registry.addViewController("/").setViewName("forward:/index.html");
+        registry.addViewController("/dashboard").setViewName("forward:/index.html");
+        registry.addViewController("/dashboard/**").setViewName("forward:/index.html");
+        registry.addViewController("/ui").setViewName("forward:/index.html");
+        registry.addViewController("/ui/**").setViewName("forward:/index.html");
+        registry.addViewController("/index").setViewName("forward:/index.html");
+        registry.addViewController("/index.html").setViewName("forward:/index.html");
+    }
 
     @Bean
     public CorsFilter corsFilter() {

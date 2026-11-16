@@ -1,0 +1,43 @@
+{
+  "suite": "Next-Gen Control Plane Comprehensive IEEE Benchmark Suite",
+  "timestamp_epoch_ms": 1794764113344,
+  "total_elapsed_seconds": 44.34,
+  "status": "ALL_PASSED",
+  "artifacts_generated": [
+    "mttr_30_trials.json",
+    "raft_25_partitions.json",
+    "risk_classification_roc_auc.json",
+    "load_forecast_rmse.json"
+  ],
+  "mttr_summary": {
+    "mean": 1.6466166666666666,
+    "median": 1.5806499999999999,
+    "std_dev": 0.36528970702109237,
+    "min": 1.0142,
+    "max": 2.3102,
+    "p90": 2.22504,
+    "p95": 2.25432,
+    "p99": 2.29744
+  },
+  "raft_summary": {
+    "experiments_passed": 25,
+    "leader_election_latency_ms": {
+      "mean": 916.0960000000001,
+      "median": 934.1600000000001,
+      "min": 821.33,
+      "max": 999.2,
+      "p95": 994.7765
+    }
+  },
+  "risk_classification_summary": {
+    "host_telemetry_roc_auc": 1.0,
+    "alibaba_trace_roc_auc": 0.6631951259181781
+  },
+  "load_forecasting_summary": {
+    "metric": "RMSE (% utilization)",
+    "cpu_naive_rmse": 7.554,
+    "cpu_lstm_rmse": 3.942,
+    "mem_naive_rmse": 2.571,
+    "mem_lstm_rmse": 1.857
+  }
+}

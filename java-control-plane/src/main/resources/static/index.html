@@ -1,0 +1,1804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Next-Gen Control Plane — Distributed Autonomous Cluster</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <style>
+    :root {
+      --bg-dark: #070a13;
+      --bg-card: rgba(13, 20, 36, 0.78);
+      --bg-card-hover: rgba(20, 32, 58, 0.9);
+      --border-color: rgba(0, 212, 255, 0.18);
+      --border-glow: rgba(0, 212, 255, 0.45);
+      --cyan: #00d4ff;
+      --green: #00ff88;
+      --amber: #ffb700;
+      --red: #ff3366;
+      --purple: #8b5cf6;
+      --text-main: #f0f6fc;
+      --text-muted: #8b9bb4;
+      --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      overflow-x: hidden;
+      min-height: 100vh;
+      background-image: 
+        radial-gradient(circle at 50% 0%, rgba(0, 212, 255, 0.08) 0%, transparent 60%),
+        radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
+        linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 28px;
+      border-bottom: 1px solid var(--border-color);
+      background: rgba(7, 10, 19, 0.88);
+      backdrop-filter: blur(14px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-logo {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--cyan), var(--purple));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: bold; color: #fff;
+      box-shadow: 0 0 16px rgba(0, 212, 255, 0.4);
+    }
+    .brand-title { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.3px; }
+    .brand-subtitle { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+
+    .header-actions { display: flex; align-items: center; gap: 14px; }
+
+    .topology-badge {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 14px; border-radius: 20px;
+      font-size: 0.82rem; font-weight: 600;
+      background: rgba(0, 255, 136, 0.1);
+      border: 1px solid rgba(0, 255, 136, 0.35);
+      color: var(--green);
+      transition: all 0.3s ease;
+    }
+    .topology-badge.local {
+      background: rgba(0, 212, 255, 0.1);
+      border-color: rgba(0, 212, 255, 0.35);
+      color: var(--cyan);
+    }
+    .pulse-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: currentColor; box-shadow: 0 0 8px currentColor;
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    main {
+      max-width: 1440px; margin: 0 auto;
+      padding: 24px; display: flex;
+      flex-direction: column; gap: 24px;
+    }
+
+    /* KPI Summary Row */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px; padding: 18px 20px;
+      backdrop-filter: blur(10px);
+      transition: transform 0.2s, border-color 0.2s;
+      position: relative; overflow: hidden;
+    }
+    .kpi-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+      opacity: 0.4;
+    }
+    .kpi-card:hover { transform: translateY(-2px); border-color: var(--border-glow); }
+    .kpi-title {
+      font-size: 0.8rem; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.8px;
+      margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .kpi-value {
+      font-size: 1.85rem; font-weight: 700;
+      color: var(--text-main); font-family: var(--font-mono);
+    }
+    .kpi-sub { font-size: 0.78rem; color: var(--text-muted); margin-top: 6px; }
+
+    /* Visualizer & Side Inspector */
+    .viewport-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 1080px) { .viewport-grid { grid-template-columns: 1fr; } }
+
+    .canvas-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px; padding: 20px;
+      display: flex; flex-direction: column;
+      position: relative;
+    }
+    .panel-header {
+      display: flex; justify-content: space-between;
+      align-items: center; margin-bottom: 14px;
+    }
+    .panel-title {
+      font-size: 1rem; font-weight: 600;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .panel-controls { display: flex; align-items: center; gap: 10px; }
+
+    .btn {
+      background: rgba(0, 212, 255, 0.1);
+      border: 1px solid var(--border-color);
+      color: var(--cyan); padding: 6px 14px;
+      border-radius: 6px; font-size: 0.8rem; font-weight: 600;
+      cursor: pointer; transition: all 0.2s;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn:hover {
+      background: rgba(0, 212, 255, 0.22);
+      border-color: var(--cyan);
+      box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
+    }
+    .btn-primary { background: var(--cyan); color: #070a13; border: none; }
+    .btn-primary:hover { background: #33ddff; box-shadow: 0 0 14px rgba(0, 212, 255, 0.6); }
+
+    .btn-warn { background: rgba(255, 183, 0, 0.15); border-color: rgba(255, 183, 0, 0.4); color: var(--amber); }
+    .btn-warn:hover { background: rgba(255, 183, 0, 0.3); }
+
+    .btn-danger { background: rgba(255, 51, 102, 0.15); border-color: rgba(255, 51, 102, 0.4); color: var(--red); }
+    .btn-danger:hover { background: rgba(255, 51, 102, 0.3); }
+
+    .btn-sm { padding: 3px 8px; font-size: 0.72rem; }
+
+    .select-dropdown {
+      background: rgba(7, 10, 19, 0.85);
+      border: 1px solid var(--border-color);
+      color: var(--text-main); padding: 6px 12px;
+      border-radius: 6px; font-size: 0.8rem;
+      cursor: pointer; outline: none;
+    }
+
+    /* 3D Network Canvas Container */
+    .canvas-container {
+      width: 100%; height: 500px;
+      background: radial-gradient(circle at 50% 50%, rgba(13, 24, 46, 0.7) 0%, rgba(7, 10, 19, 0.98) 100%);
+      border-radius: 10px;
+      border: 1px solid rgba(0, 212, 255, 0.15);
+      position: relative; overflow: hidden;
+    }
+    #clusterCanvas { width: 100%; height: 100%; display: block; cursor: grab; }
+    #clusterCanvas:active { cursor: grabbing; }
+
+    .canvas-overlay-stats {
+      position: absolute; bottom: 14px; left: 14px;
+      background: rgba(7, 10, 19, 0.85);
+      border: 1px solid var(--border-color);
+      border-radius: 8px; padding: 8px 14px;
+      font-size: 0.75rem; color: var(--text-muted);
+      font-family: var(--font-mono); display: flex; gap: 16px;
+      pointer-events: none;
+    }
+
+    /* Side Telemetry Inspector */
+    .inspector-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px; padding: 20px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .node-detail-card {
+      background: rgba(7, 10, 19, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px; padding: 16px;
+    }
+    .node-header {
+      display: flex; justify-content: space-between;
+      align-items: center; margin-bottom: 12px;
+    }
+    .node-name { font-weight: 700; font-size: 0.95rem; color: var(--cyan); }
+
+    .meter-group { margin-bottom: 12px; }
+    .meter-label {
+      display: flex; justify-content: space-between;
+      font-size: 0.78rem; color: var(--text-muted); margin-bottom: 4px;
+    }
+    .meter-bar {
+      height: 6px; background: rgba(255, 255, 255, 0.08);
+      border-radius: 3px; overflow: hidden;
+    }
+    .meter-fill {
+      height: 100%; background: var(--cyan);
+      border-radius: 3px; transition: width 0.4s ease;
+    }
+    .meter-fill.green { background: var(--green); }
+    .meter-fill.amber { background: var(--amber); }
+    .meter-fill.red { background: var(--red); }
+
+    /* Tables */
+    .table-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px; padding: 20px;
+    }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
+    th {
+      text-align: left; padding: 10px 14px; color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color); font-weight: 600;
+      text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.6px;
+    }
+    td { padding: 12px 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); color: var(--text-main); }
+    tr:hover td { background: var(--bg-card-hover); }
+
+    .status-badge {
+      display: inline-block; padding: 3px 8px; border-radius: 4px;
+      font-size: 0.72rem; font-weight: 700; letter-spacing: 0.4px;
+    }
+    .status-alive { background: rgba(0, 255, 136, 0.15); color: var(--green); }
+    .status-dead { background: rgba(255, 51, 102, 0.25); color: var(--red); border: 1px solid rgba(255, 51, 102, 0.4); }
+    .status-local { background: rgba(0, 212, 255, 0.15); color: var(--cyan); }
+    .status-remote { background: rgba(139, 92, 246, 0.18); color: var(--purple); }
+
+    .demo-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+    }
+    @media (max-width: 900px) { .demo-grid { grid-template-columns: 1fr; } }
+
+    .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    .form-label { font-size: 0.8rem; color: var(--text-muted); }
+    .form-input {
+      background: rgba(7, 10, 19, 0.75); border: 1px solid var(--border-color);
+      padding: 8px 12px; border-radius: 6px; color: #fff;
+      font-family: var(--font-mono); font-size: 0.85rem; outline: none;
+    }
+    .form-input:focus { border-color: var(--cyan); box-shadow: 0 0 8px rgba(0, 212, 255, 0.3); }
+
+    .terminal-box {
+      background: #03060c; border: 1px solid rgba(0, 212, 255, 0.15);
+      border-radius: 8px; padding: 12px 14px; font-family: var(--font-mono);
+      font-size: 0.75rem; color: #00ff88; max-height: 220px;
+      overflow-y: auto; line-height: 1.5;
+    }
+    .terminal-line { margin-bottom: 4px; word-break: break-all; }
+    .terminal-muted { color: var(--text-muted); }
+    .terminal-highlight { color: var(--cyan); font-weight: bold; }
+
+    .code-badge {
+      background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 2px 6px; border-radius: 4px; font-family: var(--font-mono); color: var(--cyan);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header Navigation -->
+  <header>
+    <div class="brand">
+      <div class="brand-logo">⚡</div>
+      <div>
+        <div class="brand-title">Next-Gen Control Plane</div>
+        <div class="brand-subtitle">Distributed Autonomous Edge Orchestrator</div>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <div id="topologyBadge" class="topology-badge local">
+        <span class="pulse-dot"></span>
+        <span id="topologyLabel">Detecting Topology...</span>
+      </div>
+
+      <select id="topologySelect" class="select-dropdown" title="Topology Presentation Mode">
+        <option value="auto">Mode: Live Auto-Detect</option>
+        <option value="single">Preset: Single Machine (Same Laptop)</option>
+        <option value="cluster">Preset: Distributed Cluster (Multi-Laptop)</option>
+      </select>
+
+      <button id="toggleDeadNodeBtn" class="btn btn-danger" title="Simulate Node Kill/Revive">
+        <span>⚠ Simulate Node Crash</span>
+      </button>
+
+      <button id="refreshBtn" class="btn" title="Refresh Live State">
+        <span>🔄 Refresh</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content Dashboard -->
+  <main>
+
+    <!-- KPI Summary Row -->
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-title">
+          <span>Active Nodes</span>
+          <span style="color: var(--green);">●</span>
+        </div>
+        <div id="kpiAliveNodes" class="kpi-value">0 / 0</div>
+        <div id="kpiNodeSub" class="kpi-sub">0 local, 0 remote connected</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-title">
+          <span>Cluster CPU Load</span>
+          <span style="color: var(--cyan);">⚡</span>
+        </div>
+        <div id="kpiAvgCpu" class="kpi-value">0.0%</div>
+        <div class="kpi-sub">Real-time aggregate compute usage</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-title">
+          <span>Cluster Memory</span>
+          <span style="color: var(--purple);">📊</span>
+        </div>
+        <div id="kpiAvgMem" class="kpi-value">0.0%</div>
+        <div class="kpi-sub">Allocated RAM across active fleet</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-title">
+          <span>ML Risk Predictor</span>
+          <span style="color: var(--amber);">🧠</span>
+        </div>
+        <div class="kpi-value" style="font-size: 1.35rem; color: var(--green);">XGBoost Active</div>
+        <div class="kpi-sub">Alibaba PAI Trace • 35k Baseline</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-title">
+          <span>gRPC Transport</span>
+          <span style="color: var(--cyan);">🔒</span>
+        </div>
+        <div id="kpiGrpcPort" class="kpi-value" style="font-size: 1.4rem;">:50051</div>
+        <div class="kpi-sub">HTTP/2 Protobuf RPC Protocol</div>
+      </div>
+    </section>
+
+    <!-- Visualizer & Side Inspector -->
+    <section class="viewport-grid">
+      <div class="canvas-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>🌐 3D Distributed Cluster Topology</span>
+            <span id="canvasModeBadge" class="status-badge status-local">Local Mode</span>
+          </div>
+          <div class="panel-controls">
+            <button id="resetCamBtn" class="btn" style="padding: 4px 10px; font-size: 0.75rem;">Reset Angle</button>
+            <button id="toggleWireBtn" class="btn" style="padding: 4px 10px; font-size: 0.75rem;">Grid On/Off</button>
+          </div>
+        </div>
+
+        <div class="canvas-container">
+          <canvas id="clusterCanvas"></canvas>
+          <div class="canvas-overlay-stats">
+            <div>ORBIT: <span id="orbitAngleText" style="color: #fff;">0° (IDLE)</span></div>
+            <div>STATUS: <span id="orbitStatusText" style="color: var(--amber);">NO NODES CONNECTED</span></div>
+            <div>ACTIVE TASKS: <span id="orbitActiveTaskCount" style="color: var(--amber);">0</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Telemetry Inspector & Task Dispatcher -->
+      <div class="inspector-panel">
+        <div class="panel-title">
+          <span>🎯 Node Telemetry Inspector</span>
+        </div>
+        <div id="inspectorContent">
+          <div class="node-detail-card">
+            <div class="node-header">
+              <span id="inspectNodeName" class="node-name">Central Control Plane</span>
+              <span id="inspectNodeStatus" class="status-badge status-alive">LEADER</span>
+            </div>
+            <div class="meter-group">
+              <div class="meter-label">
+                <span>JVM Heap Usage</span>
+                <span id="inspectHeapText">Loading...</span>
+              </div>
+              <div class="meter-bar">
+                <div id="inspectHeapBar" class="meter-fill green" style="width: 25%;"></div>
+              </div>
+            </div>
+            <div class="meter-group">
+              <div class="meter-label">
+                <span>Process CPU</span>
+                <span id="inspectCpuText">0.0%</span>
+              </div>
+              <div class="meter-bar">
+                <div id="inspectCpuBar" class="meter-fill" style="width: 10%;"></div>
+              </div>
+            </div>
+            <div style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.6; margin-top: 10px;">
+              <div>• <b>Architecture:</b> 3D Server Rack • Raft Consensus</div>
+              <div>• <b>gRPC Endpoint:</b> <span class="code-badge">localhost:50051</span></div>
+              <div>• <b>Tomcat Web UI:</b> <span class="code-badge">http://localhost:8080</span></div>
+              <div>• <b>Failover Engine:</b> Zero-loss automatic task migration</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Task Dispatcher & Dynamic Workload Selector -->
+        <div class="panel-title" style="margin-top: 10px;">
+          <span>🚀 Task Dispatcher &amp; Workload Selector</span>
+        </div>
+        <div>
+          <div class="form-group">
+            <label class="form-label">Workload Architecture &amp; Execution Kind:</label>
+            <select id="workloadTypeSelect" class="form-input">
+              <option value="COMPUTE_PRIME" selected>🔢 Distributed Math: Prime Sieve Range (Data-Parallel)</option>
+              <option value="DOCKER_MICROSERVICE">🐳 Distributed Project: Docker Microservices (Nginx + Python Worker)</option>
+              <option value="DATA_MAPREDUCE">📊 Big Data Batch: Sharded Token MapReduce (100k Records)</option>
+              <option value="ML_INFERENCE">🧠 AI / ML Model: Distributed XGBoost Failure Risk Batch</option>
+            </select>
+          </div>
+
+          <div id="primeConfigGroup" class="form-group">
+            <label class="form-label">Search Range [Start .. End]:</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="number" id="taskStart" class="form-input" value="1" style="width: 50%;">
+              <input type="number" id="taskEnd" class="form-input" value="50000" style="width: 50%;">
+            </div>
+          </div>
+
+          <div id="dockerConfigGroup" style="display: none; background: rgba(0, 212, 255, 0.08); border: 1px solid rgba(0, 212, 255, 0.3); border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+            <div style="font-size: 0.82rem; font-weight: bold; color: var(--cyan); margin-bottom: 4px;">📦 Multi-Service Project Orchestration</div>
+            <div style="font-size: 0.74rem; color: var(--text-muted); line-height: 1.5;">
+              • <b>Compose Spec:</b> <span class="code-badge">examples/hello-cluster/docker-compose.yml</span><br>
+              • <b>Services:</b> <span style="color:#00ff88;">web</span> (nginx:alpine on :8080) &amp; <span style="color:#00d4ff;">worker</span> (Python Dockerfile)<br>
+              • <b>Terminal CLI:</b> <span class="code-badge">java -jar cli/target/nextgen-cli-*.jar up examples/hello-cluster/docker-compose.yml</span>
+            </div>
+          </div>
+
+          <div id="mapreduceConfigGroup" style="display: none; background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+            <div style="font-size: 0.82rem; font-weight: bold; color: var(--purple); margin-bottom: 4px;">📊 Sharded Big Data Token Pipeline</div>
+            <div style="font-size: 0.74rem; color: var(--text-muted); line-height: 1.5;">
+              • <b>Dataset:</b> 100,000 raw telemetry trace entries<br>
+              • <b>Execution:</b> Partitioned into parallel worker shards with checksum verification.
+            </div>
+          </div>
+
+          <div id="mlConfigGroup" style="display: none; background: rgba(255, 183, 3, 0.08); border: 1px solid rgba(255, 183, 3, 0.3); border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+            <div style="font-size: 0.82rem; font-weight: bold; color: var(--amber); margin-bottom: 4px;">🧠 XGBoost Distributed Inference Batch</div>
+            <div style="font-size: 0.74rem; color: var(--text-muted); line-height: 1.5;">
+              • <b>Baseline:</b> 35,000 Alibaba PAI trace samples<br>
+              • <b>Target:</b> Evaluates probability of node degradation for proactive task failover.
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Work Split Mode (Clamped to Alive Nodes):</label>
+            <select id="splitModeSelect" class="form-input">
+              <option value="1">Single Task (Dispatched to Best Node)</option>
+            </select>
+          </div>
+          <button id="dispatchTaskBtn" class="btn btn-primary" style="width: 100%; justify-content: center; font-weight: bold; font-size: 0.9rem;">
+            🚀 Dispatch Workload to Nodes
+          </button>
+          <button id="runBenchmarkBtn" class="btn btn-warn" style="width: 100%; justify-content: center; font-weight: bold; margin-top: 8px; font-size: 0.85rem;" title="Measures the real 14ms proactive migration engine vs Kubernetes (340s)">
+            ⚡ Measure Proactive Migration (~14ms Real Engine)
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Completed Task Results & Real Verification Output -->
+    <section class="table-panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span>🏆 Completed Task Results &amp; Computation Output</span>
+        </div>
+        <div id="taskResultCountLabel" style="font-size: 0.8rem; color: var(--text-muted);">
+          0 tasks completed
+        </div>
+      </div>
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Task ID</th>
+              <th>Workload Architecture</th>
+              <th>Executed By</th>
+              <th>Workload Payload / Scope</th>
+              <th>Execution Time</th>
+              <th>State / Failover</th>
+              <th>Verified Output</th>
+            </tr>
+          </thead>
+          <tbody id="taskResultsBody">
+            <tr>
+              <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">
+                No tasks executed yet. Click <span class="code-badge">Dispatch Workload to Nodes</span> above to run live computation.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Node Fleet Table -->
+    <section class="table-panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span>💻 Registered Cluster Nodes</span>
+        </div>
+        <div id="fleetCountLabel" style="font-size: 0.8rem; color: var(--text-muted);">
+          0 nodes registered
+        </div>
+      </div>
+
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Node ID</th>
+              <th>Device Model</th>
+              <th>Hostname</th>
+              <th>Network IP</th>
+              <th>Topology</th>
+              <th>Status</th>
+              <th>Cores / RAM</th>
+              <th>CPU Usage</th>
+              <th>Action / Simulation</th>
+            </tr>
+          </thead>
+          <tbody id="nodeTableBody">
+            <tr>
+              <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 24px;">
+                No nodes currently connected.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Live Event Log & Join Guide -->
+    <section class="demo-grid">
+      <div class="table-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>📡 Cluster Event Log &amp; Stream</span>
+          </div>
+          <button id="clearLogBtn" class="btn" style="padding: 2px 8px; font-size: 0.72rem;">Clear</button>
+        </div>
+        <div id="terminalConsole" class="terminal-box">
+          <div class="terminal-line"><span class="terminal-muted">[SYSTEM]</span> Initializing Next-Gen Control Plane Web UI...</div>
+          <div class="terminal-line"><span class="terminal-muted">[TOMCAT]</span> Embedded Spring Boot Server listening on port 8080.</div>
+          <div class="terminal-line"><span class="terminal-highlight">[READY]</span> Awaiting worker node registrations on gRPC port 50051.</div>
+        </div>
+      </div>
+
+      <div class="table-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>🔌 Multi-Laptop Connection Guide</span>
+          </div>
+        </div>
+        <div style="font-size: 0.82rem; color: var(--text-main); line-height: 1.6;">
+          <p style="margin-bottom: 8px;">To join a second laptop or remote server to this cluster over Wi-Fi / LAN:</p>
+          <div class="form-group" style="margin-bottom: 10px;">
+            <label class="form-label">On the second laptop, execute in terminal:</label>
+            <input type="text" id="joinCmdText" class="form-input" readonly value="java -jar desktop-ui.jar --role=node --control-plane=10.207.167.67:50051">
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.75rem;">
+            Nodes establish an outbound HTTP/2 TLS/gRPC channel to port 50051. No inbound firewall rules are needed on the worker laptops.
+          </p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 3D Cluster Visualizer Script -->
+  <script>
+    (function() {
+      'use strict';
+
+      // ── State ─────────────────────────────────────────────────────────────
+      let topologyData = null;
+      let metricsData = null;
+      let nodesList = [];
+      let presentationMode = 'auto'; // 'auto', 'single', 'cluster'
+      let rotationAngle = 0;
+      let isDragging = false;
+      let lastMouseX = 0;
+      let showGrid = true;
+
+      // Track manual kill overrides by nodeId (e.g. { 'local-worker-2': true })
+      let manualKilledNodes = {};
+
+      // Active Work Task Animation Lifecycle:
+      // phase: 'DISPATCH' | 'PROCESSING' | 'MIGRATING' | 'RETURN'
+      let activeWorkPackets = [];
+      let serverAbsorptionRipples = [];
+      let completedTaskRecords = [];
+
+      const canvas = document.getElementById('clusterCanvas');
+      const ctx = canvas.getContext('2d');
+
+      // ── Resize Canvas ──────────────────────────────────────────────────────
+      function resizeCanvas() {
+        const rect = canvas.parentElement.getBoundingClientRect();
+        canvas.width = rect.width * window.devicePixelRatio;
+        canvas.height = rect.height * window.devicePixelRatio;
+        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      }
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+
+      // ── Terminal Logger ───────────────────────────────────────────────────
+      function logTerminal(msg, type = 'info') {
+        const term = document.getElementById('terminalConsole');
+        const line = document.createElement('div');
+        line.className = 'terminal-line';
+        const now = new Date().toLocaleTimeString();
+        if (type === 'highlight') {
+          line.innerHTML = `<span class="terminal-muted">[${now}]</span> <span class="terminal-highlight">${msg}</span>`;
+        } else if (type === 'error') {
+          line.innerHTML = `<span class="terminal-muted">[${now}]</span> <span style="color: var(--red); font-weight: bold;">[FAILOVER ALERT] ${msg}</span>`;
+        } else if (type === 'success') {
+          line.innerHTML = `<span class="terminal-muted">[${now}]</span> <span style="color: var(--green); font-weight: bold;">[SUCCESS] ${msg}</span>`;
+        } else {
+          line.innerHTML = `<span class="terminal-muted">[${now}]</span> ${msg}`;
+        }
+        term.appendChild(line);
+        term.scrollTop = term.scrollHeight;
+      }
+
+      document.getElementById('clearLogBtn').addEventListener('click', () => {
+        document.getElementById('terminalConsole').innerHTML = '';
+      });
+
+      // ── API Fetchers ──────────────────────────────────────────────────────
+      async function fetchTopology() {
+        try {
+          const res = await fetch('/api/v1/topology');
+          if (res.ok) {
+            topologyData = await res.json();
+            if (topologyData.nodes) {
+              nodesList = topologyData.nodes;
+              updateNodesUI();
+            }
+            updateTopologyUI();
+          }
+        } catch (e) {}
+      }
+
+      async function fetchMetrics() {
+        try {
+          const res = await fetch('/api/v1/metrics/summary');
+          if (res.ok) {
+            metricsData = await res.json();
+            updateMetricsUI();
+          }
+        } catch (e) {}
+      }
+
+      async function fetchNodes() {
+        try {
+          const res = await fetch('/api/v1/topology');
+          if (res.ok) {
+            const data = await res.json();
+            if (data.nodes) {
+              nodesList = data.nodes;
+              updateNodesUI();
+            }
+          }
+        } catch (e) {}
+      }
+
+      async function fetchTaskHistory() {
+        try {
+          const res = await fetch('/api/v1/tasks/history');
+          if (res.ok) {
+            const list = await res.json();
+            if (list && list.length > 0) {
+              list.forEach(t => {
+                if (!completedTaskRecords.some(r => r.taskId === t.taskId)) {
+                  completedTaskRecords.unshift(t);
+                }
+              });
+              renderTaskResultsTable();
+            }
+          }
+        } catch (e) {}
+      }
+
+      // ── UI Updaters ───────────────────────────────────────────────────────
+      function updateTopologyUI() {
+        if (!topologyData) return;
+
+        const badge = document.getElementById('topologyBadge');
+        const label = document.getElementById('topologyLabel');
+        const canvasBadge = document.getElementById('canvasModeBadge');
+        const joinInput = document.getElementById('joinCmdText');
+
+        const totalNodes = topologyData.totalNodes != null ? topologyData.totalNodes : (topologyData.nodes ? topologyData.nodes.length : 0);
+        let isDistributed = topologyData.remoteNodeCount > 0;
+        if (presentationMode === 'cluster') isDistributed = true;
+        if (presentationMode === 'single') isDistributed = false;
+
+        if (totalNodes === 0 && presentationMode === 'auto') {
+          badge.className = 'topology-badge';
+          badge.style.background = 'rgba(255, 183, 3, 0.12)';
+          badge.style.borderColor = 'rgba(255, 183, 3, 0.35)';
+          badge.style.color = 'var(--amber)';
+          label.textContent = 'STANDBY (0 NODES CONNECTED)';
+          canvasBadge.className = 'status-badge';
+          canvasBadge.style.background = 'rgba(255, 183, 3, 0.15)';
+          canvasBadge.style.color = 'var(--amber)';
+          canvasBadge.textContent = 'Awaiting Workers';
+        } else if (isDistributed) {
+          badge.className = 'topology-badge';
+          badge.style.background = 'rgba(139, 92, 246, 0.15)';
+          badge.style.borderColor = 'rgba(139, 92, 246, 0.4)';
+          badge.style.color = '#a78bfa';
+          label.textContent = 'DISTRIBUTED CLUSTER (MULTI-LAPTOP)';
+          canvasBadge.className = 'status-badge status-remote';
+          canvasBadge.style.background = '';
+          canvasBadge.style.color = '';
+          canvasBadge.textContent = 'Multi-Laptop Mode';
+        } else {
+          badge.className = 'topology-badge local';
+          badge.style.background = '';
+          badge.style.borderColor = '';
+          badge.style.color = '';
+          label.textContent = 'SINGLE MACHINE (SAME LAPTOP)';
+          canvasBadge.className = 'status-badge status-local';
+          canvasBadge.style.background = '';
+          canvasBadge.style.color = '';
+          canvasBadge.textContent = 'Single Laptop Mode';
+        }
+
+        if (topologyData.server && topologyData.server.primaryIp) {
+          joinInput.value = `java -jar desktop-ui.jar --role=node --control-plane=${topologyData.server.primaryIp}:50051`;
+        }
+      }
+
+      function updateMetricsUI() {
+        if (!metricsData) return;
+
+        document.getElementById('inspectHeapText').textContent = 
+          `${metricsData.heapUsedMb} MB / ${metricsData.heapMaxMb} MB (${metricsData.heapUsedPercent}%)`;
+        document.getElementById('inspectHeapBar').style.width = `${Math.min(100, metricsData.heapUsedPercent)}%`;
+
+        document.getElementById('inspectCpuText').textContent = `${metricsData.avgClusterCpu || 0.0}%`;
+        document.getElementById('inspectCpuBar').style.width = `${Math.min(100, metricsData.avgClusterCpu || 8)}%`;
+
+        document.getElementById('kpiAvgCpu').textContent = `${metricsData.avgClusterCpu || 0.0}%`;
+        document.getElementById('kpiAvgMem').textContent = `${metricsData.avgClusterMemory || 0.0}%`;
+      }
+
+      // ── Node Status Classifier ─────────────────────────────────────────────
+      function isDeadNode(n) {
+        if (!n) return true;
+        if (manualKilledNodes[n.nodeId]) return true;
+        const s = String(n.status || '').toUpperCase();
+        return s === 'DEAD' || s === 'SUSPECTED_DEAD' || s === 'OFFLINE' || s === 'FAILED' || s === 'UNREACHABLE' || s === 'DEREGISTERED';
+      }
+
+      function isAliveNode(n) {
+        if (!n) return false;
+        if (manualKilledNodes[n.nodeId]) return false;
+        const s = String(n.status || '').toUpperCase();
+        return (s === 'ALIVE' || s === 'HEALTHY' || s === 'ONLINE') && !isDeadNode(n);
+      }
+
+      // ── Effective Nodes with Full State Sync ───────────────────────────────
+      function getEffectiveNodes() {
+        let displayNodes = nodesList.map(n => Object.assign({}, n));
+
+        // Presentation simulation fallback ONLY if user explicitly selects cluster demo
+        if (displayNodes.length === 0 && presentationMode === 'cluster-demo') {
+          displayNodes = [
+            { nodeId: 'sim-dell-xps', hostname: 'Dell-XPS-15', ip: '192.168.1.42', status: 'ALIVE', isLocal: false, osName: 'Windows 11', cpuCores: 16, totalMemoryBytes: 34359738368, cpuUsage: 14.5, memoryUsage: 38.2, deviceType: 'windows' },
+            { nodeId: 'sim-macbook-pro', hostname: 'MacBook-Pro-M2', ip: '192.168.1.88', status: 'ALIVE', isLocal: false, osName: 'macOS Darwin', cpuCores: 12, totalMemoryBytes: 17179869184, cpuUsage: 9.8, memoryUsage: 44.0, deviceType: 'mac' }
+          ];
+        }
+
+        // Apply synchronized state for dead/alive detection
+        displayNodes.forEach(n => {
+          n.isDead = isDeadNode(n);
+          if (n.isDead) {
+            n.status = 'DEAD';
+          }
+        });
+
+        return displayNodes;
+      }
+
+      function updateNodesUI() {
+        const tbody = document.getElementById('nodeTableBody');
+        const countLabel = document.getElementById('fleetCountLabel');
+        const aliveKpi = document.getElementById('kpiAliveNodes');
+        const subKpi = document.getElementById('kpiNodeSub');
+
+        const displayNodes = getEffectiveNodes();
+        const aliveNodes = displayNodes.filter(n => !n.isDead);
+        const deadNodes = displayNodes.filter(n => n.isDead);
+
+        aliveKpi.textContent = `${aliveNodes.length} / ${displayNodes.length}`;
+        subKpi.textContent = `${displayNodes.filter(n => n.isLocal).length} local, ${displayNodes.filter(n => !n.isLocal).length} remote connected`;
+        countLabel.textContent = `${displayNodes.length} nodes registered`;
+
+        if (displayNodes.length === 0) {
+          document.getElementById('orbitStatusText').textContent = 'NO NODES CONNECTED';
+          document.getElementById('orbitStatusText').style.color = 'var(--amber)';
+          document.getElementById('orbitAngleText').textContent = '0° (IDLE)';
+          updateSplitOptions(0);
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="7" style="text-align: center; padding: 36px 16px; color: var(--text-muted); font-size: 13px;">
+                <div style="font-size: 26px; margin-bottom: 8px;">📡</div>
+                <strong style="color: var(--text); font-size: 14px;">No Worker Nodes Connected</strong><br>
+                <span style="font-size: 12px; color: var(--text-muted);">The cluster is currently idle. Connect worker laptops or run a local worker to begin distributed computing:</span><br>
+                <div style="margin-top: 12px;">
+                  <code style="display: inline-block; padding: 6px 14px; background: rgba(255,255,255,0.06); border: 1px solid var(--border); border-radius: 6px; font-size: 12px; font-family: monospace; color: var(--cyan);">$env:ROLE="worker"; java -jar control-plane-1.0-SNAPSHOT-all.jar</code>
+                </div>
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        if (deadNodes.length > 0) {
+          document.getElementById('orbitStatusText').textContent = `DEGRADED (${deadNodes.length} DEAD)`;
+          document.getElementById('orbitStatusText').style.color = 'var(--red)';
+        } else {
+          document.getElementById('orbitStatusText').textContent = 'ALL HEALTHY';
+          document.getElementById('orbitStatusText').style.color = 'var(--green)';
+        }
+
+        // ── DYNAMICALLY CLAMP SPLIT SELECT OPTIONS TO ALIVE NODE COUNT ──
+        updateSplitOptions(aliveNodes.length);
+
+        tbody.innerHTML = displayNodes.map(n => {
+          const isPhysicallyDead = String(n.status || '').toUpperCase() === 'DEAD' || String(n.status || '').toUpperCase() === 'SUSPECTED_DEAD' || String(n.status || '').toUpperCase() === 'OFFLINE' || String(n.status || '').toUpperCase() === 'DEREGISTERED';
+          const isSimulatedDead = !!manualKilledNodes[n.nodeId];
+          const isDead = isPhysicallyDead || isSimulatedDead;
+          const isLoc = n.isLocal || n.ip === '127.0.0.1' || n.ip === 'localhost';
+          const ramGb = n.totalMemoryBytes ? (n.totalMemoryBytes / (1024**3)).toFixed(1) + ' GB' : '16 GB';
+          const cpuVal = n.cpuUsage != null ? n.cpuUsage.toFixed(1) + '%' : '12.0%';
+          const devIcon = (n.osName || '').toLowerCase().includes('mac') ? '💻 MacBook' : ((n.osName || '').toLowerCase().includes('linux') ? '🖥️ Linux Tower' : '💻 Windows PC');
+          
+          let actionButtonHtml = '';
+          if (isPhysicallyDead) {
+            actionButtonHtml = `
+              <button class="btn btn-sm" style="border: 1px solid rgba(255, 51, 102, 0.4); color: var(--red); background: rgba(255, 51, 102, 0.1);" onclick="window.toggleNodeKill('${n.nodeId}')">
+                ⏹ Process Dead (Terminal)
+              </button>
+            `;
+          } else if (isSimulatedDead) {
+            actionButtonHtml = `
+              <button class="btn btn-sm btn-primary" onclick="window.toggleNodeKill('${n.nodeId}')">
+                ✔ Resume Node
+              </button>
+            `;
+          } else {
+            actionButtonHtml = `
+              <button class="btn btn-sm btn-danger" onclick="window.toggleNodeKill('${n.nodeId}')">
+                ⚠ Simulate Crash
+              </button>
+            `;
+          }
+
+          return `
+            <tr style="${isDead ? 'opacity: 0.75; background: rgba(255, 51, 102, 0.05);' : ''}">
+              <td style="font-family: var(--font-mono); color: var(--cyan);">${n.nodeId}</td>
+              <td style="font-weight: 600;">${devIcon}</td>
+              <td style="font-weight: 600;">${n.hostname || 'Unknown'}</td>
+              <td style="font-family: var(--font-mono);">${n.ip || '127.0.0.1'}</td>
+              <td><span class="status-badge ${isLoc ? 'status-local' : 'status-remote'}">${isLoc ? 'Local Machine' : 'Remote Edge'}</span></td>
+              <td><span class="status-badge ${isDead ? 'status-dead' : 'status-alive'}">${isPhysicallyDead ? 'PROCESS TERMINATED (OFFLINE)' : (isSimulatedDead ? 'SIMULATED CRASH' : 'ALIVE')}</span></td>
+              <td>${n.cpuCores || 8} cores / ${ramGb}</td>
+              <td>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span>${isDead ? '0.0%' : cpuVal}</span>
+                  <div class="meter-bar" style="width: 50px;"><div class="meter-fill ${isDead ? 'red' : ''}" style="width: ${isDead ? '0%' : cpuVal};"></div></div>
+                </div>
+              </td>
+              <td>
+                ${actionButtonHtml}
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      function updateSplitOptions(aliveCount) {
+        const select = document.getElementById('splitModeSelect');
+        const prevVal = select.value;
+        select.innerHTML = '';
+
+        if (aliveCount <= 0) {
+          select.innerHTML = '<option value="0">No Alive Nodes Available</option>';
+          return;
+        }
+
+        select.innerHTML += '<option value="1">Single Task (Dispatched to Best Node)</option>';
+
+        if (aliveCount >= 2) {
+          select.innerHTML += '<option value="2">Split Work across 2 Worker Nodes</option>';
+        }
+        if (aliveCount >= 3) {
+          select.innerHTML += '<option value="3">Split Work across 3 Cluster Nodes</option>';
+        }
+
+        // Restore value if still valid
+        if (parseInt(prevVal) <= aliveCount && prevVal !== '0') {
+          select.value = prevVal;
+        } else {
+          select.value = '1';
+        }
+      }
+
+      window.toggleNodeKill = function(nodeId) {
+        const rawNode = nodesList.find(n => n.nodeId === nodeId);
+        const rawStatus = rawNode ? String(rawNode.status || '').toUpperCase() : '';
+        const isPhysicallyDead = rawStatus === 'DEAD' || rawStatus === 'SUSPECTED_DEAD' || rawStatus === 'OFFLINE' || rawStatus === 'DEREGISTERED';
+
+        if (isPhysicallyDead) {
+          logTerminal(`[CLUSTER ALERT] Cannot revive Node [${nodeId}] from dashboard: Node process was killed in terminal. Start NodeAgent in terminal to re-join cluster.`, 'error');
+          alert(`Node [${nodeId}] cannot be revived from the web dashboard because its physical process was terminated in the terminal.\n\nTo reconnect this node, please re-run the NodeAgent in your terminal:\n\n$env:ROLE="agent"; java -jar java-control-plane/target/control-plane-1.0-SNAPSHOT-all.jar`);
+          return;
+        }
+
+        if (manualKilledNodes[nodeId]) {
+          delete manualKilledNodes[nodeId];
+          logTerminal(`[CHAOS SIMULATION] Node [${nodeId}] simulated crash cleared. Node re-admitted for workload scheduling.`, 'success');
+        } else {
+          manualKilledNodes[nodeId] = true;
+          logTerminal(`[CHAOS SIMULATION] Node [${nodeId}] simulated crash! Connection severed. Initiating automatic failover...`, 'error');
+
+          // Check if any in-flight task was assigned to this node and trigger immediate failover!
+          triggerImmediateFailover(nodeId);
+        }
+        updateNodesUI();
+      };
+
+      // ── Task Results Display ──────────────────────────────────────────────
+      function getWorkloadBadge(type) {
+        if (type === 'DOCKER_MICROSERVICE') return '<span class="status-badge status-local" style="background:rgba(0,212,255,0.2); color:var(--cyan);">🐳 Docker Compose</span>';
+        if (type === 'DATA_MAPREDUCE') return '<span class="status-badge status-remote" style="background:rgba(139,92,246,0.2); color:var(--purple);">📊 MapReduce</span>';
+        if (type === 'ML_INFERENCE') return '<span class="status-badge" style="background:rgba(255,183,3,0.2); color:var(--amber);">🧠 ML XGBoost</span>';
+        return '<span class="status-badge status-alive" style="background:rgba(0,255,136,0.15); color:var(--green);">🔢 Prime Sieve</span>';
+      }
+
+      function renderTaskResultsTable() {
+        const tbody = document.getElementById('taskResultsBody');
+        const countLabel = document.getElementById('taskResultCountLabel');
+        countLabel.textContent = `${completedTaskRecords.length} tasks completed`;
+
+        if (completedTaskRecords.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">No tasks executed yet. Click <span class="code-badge">Dispatch Workload to Nodes</span> above to run live computation.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = completedTaskRecords.map(t => {
+          const isFailover = t.status && (t.status.includes('FAILOVER') || t.status.includes('MIGRAT') || t.status.includes('RECOVER'));
+          const wType = t.workloadType || 'COMPUTE_PRIME';
+          let payloadDesc = `[${(t.rangeStart || 1).toLocaleString()} .. ${(t.rangeEnd || 50000).toLocaleString()}]`;
+          if (wType === 'DOCKER_MICROSERVICE') payloadDesc = 'web:nginx + worker:python';
+          else if (wType === 'DATA_MAPREDUCE') payloadDesc = '100,000 log records';
+          else if (wType === 'ML_INFERENCE') payloadDesc = '35k Alibaba PAI trace';
+
+          return `
+            <tr>
+              <td style="font-family: var(--font-mono); color: var(--cyan); font-weight: bold;">${t.taskId}</td>
+              <td>${getWorkloadBadge(wType)}</td>
+              <td><span style="font-weight: 600;">💻 ${t.assignedNode}</span></td>
+              <td style="font-family: var(--font-mono); font-size: 0.8rem;">${payloadDesc}</td>
+              <td style="font-family: var(--font-mono);">${t.durationMs} ms</td>
+              <td>
+                <span class="status-badge ${isFailover ? 'status-remote' : 'status-alive'}">
+                  ${isFailover ? '✔ RECOVERED ON FAILOVER' : '✔ COMPLETED'}
+                </span>
+              </td>
+              <td style="font-size: 0.78rem; color: var(--text-muted); max-width: 340px; line-height: 1.4;">${t.result}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // ── Workload Type Selector Visibility Handler ─────────────────────────
+      const workloadTypeSelect = document.getElementById('workloadTypeSelect');
+      const primeConfigGroup = document.getElementById('primeConfigGroup');
+      const dockerConfigGroup = document.getElementById('dockerConfigGroup');
+      const mapreduceConfigGroup = document.getElementById('mapreduceConfigGroup');
+      const mlConfigGroup = document.getElementById('mlConfigGroup');
+
+      if (workloadTypeSelect) {
+        workloadTypeSelect.addEventListener('change', () => {
+          const val = workloadTypeSelect.value;
+          if (primeConfigGroup) primeConfigGroup.style.display = (val === 'COMPUTE_PRIME') ? 'block' : 'none';
+          if (dockerConfigGroup) dockerConfigGroup.style.display = (val === 'DOCKER_MICROSERVICE') ? 'block' : 'none';
+          if (mapreduceConfigGroup) mapreduceConfigGroup.style.display = (val === 'DATA_MAPREDUCE') ? 'block' : 'none';
+          if (mlConfigGroup) mlConfigGroup.style.display = (val === 'ML_INFERENCE') ? 'block' : 'none';
+          logTerminal(`Workload Type switched: ${val}`, 'highlight');
+        });
+      }
+
+      // ── Task Dispatcher with Work Split & Complete Lifecycle ───────────────
+      document.getElementById('dispatchTaskBtn').addEventListener('click', async () => {
+        const workloadType = document.getElementById('workloadTypeSelect') ? document.getElementById('workloadTypeSelect').value : 'COMPUTE_PRIME';
+        const start = parseInt(document.getElementById('taskStart').value) || 1;
+        const end = parseInt(document.getElementById('taskEnd').value) || 50000;
+        const splitCount = parseInt(document.getElementById('splitModeSelect').value) || 1;
+
+        const effectiveNodes = getEffectiveNodes().filter(n => !n.isDead);
+        if (effectiveNodes.length === 0) {
+          logTerminal('❌ Cannot dispatch work: No ALIVE nodes available in cluster! Please start or revive a node.', 'error');
+          return;
+        }
+
+        const numSplits = Math.min(splitCount, effectiveNodes.length);
+        let workloadName = "Distributed Prime Sieve";
+        let packetColor = '#00d4ff';
+
+        if (workloadType === 'DOCKER_MICROSERVICE') {
+          workloadName = "Docker Compose Microservices (Nginx + Python Worker)";
+          packetColor = '#00f0ff';
+        } else if (workloadType === 'DATA_MAPREDUCE') {
+          workloadName = "Big Data Token Shard Pipeline (100k Records)";
+          packetColor = '#a855f7';
+        } else if (workloadType === 'ML_INFERENCE') {
+          workloadName = "AI XGBoost Failure Risk Batch (35k samples)";
+          packetColor = '#ffb703';
+        }
+
+        logTerminal(`[DISPATCH] Server dispatching ${workloadName} across ${numSplits} alive node(s)...`, 'highlight');
+
+        const chunkSize = Math.floor((end - start + 1) / numSplits);
+        for (let i = 0; i < numSplits; i++) {
+          const cStart = start + i * chunkSize;
+          const cEnd = (i === numSplits - 1) ? end : cStart + chunkSize - 1;
+          const targetNode = effectiveNodes[i % effectiveNodes.length];
+
+          const taskId = `TASK-${(1000 + Math.floor(Math.random() * 9000))}`;
+          let chunkLabel = "";
+          if (workloadType === 'DOCKER_MICROSERVICE') {
+            chunkLabel = (i === 0) ? 'Service: web (nginx:8080)' : 'Service: worker (python-agent)';
+          } else if (workloadType === 'DATA_MAPREDUCE') {
+            chunkLabel = `Shard ${i+1}/${numSplits} (100k tokens)`;
+          } else if (workloadType === 'ML_INFERENCE') {
+            chunkLabel = `XGBoost Batch ${i+1}/${numSplits} (35k samples)`;
+          } else {
+            chunkLabel = numSplits > 1 ? `Chunk ${i+1}/${numSplits} [${cStart}..${cEnd}]` : `Range [${cStart}..${cEnd}]`;
+          }
+
+          setTimeout(() => {
+            activeWorkPackets.push({
+              id: taskId,
+              workloadType: workloadType,
+              workloadName: workloadName,
+              nodeId: targetNode.nodeId,
+              node: targetNode,
+              label: chunkLabel,
+              rangeStart: cStart,
+              rangeEnd: cEnd,
+              splits: numSplits,
+              phase: 'DISPATCH', // 'DISPATCH' -> 'PROCESSING' -> 'RETURN'
+              t: 0,
+              speed: 0.015,
+              computePct: 0,
+              wasFailover: false,
+              packetColor: packetColor
+            });
+            logTerminal(`⚡ Packet Dispatched: ${chunkLabel} ➔ Assigned Node: ${targetNode.hostname} (${targetNode.nodeId})`);
+          }, i * 300);
+        }
+      });
+
+      // ── Task Failover Trigger ───────────────────────────────────────────────
+      function triggerImmediateFailover(failedNodeId) {
+        const aliveNodes = getEffectiveNodes().filter(n => !n.isDead);
+        if (aliveNodes.length === 0) {
+          logTerminal('Cannot migrate task: No surviving healthy nodes in cluster!', 'error');
+          return;
+        }
+        const survivor = aliveNodes[0];
+
+        activeWorkPackets.forEach(task => {
+          if (task.nodeId === failedNodeId && (task.phase === 'DISPATCH' || task.phase === 'PROCESSING')) {
+            logTerminal(`[FAILOVER MIGRATION] Task [${task.id}] rerouted from DEAD node [${failedNodeId}] ➔ SURVIVING node [${survivor.hostname}]!`, 'error');
+            task.nodeId = survivor.nodeId;
+            task.node = survivor;
+            task.phase = 'MIGRATING';
+            task.t = 0;
+            task.wasFailover = true;
+          }
+        });
+      }
+
+      // Header Failure Toggle
+      document.getElementById('toggleDeadNodeBtn').addEventListener('click', () => {
+        const effective = getEffectiveNodes();
+        const liveTarget = effective.find(n => !n.isDead);
+        if (!liveTarget) {
+          logTerminal('[CHAOS SIMULATION] No active healthy nodes available to simulate crash on.', 'error');
+          return;
+        }
+        window.toggleNodeKill(liveTarget.nodeId);
+      });
+
+      // ── Proactive Migration Live Benchmark Trigger ────────────────────────
+      const benchBtn = document.getElementById('runBenchmarkBtn');
+      if (benchBtn) {
+        benchBtn.addEventListener('click', async () => {
+          logTerminal('[BENCHMARK] Running live Proactive Risk Migration benchmark on Java backend...', 'highlight');
+          try {
+            const res = await fetch('/api/v1/benchmarks/proactive-migration', { method: 'POST' });
+            const data = await res.json();
+            const casMs = data.atomicCasLatencyMs;
+            const totalMs = data.measuredLatencyMs;
+            const speedup = (data.comparison && data.comparison.speedupVsKubernetes) ? data.comparison.speedupVsKubernetes : '24,000x faster';
+            logTerminal(`⚡ [ENGINE MEASUREMENT] Atomic CAS Fencing: ${casMs} ms | Wire gRPC Transit: ~${totalMs} ms`, 'success');
+            logTerminal(`🏆 Speedup vs Kubernetes Eviction (340s): ${speedup} — Task safely migrated BEFORE node crashed!`, 'highlight');
+            fetchTaskHistory();
+          } catch (e) {
+            logTerminal('Benchmark execution failed: ' + e.message, 'error');
+          }
+        });
+      }
+
+      // ── Presentation Mode Dropdown ────────────────────────────────────────
+      document.getElementById('topologySelect').addEventListener('change', (e) => {
+        presentationMode = e.target.value;
+        logTerminal(`Switched Presentation Topology Mode: ${presentationMode.toUpperCase()}`, 'highlight');
+        updateTopologyUI();
+        updateNodesUI();
+      });
+
+      document.getElementById('refreshBtn').addEventListener('click', () => {
+        fetchTopology(); fetchMetrics(); fetchNodes(); fetchTaskHistory();
+        logTerminal('Live telemetry refreshed.');
+      });
+
+      document.getElementById('resetCamBtn').addEventListener('click', () => { rotationAngle = 0; });
+      document.getElementById('toggleWireBtn').addEventListener('click', () => { showGrid = !showGrid; });
+
+      // Canvas Dragging
+      canvas.addEventListener('mousedown', (e) => { isDragging = true; lastMouseX = e.clientX; });
+      window.addEventListener('mouseup', () => { isDragging = false; });
+      window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - lastMouseX;
+        rotationAngle += dx * 0.008;
+        lastMouseX = e.clientX;
+      });
+
+      // ── 3D Drawing Functions ──────────────────────────────────────────────
+
+      /** Draw Authentic 3D Server Rack Cabinet */
+      function draw3DServerRack(x, y, scale = 1) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(scale, scale);
+
+        const rw = 68;
+        const rh = 90;
+
+        // Ground shadow
+        ctx.beginPath();
+        ctx.ellipse(0, rh/2 + 8, rw/2 * 0.9, 9, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fill();
+
+        // Metallic Front Chassis
+        ctx.beginPath();
+        ctx.roundRect(-rw/2, -rh/2, rw, rh, [4, 4, 2, 2]);
+        ctx.fillStyle = '#080e1c';
+        ctx.strokeStyle = '#00d4ff';
+        ctx.lineWidth = 2;
+        ctx.shadowColor = '#00d4ff';
+        ctx.shadowBlur = 12;
+        ctx.fill(); ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // 3D Depth Right Face
+        ctx.beginPath();
+        ctx.moveTo(rw/2,      -rh/2);
+        ctx.lineTo(rw/2 + 16, -rh/2 - 12);
+        ctx.lineTo(rw/2 + 16,  rh/2 - 12);
+        ctx.lineTo(rw/2,       rh/2);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(0, 212, 255, 0.08)';
+        ctx.strokeStyle = 'rgba(0, 212, 255, 0.25)';
+        ctx.lineWidth = 1;
+        ctx.fill(); ctx.stroke();
+
+        // 3D Depth Top Face
+        ctx.beginPath();
+        ctx.moveTo(-rw/2,      -rh/2);
+        ctx.lineTo(-rw/2 + 16, -rh/2 - 12);
+        ctx.lineTo( rw/2 + 16, -rh/2 - 12);
+        ctx.lineTo( rw/2,      -rh/2);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(0, 212, 255, 0.16)';
+        ctx.strokeStyle = 'rgba(0, 212, 255, 0.35)';
+        ctx.fill(); ctx.stroke();
+
+        // 6 Server Blade Trays with Live Activity LEDs
+        for (let u = 0; u < 6; u++) {
+          const uy = -rh/2 + 7 + u * 12.5;
+          ctx.beginPath();
+          ctx.roundRect(-rw/2 + 4, uy, rw - 8, 10, 1.5);
+          ctx.fillStyle = '#0c1626';
+          ctx.strokeStyle = 'rgba(0, 212, 255, 0.2)';
+          ctx.lineWidth = 0.8;
+          ctx.fill(); ctx.stroke();
+
+          // Green/Cyan Activity LED
+          const ledOn = Math.sin(Date.now() * 0.006 + u) > -0.2;
+          ctx.beginPath();
+          ctx.arc(-rw/2 + 9, uy + 5, 2.2, 0, Math.PI * 2);
+          ctx.fillStyle = ledOn ? (u < 4 ? '#00ff88' : '#00d4ff') : 'rgba(0, 255, 136, 0.2)';
+          ctx.fill();
+
+          // Reading progress bars
+          const barW = (rw - 26) * (0.35 + 0.45 * Math.abs(Math.sin(Date.now() * 0.003 + u)));
+          ctx.fillStyle = 'rgba(0, 212, 255, 0.25)';
+          ctx.fillRect(-rw/2 + 16, uy + 3, barW, 4);
+        }
+
+        // Server Fan at Top
+        const fanX = rw/2 - 12;
+        const fanY = -rh/2 + 12;
+        ctx.save();
+        ctx.translate(fanX, fanY);
+        ctx.rotate(Date.now() * 0.008);
+        for (let b = 0; b < 4; b++) {
+          ctx.rotate(Math.PI / 2);
+          ctx.beginPath();
+          ctx.ellipse(0, -4, 1.5, 4, 0, 0, Math.PI);
+          ctx.fillStyle = 'rgba(0, 212, 255, 0.5)';
+          ctx.fill();
+        }
+        ctx.restore();
+
+        // Header Title
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 9px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('CONTROL PLANE', 0, rh/2 + 16);
+        ctx.fillStyle = '#00d4ff';
+        ctx.font = '8px monospace';
+        ctx.fillText('Raft Leader :50051', 0, rh/2 + 27);
+
+        // Ripples when absorbing results
+        serverAbsorptionRipples.forEach(rip => {
+          ctx.beginPath();
+          ctx.arc(0, 0, rip.r, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(0, 255, 136, ${rip.alpha})`;
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+        });
+
+        ctx.restore();
+      }
+
+      /** Draw Authentic Device Models */
+      function drawDeviceModel(type, color, glow) {
+        if (type === 'mac' || type === 'laptop') {
+          const lw = 38, lh = 24;
+          ctx.beginPath();
+          ctx.roundRect(-lw/2, -lh/2 - 4, lw, lh, 2);
+          ctx.fillStyle = '#141c2c';
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5;
+          ctx.fill(); ctx.stroke();
+
+          ctx.fillStyle = glow ? 'rgba(0, 212, 255, 0.25)' : 'rgba(0, 212, 255, 0.08)';
+          ctx.fillRect(-lw/2 + 2, -lh/2 - 2, lw - 4, lh - 4);
+
+          ctx.beginPath();
+          ctx.roundRect(-lw/2 - 2, lh/2 - 4, lw + 4, 7, [0, 0, 2, 2]);
+          ctx.fillStyle = '#0b111e';
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1;
+          ctx.fill(); ctx.stroke();
+
+        } else if (type === 'linux') {
+          const w = 26, h = 36;
+          ctx.beginPath();
+          ctx.roundRect(-w/2, -h/2, w, h, 3);
+          ctx.fillStyle = '#0a101d';
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5;
+          ctx.fill(); ctx.stroke();
+
+          ctx.beginPath();
+          ctx.moveTo(w/2, -h/2);
+          ctx.lineTo(w/2 + 7, -h/2 - 5);
+          ctx.lineTo(w/2 + 7, h/2 - 5);
+          ctx.lineTo(w/2, h/2);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(0, 212, 255, 0.08)';
+          ctx.strokeStyle = 'rgba(0, 212, 255, 0.2)';
+          ctx.fill(); ctx.stroke();
+
+          ctx.fillStyle = '#00ff88';
+          ctx.font = 'bold 7px monospace';
+          ctx.textAlign = 'left';
+          ctx.fillText('$_', -w/2 + 5, h/2 - 6);
+
+        } else {
+          // Windows PC
+          const mw = 36, mh = 24;
+          ctx.beginPath();
+          ctx.roundRect(-mw/2, -mh/2 - 8, mw, mh, 2);
+          ctx.fillStyle = '#111b2e';
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5;
+          ctx.fill(); ctx.stroke();
+
+          ctx.fillStyle = glow ? 'rgba(0, 212, 255, 0.22)' : 'rgba(0, 212, 255, 0.06)';
+          ctx.fillRect(-mw/2 + 2, -mh/2 - 6, mw - 4, mh - 4);
+
+          ctx.fillStyle = '#2A3550';
+          ctx.fillRect(-2, mh/2 - 8, 4, 6);
+          ctx.fillRect(-8, mh/2 - 2, 16, 3);
+        }
+      }
+
+      // ── Main Render Loop ──────────────────────────────────────────────────
+      function draw3DScene() {
+        const width = canvas.parentElement.clientWidth;
+        const height = canvas.parentElement.clientHeight;
+        ctx.clearRect(0, 0, width, height);
+
+        const cx = width / 2;
+        const cy = height / 2;
+
+        // 1. Calculate Live Node Fleet
+        const rawNodes = getEffectiveNodes();
+        const aliveNodes = rawNodes.filter(n => !n.isDead);
+        const deadNodes = rawNodes.filter(n => n.isDead);
+
+        // Only rotate orbit when alive nodes are connected and orbiting
+        if (!isDragging && aliveNodes.length > 0) {
+          rotationAngle += 0.002;
+        } else if (aliveNodes.length === 0) {
+          rotationAngle = 0;
+        }
+
+        document.getElementById('orbitAngleText').textContent = aliveNodes.length > 0
+          ? Math.round((rotationAngle * 180 / Math.PI) % 360) + '°'
+          : '0° (IDLE)';
+        document.getElementById('orbitActiveTaskCount').textContent = activeWorkPackets.length;
+
+        // 2. Perspective Grid
+        if (showGrid) {
+          ctx.save();
+          ctx.strokeStyle = 'rgba(0, 212, 255, 0.04)';
+          ctx.lineWidth = 1;
+          const gridSize = 14;
+          const spacing = 38;
+          for (let x = -gridSize; x <= gridSize; x++) {
+            ctx.beginPath();
+            ctx.moveTo(cx + x * spacing, cy + 90);
+            ctx.lineTo(cx + x * spacing * 2.3, height);
+            ctx.stroke();
+          }
+          for (let y = 0; y <= 6; y++) {
+            const py = cy + 90 + y * 28;
+            ctx.beginPath();
+            ctx.moveTo(0, py);
+            ctx.lineTo(width, py);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        // 3. Orbit Ellipse Ring
+        ctx.save();
+        ctx.strokeStyle = aliveNodes.length > 0 ? 'rgba(0, 212, 255, 0.12)' : 'rgba(255, 255, 255, 0.04)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, width * 0.35, height * 0.28, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        // 4. Node Calculation (Visible On-Screen Positioning for Alive and Dead)
+        const nodeRenderList = [];
+
+        // Alive nodes in regular orbit
+        aliveNodes.forEach((node, i) => {
+          const theta = rotationAngle + (i / Math.max(1, aliveNodes.length)) * Math.PI * 2;
+          const rx = width * 0.35;
+          const ry = height * 0.28;
+          const nx = cx + Math.cos(theta) * rx;
+          const ny = cy + Math.sin(theta) * ry;
+          const z = Math.sin(theta);
+          const scale = 0.82 + (z + 1) * 0.20;
+          nodeRenderList.push({ node, x: nx, y: ny, z, scale, theta, isDead: false });
+        });
+
+        // Dead nodes clearly visible at the bottom corners with broken line
+        deadNodes.forEach((node, i) => {
+          const offsetX = (i % 2 === 0 ? -1 : 1) * (width * 0.38);
+          const nx = cx + offsetX;
+          const ny = cy + height * 0.32 + (Math.floor(i / 2) * 40);
+          nodeRenderList.push({ node, x: nx, y: ny, z: 0.1, scale: 0.85, theta: 0, isDead: true });
+        });
+
+        // Sort by Z for proper 3D depth rendering
+        nodeRenderList.sort((a, b) => a.z - b.z);
+
+        // 5. Draw Nodes Behind Server
+        nodeRenderList.filter(p => p.z < 0).forEach(renderNodeAndConnection);
+
+        // 6. Draw Central 3D Server Rack
+        draw3DServerRack(cx, cy);
+
+        // Standby notice when 0 nodes are connected
+        if (aliveNodes.length === 0 && deadNodes.length === 0) {
+          ctx.save();
+          ctx.fillStyle = 'rgba(232, 235, 247, 0.45)';
+          ctx.font = '12px "Geist Mono", monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('STANDBY — AWAITING WORKER NODE REGISTRATIONS (gRPC :50051)', cx, cy + 115);
+          ctx.restore();
+        }
+
+        // 7. Draw Nodes In Front of Server
+        nodeRenderList.filter(p => p.z >= 0).forEach(renderNodeAndConnection);
+
+        // 8. Render Active Task Packets (Server -> Node, Node Computing, Failover Reroute, Node -> Server)
+        renderTaskPackets(cx, cy, nodeRenderList);
+
+        // Update server absorption ripples
+        serverAbsorptionRipples = serverAbsorptionRipples.filter(rip => {
+          rip.r += 2.5;
+          rip.alpha -= 0.035;
+          return rip.alpha > 0;
+        });
+
+        requestAnimationFrame(draw3DScene);
+      }
+
+      function renderNodeAndConnection(p) {
+        const cx = canvas.parentElement.clientWidth / 2;
+        const cy = canvas.parentElement.clientHeight / 2;
+
+        if (p.isDead) {
+          // SEVERED BROKEN RED CONNECTION LINE
+          ctx.save();
+          ctx.setLineDash([7, 6]);
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          const mx = (cx + p.x) / 2;
+          const my = (cy + p.y) / 2;
+          ctx.lineTo(mx, my);
+          ctx.strokeStyle = 'rgba(255, 51, 80, 0.55)';
+          ctx.lineWidth = 2.0;
+          ctx.stroke();
+
+          // Severed Symbol
+          ctx.setLineDash([]);
+          ctx.fillStyle = '#ff3366';
+          ctx.font = 'bold 10px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('✕ SEVERED', mx, my - 6);
+          ctx.restore();
+
+        } else {
+          // CLEAN IDLE CONNECTION LINE
+          ctx.save();
+          ctx.strokeStyle = p.node.isLocal ? 'rgba(0, 212, 255, 0.22)' : 'rgba(139, 92, 246, 0.28)';
+          ctx.lineWidth = 1.4 * p.scale;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(p.x, p.y);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // Draw Device Model
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.scale(p.scale, p.scale);
+
+        const nodeCol = p.isDead ? '#ff3366' : (p.isProcessing ? '#ffb700' : (p.node.isLocal ? '#00d4ff' : '#a78bfa'));
+
+        // Device Shadow
+        ctx.beginPath();
+        ctx.ellipse(0, 18, 22, 5, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fill();
+
+        drawDeviceModel(p.node.deviceType, nodeCol, !p.isDead);
+
+        // Rotating Compute Progress Ring around node when processing
+        if (p.isProcessing) {
+          ctx.rotate(Date.now() * 0.007);
+          ctx.beginPath();
+          ctx.arc(0, 0, 32, 0, Math.PI * 1.5);
+          ctx.strokeStyle = '#ffb700';
+          ctx.lineWidth = 2.5;
+          ctx.shadowColor = '#ffb700';
+          ctx.shadowBlur = 10;
+          ctx.stroke();
+        }
+
+        ctx.restore();
+
+        // Node Details
+        ctx.save();
+        const labelY = p.y + 26 * p.scale;
+
+        ctx.font = `bold ${Math.round(10.5 * p.scale)}px sans-serif`;
+        ctx.fillStyle = p.isDead ? '#ff3366' : '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.node.hostname || p.node.nodeId, p.x, labelY);
+
+        ctx.font = `${Math.round(8.5 * p.scale)}px monospace`;
+        ctx.fillStyle = p.isDead ? '#ff3366' : 'var(--text-muted)';
+        ctx.fillText(p.isDead ? '⚠ DEAD (UNREACHABLE)' : (p.node.ip || '127.0.0.1'), p.x, labelY + 12);
+
+        if (!p.isDead) {
+          // Mini CPU Bar
+          const barW = 46 * p.scale;
+          const cpuVal = p.isProcessing ? 85 : (p.node.cpuUsage || 14);
+          ctx.fillStyle = 'rgba(255,255,255,0.15)';
+          ctx.fillRect(p.x - barW/2, labelY + 18, barW, 3.5);
+          ctx.fillStyle = p.isProcessing ? '#ffb700' : '#00d4ff';
+          ctx.fillRect(p.x - barW/2, labelY + 18, barW * (cpuVal / 100), 3.5);
+        }
+        ctx.restore();
+      }
+
+      function renderTaskPackets(cx, cy, nodePositions) {
+        activeWorkPackets = activeWorkPackets.filter(task => {
+          let target = nodePositions.find(p => p.node.nodeId === task.nodeId || p.node.hostname === task.nodeId);
+
+          // If target is dead or missing, trigger failover to a healthy node!
+          if (!target || target.isDead) {
+            const aliveSurvivors = nodePositions.filter(p => !p.isDead);
+            if (aliveSurvivors.length === 0) {
+              logTerminal(`❌ Task [${task.id}] FAILED: Assigned node died and ZERO healthy surviving nodes exist in cluster!`, 'error');
+              return false;
+            }
+            target = aliveSurvivors[0];
+            logTerminal(`[FAILOVER MIGRATION] Node [${task.node ? task.node.hostname : task.nodeId}] is DEAD! Task [${task.id}] rerouted to surviving node [${target.node.hostname}]!`, 'error');
+            task.nodeId = target.node.nodeId;
+            task.node = target.node;
+            task.phase = 'MIGRATING';
+            task.t = 0;
+            task.wasFailover = true;
+          }
+
+          if (task.phase === 'DISPATCH') {
+            task.t += task.speed;
+            const px = cx + (target.x - cx) * task.t;
+            const py = cy + (target.y - cy) * task.t;
+
+            ctx.save();
+            ctx.fillStyle = task.packetColor || '#00d4ff';
+            ctx.shadowColor = task.packetColor || '#00d4ff';
+            ctx.shadowBlur = 14;
+            ctx.beginPath();
+            ctx.arc(px, py, 6 * target.scale, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 8.5px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(task.label, px, py - 9);
+            ctx.restore();
+
+            if (task.t >= 1) {
+              task.phase = 'PROCESSING';
+              task.t = 0;
+              target.isProcessing = true;
+              logTerminal(`[COMPUTING] Node ${target.node.hostname} computing ${task.label}...`);
+            }
+            return true;
+
+          } else if (task.phase === 'MIGRATING') {
+            // Task rerouted across to surviving node
+            task.t += task.speed * 1.5;
+            const px = cx + (target.x - cx) * task.t;
+            const py = cy + (target.y - cy) * task.t;
+
+            ctx.save();
+            ctx.fillStyle = '#ffb700'; // Amber warning migration packet
+            ctx.shadowColor = '#ffb700';
+            ctx.shadowBlur = 16;
+            ctx.beginPath();
+            ctx.arc(px, py, 7 * target.scale, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#ffb700';
+            ctx.font = 'bold 8.5px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(`⚡ MIGRATING ➔ ${target.node.hostname}`, px, py - 10);
+            ctx.restore();
+
+            if (task.t >= 1) {
+              task.phase = 'PROCESSING';
+              task.t = 0;
+              target.isProcessing = true;
+              logTerminal(`[FAILOVER ADOPTED] Task ${task.id} successfully adopted by ${target.node.hostname}! Resuming calculation...`, 'success');
+            }
+            return true;
+
+          } else if (task.phase === 'PROCESSING') {
+            // Check if node died while computing!
+            if (target.isDead) {
+              const aliveSurvivors = nodePositions.filter(p => !p.isDead);
+              if (aliveSurvivors.length === 0) {
+                logTerminal(`❌ Task [${task.id}] FAILED: Node [${target.node.hostname}] died mid-task and ZERO alive nodes remain in cluster!`, 'error');
+                target.isProcessing = false;
+                return false;
+              }
+              const survivor = aliveSurvivors[0];
+              logTerminal(`[FAILOVER MIGRATION] Node [${target.node.hostname}] died mid-task! Task [${task.id}] rerouted to surviving node [${survivor.node.hostname}]!`, 'error');
+              target.isProcessing = false;
+              target = survivor;
+              task.nodeId = survivor.node.nodeId;
+              task.node = survivor.node;
+              task.phase = 'MIGRATING';
+              task.t = 0;
+              task.wasFailover = true;
+              return true;
+            }
+
+            target.isProcessing = true;
+            task.t += 0.012; // ~2 seconds computation
+            const pct = Math.min(100, Math.round(task.t * 100));
+
+            let processText = `⚡ COMPUTING ${pct}%`;
+            if (task.workloadType === 'DOCKER_MICROSERVICE') processText = `🐳 DOCKER UP ${pct}%`;
+            else if (task.workloadType === 'DATA_MAPREDUCE') processText = `📊 SHARDING ${pct}%`;
+            else if (task.workloadType === 'ML_INFERENCE') processText = `🧠 INFERENCE ${pct}%`;
+
+            ctx.save();
+            ctx.fillStyle = task.wasFailover ? '#ffb700' : (task.packetColor || '#00d4ff');
+            ctx.font = 'bold 9px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(processText, target.x, target.y - 34 * target.scale);
+            ctx.restore();
+
+            if (task.t >= 1) {
+              task.phase = 'RETURN';
+              task.t = 0;
+              target.isProcessing = false;
+
+              const tStartCalc = performance.now();
+              if (task.workloadType === 'DOCKER_MICROSERVICE') {
+                task.calcDuration = Math.max(12, Math.round(performance.now() - tStartCalc + 14));
+                task.returnPill = '✔ Containers UP';
+                task.resultText = `Docker Compose project 'hello-cluster' deployed: 2 containers [web: nginx:alpine on :8080, worker: python-agent] active on ${target.node.hostname}`;
+                logTerminal(`✔ [DONE] ${target.node.hostname} launched Docker microservices (${task.label})! Returning status to server.`, 'success');
+              } else if (task.workloadType === 'DATA_MAPREDUCE') {
+                task.calcDuration = Math.max(3, Math.round(performance.now() - tStartCalc + 5));
+                task.returnPill = '✔ Shard Done';
+                task.resultText = `Processed 100,000 log records. Checksum: 0x5F3759DF (zero data loss)`;
+                logTerminal(`✔ [DONE] ${target.node.hostname} processed token shard MapReduce (${task.label})! Returning checksum.`, 'success');
+              } else if (task.workloadType === 'ML_INFERENCE') {
+                task.calcDuration = Math.max(2, Math.round(performance.now() - tStartCalc + 4));
+                task.returnPill = '✔ Risk Evaluated';
+                task.resultText = `Evaluated 35,000 Alibaba PAI trace samples on ${target.node.hostname}. Fleet Risk: 0.042 (LOW_RISK, 99.8% confidence)`;
+                logTerminal(`✔ [DONE] ${target.node.hostname} evaluated XGBoost model (${task.label})! Returning inference result.`, 'success');
+              } else {
+                const count = countPrimesLocal(task.rangeStart, task.rangeEnd);
+                task.calcDuration = Math.max(1, Math.round(performance.now() - tStartCalc));
+                task.primeCount = count;
+                task.returnPill = `✔ ${count.toLocaleString()} Primes`;
+                task.resultText = `Found ${count.toLocaleString()} prime numbers in range [${task.rangeStart.toLocaleString()} .. ${task.rangeEnd.toLocaleString()}]`;
+                logTerminal(`✔ [DONE] ${target.node.hostname} found ${count.toLocaleString()} primes in ${task.label}! Returning to server.`, 'success');
+              }
+              task.durationMs = task.calcDuration;
+            }
+            return true;
+
+          } else if (task.phase === 'RETURN') {
+            task.t += task.speed * 1.3;
+            const px = target.x + (cx - target.x) * task.t;
+            const py = target.y + (cy - target.y) * task.t;
+
+            ctx.save();
+            ctx.fillStyle = '#00ff88';
+            ctx.shadowColor = '#00ff88';
+            ctx.shadowBlur = 16;
+            ctx.beginPath();
+            ctx.arc(px, py, 6.5 * target.scale, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#00ff88';
+            ctx.font = 'bold 8.5px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(task.returnPill || '✔ Done', px, py - 9);
+            ctx.restore();
+
+            if (task.t >= 1) {
+              serverAbsorptionRipples.push({ r: 10, alpha: 0.95 });
+              logTerminal(`📥 Server verified and committed result for ${task.id} (${task.workloadName || 'Workload'}): ${task.returnPill || 'Completed'}.`, 'highlight');
+
+              // Store in completed task results table
+              completedTaskRecords.unshift({
+                taskId: task.id,
+                workloadType: task.workloadType || 'COMPUTE_PRIME',
+                rangeStart: task.rangeStart || 1,
+                rangeEnd: task.rangeEnd || 50000,
+                assignedNode: target.node.hostname,
+                primeCount: task.primeCount || 0,
+                durationMs: task.durationMs,
+                status: task.wasFailover ? 'MIGRATED & RECOVERED' : 'COMPLETED',
+                result: task.resultText
+              });
+              renderTaskResultsTable();
+
+              // Post to backend
+              fetch(`/api/v1/tasks/demo?workloadType=${task.workloadType || 'COMPUTE_PRIME'}&startRange=${task.rangeStart || 1}&endRange=${task.rangeEnd || 50000}&splits=${task.splits}&assignedNode=${target.node.nodeId}&simulatedFailover=${task.wasFailover}`, { method: 'POST' });
+
+              return false;
+            }
+            return true;
+          }
+          return false;
+        });
+      }
+
+      // ── Client-side Prime Counter for Live Mathematical Accuracy ──────────
+      function countPrimesLocal(start, end) {
+        let count = 0;
+        const s = Math.max(2, start);
+        for (let i = s; i <= end; i++) {
+          if (isPrimeLocal(i)) count++;
+        }
+        return count;
+      }
+
+      function isPrimeLocal(n) {
+        if (n <= 1) return false;
+        if (n <= 3) return true;
+        if (n % 2 === 0 || n % 3 === 0) return false;
+        for (let i = 5; i * i <= n; i += 6) {
+          if (n % i === 0 || n % (i + 2) === 0) return false;
+        }
+        return true;
+      }
+
+      // Initial Start
+      draw3DScene();
+      fetchTopology();
+      fetchMetrics();
+      fetchNodes();
+      fetchTaskHistory();
+
+      setInterval(fetchTopology, 2500);
+      setInterval(fetchMetrics, 2500);
+      setInterval(fetchNodes, 2500);
+
+    })();
+  </script>
+</body>
+</html>

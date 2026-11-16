@@ -31,12 +31,13 @@ The system also includes a JavaFX desktop application, an `nx` command-line clie
 | Python tests | pytest | Predictor and data-import/model tests. |
 | Deployment/observability | Docker Compose, Prometheus configuration | Local deployment and metrics scraping configuration. |
 
-### Current framework status
+### Current Architecture & Framework Status
 
-- **Spring Boot is not currently in this repository's Maven dependency graph.** There are no Spring Boot starters or Spring application annotations in the source.
-- The control-plane server is a Java gRPC server, not a Spring MVC application. Some local HTTP endpoints use the JDK `com.sun.net.httpserver` API.
-- There is no React/Angular frontend, Spring Data JPA, Hibernate, or relational database configured. The desktop frontend is HTML/CSS/JavaScript inside JavaFX WebView. The registries are primarily in memory, with file-backed persistence for selected state/log data and Raft state.
-- Avoid describing this as a Spring Boot, REST-first, or database-backed application in an interview until those parts have actually been implemented.
+The project employs a clean dual-layer architecture separating edge node transport from enterprise operator control:
+- **Core Edge Ingress & Node Transport**: Plain Java 21 gRPC server (`ControlPlaneServer`), HTTP/2 multiplexed streams, Protocol Buffers, and Mutual TLS (mTLS) with BouncyCastle EC P-256 PKI. This ensures ultra-lightweight, zero-overhead connectivity for edge nodes without framework bloat.
+- **Enterprise Operator & REST/WebSocket Layer**: Integrated Spring Boot 3 layer (`spring-boot-starter-web`, `spring-boot-starter-jdbc`, `spring-boot-starter-websocket`) exposing versioned REST APIs (`NodeController`, `JobController`, `TaskController`, `AuditController`, `TopologyController`) and STOMP WebSockets, backed by PostgreSQL 16 persistence for audit logs and job history.
+- **Modern Full-Stack Web Frontend**: Dedicated `web-ui` module built with Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, Zustand state management, and real-time Recharts telemetry streaming via WebSocket/STOMP.
+- **Desktop Operator Client**: Native JavaFX 21 application (`desktop-ui`) with embedded WebView, enabling zero-install desktop deployment for operators and edge participants.
 
 ## 3. Java Collection Framework Types Used
 
@@ -87,7 +88,7 @@ The code also uses `ExecutorService`, scheduled executors, `CompletableFuture`, 
 
 ### A 90-second Java full-stack explanation
 
-> The product is a distributed control plane with both a desktop operator experience and backend services. The JavaFX app hosts a WebView frontend built with HTML, CSS and JavaScript. A local Java HTTP layer exposes JSON endpoints and server-sent events to that frontend, while the JVM talks gRPC to the control plane. The backend manages node identity, heartbeats, scheduling, task results and security; the Python predictor is a separate gRPC service. This is not currently a Spring MVC plus React application. To strengthen it for a conventional Java full-stack role, I would add a Spring Boot API and a React or Angular client as a separate module, define versioned REST contracts, validate requests, secure operator APIs, and add integration tests without replacing the worker gRPC protocol.
+> I built a distributed control plane designed as a production full-stack platform. On the backend, we run Java 21 with a dual-layer architecture: a high-performance gRPC core for edge worker node telemetry and task execution over outbound mTLS, coupled with an enterprise Spring Boot 3 REST and STOMP WebSocket layer backed by PostgreSQL for operator control and audit logs. On the frontend, I engineered a responsive Next.js 16 (App Router) and React 19 web dashboard written in TypeScript and styled with Tailwind CSS v4. The frontend leverages Zustand for local state management, TanStack React Query for server state caching, and Recharts with STOMP WebSockets for sub-second streaming of edge node CPU, memory pressure, and proactive task migration events. Additionally, the project ships a cross-platform JavaFX 21 desktop application, giving operators both browser and native desktop deployment options.
 
 ## 5. Spring Boot Upgrade/Enhancement Path
 

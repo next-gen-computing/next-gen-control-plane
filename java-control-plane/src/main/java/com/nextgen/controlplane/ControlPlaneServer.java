@@ -323,22 +323,41 @@ public class ControlPlaneServer {
         HTTPServer metricsServer = new HTTPServer.Builder().withPort(metricsPort).build();
         LOG.info("📊 Prometheus metrics server started on port {}", metricsPort);
 
-        // ── Dashboard HTTP server (JSON API only — no bundled frontend) ─────
-        // The old web dashboard this used to also serve static files for is gone entirely (see
-        // README.md's "no bundled static frontend ships anymore" note); the real UI today is the
-        // desktop app's own embedded WebView, reached over gRPC, not this HTTP server. This endpoint
-        // stays for anyone scripting against real node data or wiring up their own frontend.
+        // ── Dashboard HTTP server (port 8085) ──────────────────────────────
+        // Provides the legacy /api/nodes JSON endpoint, plus an automatic HTTP 302 redirect
+        // on root "/" to the primary Spring Boot Web Dashboard on port 8080 so multi-laptop
+        // operators never get 404 whether browsing port 8080 or port 8085.
         HttpServer dashboardServer = HttpServer.create(new InetSocketAddress(dashboardPort), 0);
 
-        // API endpoint for live node data — 503s with a leader hint on a follower, see
-        // DashboardApiHandler's Javadoc.
+        // API endpoint for live node data — 503s with a leader hint on a follower
         dashboardServer.createContext("/api/nodes", new DashboardApiHandler(registry, raft.node()));
+
+        // Root handler: redirect all non-API web traffic to Spring Boot dashboard on port 8080
+        dashboardServer.createContext("/", exchange -> {
+            String path = exchange.getRequestURI().getPath();
+            if (path.startsWith("/api/nodes")) {
+                return; // Handled by /api/nodes handler
+            }
+            String hostHeader = exchange.getRequestHeaders().getFirst("Host");
+            String clientHost = "localhost";
+            if (hostHeader != null && !hostHeader.isBlank()) {
+                clientHost = hostHeader.contains(":") ? hostHeader.substring(0, hostHeader.indexOf(':')) : hostHeader;
+            }
+            String targetLocation = "http://" + clientHost + ":8080/";
+            byte[] responseBytes = ("<!DOCTYPE html><html><head><meta http-equiv='refresh' content='0;url="
+                    + targetLocation + "'></head><body>Redirecting to Control Plane Dashboard: <a href='"
+                    + targetLocation + "'>" + targetLocation + "</a></body></html>").getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+            exchange.getResponseHeaders().set("Location", targetLocation);
+            exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
+            exchange.sendResponseHeaders(302, responseBytes.length);
+            try (java.io.OutputStream os = exchange.getResponseBody()) {
+                os.write(responseBytes);
+            }
+        });
 
         dashboardServer.setExecutor(null); // default executor
         dashboardServer.start();
-        LOG.info("══════════════════════════════════════════════════");
-        LOG.info("  📊 Node data API: http://localhost:{}/api/nodes  ", dashboardPort);
-        LOG.info("══════════════════════════════════════════════════");
 
         // ── Security: PKI, enrolment, certificate policy ───
         PkiPaths pkiPaths = PkiPaths.fromEnvironment();
@@ -391,8 +410,10 @@ public class ControlPlaneServer {
         com.nextgen.controlplane.spring.RegistryBeans.setRegistries(
                 registry, taskRegistry, jobRegistry);
         com.nextgen.controlplane.spring.ControlPlaneSpringApp.startSpringContext(new String[0]);
-        LOG.info("  🌍 REST API running on http://localhost:8080/api/v1");
-        LOG.info("  🔌 WebSocket (STOMP) at  ws://localhost:8080/ws");
+        LOG.info("  💻 Web Dashboard:   http://localhost:8080/ (also on http://localhost:{}/)", dashboardPort);
+        LOG.info("  🌍 REST API:        http://localhost:8080/api/v1");
+        LOG.info("  🔌 WebSocket (STOMP) ws://localhost:8080/ws");
+        LOG.info("  📊 Node JSON API:   http://localhost:{}/api/nodes", dashboardPort);
         LOG.info("══════════════════════════════════════════════════");
 
         // Graceful shutdown hook
@@ -665,7 +686,8 @@ public class ControlPlaneServer {
                 while (addresses.hasMoreElements()) {
                     InetAddress addr = addresses.nextElement();
                     if (addr.getHostAddress().contains(":")) continue; // skip IPv6
-                    LOG.info("     → {} on {}", addr.getHostAddress(), ni.getDisplayName());
+                    LOG.info("     → Dashboard UI: http://{}:8080/ (or http://{}:{}/)", addr.getHostAddress(), addr.getHostAddress(), EnvConfig.intValue("DASHBOARD_PORT", 8085));
+                    LOG.info("     → Worker gRPC:  {}:{}", addr.getHostAddress(), EnvConfig.intValue("GRPC_PORT", 50051));
                 }
             }
         } catch (Exception e) {

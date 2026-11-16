@@ -102,6 +102,7 @@ NG.shell = {
         sections.push(['SYSTEM', [
             ['monitoring', 'Monitoring', NG.icons.monitoring, NG.views.monitoring],
             ['settings',   'Settings',  NG.icons.settings,   NG.views.settings],
+            ['animals',    'Glyph Animals', (NG.icons && NG.icons.sparkles) || '✦', NG.views.animals],
         ]]);
 
         const items = sections.flatMap(([, entries]) => entries);
@@ -215,7 +216,7 @@ NG.shell = {
         const closeNodes = NG.sse.subscribe('/api/nodes/stream', (nodes) => {
             if (NG.networkCanvas) NG.networkCanvas.updateNodes(nodes);
             if (nodeCountEl) {
-                const healthy = nodes.filter(n => n.status === 'HEALTHY' || n.status === 'ONLINE').length;
+                const healthy = nodes.filter(n => n.status === 'HEALTHY' || n.status === 'ONLINE' || n.status === 'ALIVE').length;
                 nodeCountEl.textContent = `${healthy}/${nodes.length} nodes healthy`;
             }
         });

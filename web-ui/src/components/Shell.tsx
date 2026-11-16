@@ -3,30 +3,46 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ConnectionErrorModal } from "./ConnectionErrorModal";
 
 const API = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
 
 const NAV = [
-  { href: "/",      icon: "⬡", label: "Dashboard" },
-  { href: "/nodes", icon: "▣", label: "Nodes"     },
-  { href: "/tasks", icon: "⚡", label: "Tasks"     },
-  { href: "/jobs",  icon: "◈", label: "Jobs"      },
+  { href: "/", icon: "⬡", label: "Dashboard" },
+  { href: "/nodes", icon: "▣", label: "Nodes" },
+  { href: "/tasks", icon: "⚡", label: "Tasks" },
+  { href: "/jobs", icon: "◈", label: "Jobs" },
   { href: "/audit", icon: "◻", label: "Audit Log" },
+  { href: "/animals", icon: "✦", label: "Glyph Animals" },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const [apiOk, setApiOk] = useState<boolean | null>(null);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [hasDismissed, setHasDismissed] = useState(false);
+
+  const checkHealth = () =>
+    fetch(`${API}/api/v1/health`, { signal: AbortSignal.timeout(3000) })
+      .then((res) => {
+        if (res.ok) {
+          setApiOk(true);
+          setShowErrorModal(false);
+        } else {
+          setApiOk(false);
+          if (!hasDismissed) setShowErrorModal(true);
+        }
+      })
+      .catch(() => {
+        setApiOk(false);
+        if (!hasDismissed) setShowErrorModal(true);
+      });
 
   useEffect(() => {
-    const check = () =>
-      fetch(`${API}/api/v1/health`, { signal: AbortSignal.timeout(3000) })
-        .then(() => setApiOk(true))
-        .catch(() => setApiOk(false));
-    check();
-    const id = setInterval(check, 5000);
+    checkHealth();
+    const id = setInterval(checkHealth, 5000);
     return () => clearInterval(id);
-  }, []);
+  }, [hasDismissed]);
 
   return (
     <div className="shell">
@@ -53,10 +69,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="conn-status">
+          <div
+            className="conn-status"
+            onClick={() => {
+              if (apiOk === false) setShowErrorModal(true);
+            }}
+            style={{ cursor: apiOk === false ? "pointer" : "default" }}
+            title={apiOk === false ? "Click to open Connection Diagnostics" : undefined}
+          >
             <span className={`conn-dot ${apiOk === true ? "alive" : apiOk === false ? "error" : ""}`} />
             <span>
-              {apiOk === true ? "LiveREST + WS" : apiOk === false ? "API offline" : "Connecting…"}
+              {apiOk === true ? "LiveREST + WS" : apiOk === false ? "API offline (Inspect)" : "Connecting…"}
             </span>
           </div>
         </div>
@@ -66,6 +89,19 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <main className="main">
         {children}
       </main>
+
+      {/* ── Network & Server Connection Error Modal ── */}
+      <ConnectionErrorModal
+        apiBase={API}
+        isOpen={showErrorModal}
+        onRetry={() => {
+          checkHealth();
+        }}
+        onDismiss={() => {
+          setShowErrorModal(false);
+          setHasDismissed(true);
+        }}
+      />
     </div>
   );
 }

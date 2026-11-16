@@ -17,23 +17,25 @@ what the project actually does and how each piece works.
 | Python | 3.11+ | Predictor service | `python --version` |
 | JavaFX | 21.0.2 | Desktop GUI (bundled via Maven) | Included in pom.xml |
 
-## 🚀 Quick Start (One Command)
+## 🚀 Quick Start & Topology Guides
+
+For in-depth guides covering all deployment topologies (Single Laptop, Local Hotspot Wi-Fi, Internet/WAN through CGNAT, Desktop UI, and Docker Virtual Laptops), see **[DEPLOYMENT.md](DEPLOYMENT.md)**.
+For chaos engineering benchmarks and IEEE Section VI reproducibility, see **[BENCHMARKS.md](BENCHMARKS.md)**.
 
 ```bash
 # Clone repository
-git clone https://github.com/YOUR_USERNAME/next-gen-control-plane.git
+git clone https://github.com/next-gen-computing/next-gen-control-plane.git
 cd next-gen-control-plane
 
-# Start everything (Docker mode on server laptop)
-docker compose up --build
-
+# Start full-stack with PostgreSQL, Spring Boot gRPC, Next.js UI, and Prometheus
+docker compose -f docker-compose.full-stack.yml up -d --build
 ```
 
 This will:
 1. Build Java fat JAR (ControlPlane + NodeAgent) via Maven
 2. Build Python predictor with gRPC stubs
 3. Start the control plane, predictor, and Prometheus on `nextgen-net` Docker network
-4. Dashboard API (JSON) available at http://localhost:8085/api/nodes
+4. Web Dashboard available at http://localhost:8080/ (and Node JSON API at http://localhost:8085/api/nodes)
 
 ## 🖥️ Desktop Application
 
@@ -67,20 +69,26 @@ one-time recovery codes) and a Docker-Desktop-style sidebar/topbar layout with d
 
 #### Option 1: Maven JavaFX Plugin (Recommended for Development)
 
-```bash
-#on node laptop
-cd desktop-ui
-mvn clean compile
-mvn javafx:run
-```
-
-#### Option 2: Fat JAR (Recommended for Production)
+Always run from the repository root directory (where the parent `pom.xml` lives) so Maven can build and resolve the internal `control-plane` dependency:
 
 ```bash
-cd desktop-ui
-mvn clean package -DskipTests
-java -jar target/desktop-ui-1.0-SNAPSHOT.jar
+# Build the project dependencies from root
+mvn clean install -DskipTests
+
+# Launch the Desktop UI via JavaFX plugin
+mvn -pl desktop-ui javafx:run
 ```
+
+*Note: If you only want to compile desktop-ui and its upstream dependencies, use `mvn clean compile -pl desktop-ui -am` (`-am` = also-make).*
+
+#### Option 2: Fat JAR (Standalone Desktop App)
+
+From the repository root:
+```bash
+# 📍 Directory: next-gen-control-plane (root)
+java -jar desktop-ui/target/desktop-ui-1.0-SNAPSHOT.jar
+```
+*(Or if inside `desktop-ui/`, run `java -jar target/desktop-ui-1.0-SNAPSHOT.jar`).*
 
 ### Desktop App Features
 
@@ -103,34 +111,47 @@ data. No LSTM weights are bundled, so load forecasts remain honestly untrained u
 
 ## 🔧 Local Development (Without Docker)
 
-### Step 1: Build Java Project
+> [!IMPORTANT]
+> **Working Directory Convention**: Unless explicitly stated otherwise, **ALL commands must be executed from the repository root** (`next-gen-control-plane/` where the parent `pom.xml` lives).
+> If your terminal prompt is currently inside a subfolder (such as `java-control-plane` or `desktop-ui`), run `cd ..` to return to the root first.
+
+### Step 1: Build the Java Project from Repository Root
 
 ```bash
-cd java-control-plane
-mvn clean package -DskipTests
+# 📍 Directory: next-gen-control-plane (root)
+mvn clean install -DskipTests
 ```
+*This compiles all modules (`java-control-plane`, `desktop-ui`, `cli`) and builds the shaded fat JARs in their respective `target/` directories.*
 
 ### Step 2: Start ControlPlane Server
 
+From the repository root, run the shaded server fat JAR (`control-plane-1.0-SNAPSHOT-all.jar`):
+
 **PowerShell (Windows):**
 ```powershell
-cd java-control-plane
-$env:ROLE="server"; $env:PREDICTOR_HOST="localhost"; 
-java -jar target/control-plane-1.0-SNAPSHOT-all.jar
+# 📍 Directory: next-gen-control-plane (root)
+$env:ROLE = "server"
+$env:TLS_ENABLED = "false"
+$env:SPRING_PROFILES_ACTIVE = "dev"
+java -jar java-control-plane/target/control-plane-1.0-SNAPSHOT-all.jar
 ```
 
-**Bash (Linux/Mac):**
+**Bash (Linux / macOS):**
 ```bash
-cd java-control-plane
-ROLE=server PREDICTOR_HOST=localhost java -jar target/control-plane-1.0-SNAPSHOT-all.jar
+# 📍 Directory: next-gen-control-plane (root)
+ROLE=server TLS_ENABLED=false SPRING_PROFILES_ACTIVE=dev \
+java -jar java-control-plane/target/control-plane-1.0-SNAPSHOT-all.jar
 ```
+
+*(Note: If you are already inside the `java-control-plane/` directory, the relative path to the JAR is `target/control-plane-1.0-SNAPSHOT-all.jar` instead).*
 
 **Expected output:**
 ```
 === Next-Gen Control Plane | Role: SERVER ===
 📊 Prometheus metrics server started on port 9090
-📡 Dashboard on http://localhost:8085
-📊 API endpoint: http://localhost:8085/api/nodes
+💻 Web Dashboard:   http://localhost:8080/ (also on http://localhost:8085/)
+🌍 REST API:        http://localhost:8080/api/v1
+📊 Node JSON API:   http://localhost:8085/api/nodes
 🚀 ControlPlane gRPC server RUNNING on port 50051
 ```
 
@@ -349,7 +370,9 @@ python predictor_service.py
 
 | Service | URL | Purpose |
 |---------|-----|---------|
-| Dashboard API | http://localhost:8085/api/nodes | JSON node data (no bundled HTML frontend — the desktop app is the maintained UI) |
+| Web Dashboard | http://localhost:8080/ | Full-screen interactive 3D cluster dashboard (also auto-redirects from port 8085) |
+| REST & WebSocket API | http://localhost:8080/api/v1 | Spring Boot 3 REST endpoints & STOMP WebSocket |
+| Node JSON API | http://localhost:8085/api/nodes | Lightweight JSON node registry |
 | ControlPlane gRPC | localhost:50051 | Node registration & heartbeats |
 | ControlPlane Metrics | http://localhost:9090/metrics | Prometheus |
 | Predictor gRPC | localhost:50052 | ML predictions |
@@ -490,7 +513,7 @@ by the JVM suite's real in-process integration tests (`KillAndReconnectIntegrati
 
 - [ ] `mvn clean compile` produces BUILD SUCCESS with no errors
 - [ ] Desktop GUI launches with `mvn javafx:run` and its Nodes view shows individual node details
-- [ ] `http://localhost:8085/api/nodes` returns real JSON (no bundled HTML frontend lives here anymore)
+- [ ] `http://localhost:8080/` loads the interactive 3D web dashboard (and `http://localhost:8085/api/nodes` returns real node JSON)
 - [ ] All expected nodes registered (check logs)
 - [ ] Heartbeats flowing every 2 seconds
 - [ ] Prometheus metrics accessible on both the control plane's and each node's metrics port

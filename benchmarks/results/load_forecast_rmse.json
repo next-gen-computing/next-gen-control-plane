@@ -1,0 +1,51 @@
+{
+  "benchmark": "Telemetry Load Forecasting Evaluation (5-Minute Horizon)",
+  "timestamp_epoch_ms": 1794764113036,
+  "horizon_steps": 5,
+  "sample_points": 3000,
+  "cpu_utilization_metrics": {
+    "persistence_baseline": {
+      "rmse": 7.554,
+      "mae": 4.945
+    },
+    "moving_average_5": {
+      "rmse": 5.377,
+      "mae": 3.599
+    },
+    "exponential_smoothing": {
+      "rmse": 7.358,
+      "mae": 4.574
+    },
+    "lstm_neural_forecaster": {
+      "rmse": 3.942,
+      "mae": 2.706,
+      "rmse_reduction_vs_naive_pct": 47.8
+    }
+  },
+  "memory_utilization_metrics": {
+    "persistence_baseline": {
+      "rmse": 2.571,
+      "mae": 2.049
+    },
+    "moving_average_5": {
+      "rmse": 1.991,
+      "mae": 1.576
+    },
+    "exponential_smoothing": {
+      "rmse": 2.035,
+      "mae": 1.615
+    },
+    "lstm_neural_forecaster": {
+      "rmse": 1.857,
+      "mae": 1.486,
+      "rmse_reduction_vs_naive_pct": 27.8
+    }
+  },
+  "paper_table_comparison": {
+    "metric": "RMSE (% utilization)",
+    "cpu_naive_rmse": 7.554,
+    "cpu_lstm_rmse": 3.942,
+    "mem_naive_rmse": 2.571,
+    "mem_lstm_rmse": 1.857
+  }
+}
