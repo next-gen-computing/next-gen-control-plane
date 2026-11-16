@@ -17,9 +17,9 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Controller dedicated to serving the single-page cluster dashboard.
- * Loads static/index.html directly from classpath into memory at startup
- * and serves it on all dashboard routes.
+ * Controller dedicated to serving the single-page cluster dashboard and ambient visualizers.
+ * Loads static/index.html and static/glyph-animals.html directly from classpath into memory at startup
+ * and serves them on all corresponding web routes.
  *
  * <p>Serving directly as bytes bypasses Spring MVC view resolution and forward
  * mechanics, preventing circular view path loops (status 500 Whitelabel errors).
@@ -29,23 +29,29 @@ public class DashboardWebController {
 
     private static final Logger LOG = LoggerFactory.getLogger(DashboardWebController.class);
     private final byte[] indexHtmlBytes;
+    private final byte[] animalsHtmlBytes;
 
     public DashboardWebController() {
-        byte[] bytes = new byte[0];
+        this.indexHtmlBytes = loadClasspathResource("static/index.html", "Dashboard index.html");
+        this.animalsHtmlBytes = loadClasspathResource("static/glyph-animals.html", "Glyph Animals ambient canvas");
+    }
+
+    private static byte[] loadClasspathResource(String path, String description) {
         try {
-            ClassPathResource resource = new ClassPathResource("static/index.html");
+            ClassPathResource resource = new ClassPathResource(path);
             if (resource.exists()) {
                 try (InputStream is = resource.getInputStream()) {
-                    bytes = StreamUtils.copyToByteArray(is);
-                    LOG.info("✅ Loaded dashboard index.html into memory ({} bytes)", bytes.length);
+                    byte[] bytes = StreamUtils.copyToByteArray(is);
+                    LOG.info("✅ Loaded {} into memory ({} bytes)", description, bytes.length);
+                    return bytes;
                 }
             } else {
-                LOG.warn("⚠️ static/index.html not found on classpath!");
+                LOG.warn("⚠️ {} not found on classpath at {}", description, path);
             }
         } catch (IOException e) {
-            LOG.error("Failed to read static/index.html from classpath", e);
+            LOG.error("Failed to read {} from classpath", description, e);
         }
-        this.indexHtmlBytes = bytes;
+        return new byte[0];
     }
 
     @GetMapping(value = {"/", "/index", "/index.html", "/dashboard", "/dashboard/**", "/ui", "/ui/**"}, produces = MediaType.TEXT_HTML_VALUE)
@@ -61,5 +67,18 @@ public class DashboardWebController {
         headers.setCacheControl("no-cache, no-store, must-revalidate");
         return new ResponseEntity<>(indexHtmlBytes, headers, HttpStatus.OK);
     }
-}
 
+    @GetMapping(value = {"/animals", "/animals.html", "/glyph-animals", "/glyph-animals.html"}, produces = MediaType.TEXT_HTML_VALUE)
+    @ResponseBody
+    public ResponseEntity<byte[]> getGlyphAnimals() {
+        if (animalsHtmlBytes.length == 0) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .contentType(MediaType.TEXT_HTML)
+                    .body("<h1>404 — Glyph Animals canvas not found</h1>".getBytes(StandardCharsets.UTF_8));
+        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(new MediaType("text", "html", StandardCharsets.UTF_8));
+        headers.setCacheControl("no-cache, no-store, must-revalidate");
+        return new ResponseEntity<>(animalsHtmlBytes, headers, HttpStatus.OK);
+    }
+}
