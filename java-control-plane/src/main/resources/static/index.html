@@ -550,6 +550,24 @@
   <!-- Main Content Dashboard -->
   <main>
 
+    <!-- Real-time Inbound Node Join Request Banner (Quick Share / WAN) -->
+    <div id="joinRequestAlertBanner" style="display: none; margin-bottom: 24px; padding: 16px 20px; border-radius: 14px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(56, 189, 248, 0.15)); border: 1px solid rgba(52, 211, 153, 0.4); box-shadow: 0 10px 25px rgba(0,0,0,0.5); align-items: center; justify-content: space-between; gap: 16px;">
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <span style="font-size: 26px;">📡</span>
+        <div>
+          <div style="font-weight: 700; color: #f8fafc; font-size: 0.95rem; display: flex; align-items: center; gap: 8px;">
+            <span>Nearby Node Detected</span>
+            <span id="bannerRequestBadge" style="font-size: 0.7rem; padding: 2px 7px; border-radius: 4px; background: rgba(52, 211, 153, 0.2); color: #34d399; font-weight: 600;">PENDING APPROVAL</span>
+          </div>
+          <div style="font-size: 0.78rem; color: #94a3b8;" id="bannerRequestSub">IP: 192.168.1.50 &bull; Hostname: laptop-worker-1 &bull; 8 Cores &bull; 16.0 GB RAM</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px;" id="bannerActionBtns">
+        <button id="bannerApproveBtn" class="btn btn-primary" style="background: linear-gradient(135deg, #10b981, #059669); border-color: #34d399; font-weight: 700; padding: 7px 16px;">✅ Approve &amp; Join</button>
+        <button id="bannerRejectBtn" class="btn btn-danger" style="padding: 7px 14px;">Decline</button>
+      </div>
+    </div>
+
     <!-- KPI Summary Row -->
     <section class="kpi-grid">
       <div class="kpi-card">
@@ -844,7 +862,7 @@
           <button id="closeWorkerModalBtn" class="btn" style="padding: 6px 10px; border-radius: 50%; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #94a3b8;">×</button>
         </div>
 
-        <div style="background: #060910; box-shadow: inset 4px 4px 10px rgba(0,0,0,0.8), inset -3px -3px 7px rgba(255,255,255,0.03); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 14px; padding: 18px; margin-bottom: 20px; font-family: var(--font-mono); font-size: 0.82rem;">
+        <div style="background: #060910; box-shadow: inset 4px 4px 10px rgba(0,0,0,0.8), inset -3px -3px 7px rgba(255,255,255,0.03); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 14px; padding: 18px; margin-bottom: 16px; font-family: var(--font-mono); font-size: 0.82rem;">
           <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px; margin-bottom: 8px;">
             <span style="color: #94a3b8;">Server Host IP:</span>
             <span id="modalServerIp" style="color: #38bdf8; font-weight: 700;">127.0.0.1</span>
@@ -860,6 +878,29 @@
           <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px;">
             <span style="color: #94a3b8;">Active Nodes:</span>
             <span id="modalActiveNodes" style="color: #f8fafc; font-weight: 600;">0 ALIVE</span>
+          </div>
+        </div>
+
+        <!-- Quick Share LAN Beacon Status -->
+        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(52, 211, 153, 0.3); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #34d399; box-shadow: 0 0 10px #34d399;"></span>
+            <div>
+              <div style="font-size: 0.82rem; font-weight: 700; color: #34d399;">📡 Quick Share LAN Beacon Broadcasting</div>
+              <div style="font-size: 0.72rem; color: #94a3b8;">Port UDP 50055 &bull; Nearby laptops running Desktop UI / Node mode auto-detect this server.</div>
+            </div>
+          </div>
+          <span class="code-badge" style="font-size: 0.7rem; color: #34d399;">ACTIVE</span>
+        </div>
+
+        <!-- Inbound Join Requests container -->
+        <div id="modalPendingRequestsSection" style="margin-bottom: 20px;">
+          <h4 style="font-size: 0.85rem; color: #e2e8f0; margin-bottom: 8px; font-weight: 600; display: flex; align-items: center; justify-content: space-between;">
+            <span>Nearby &amp; WAN Join Requests:</span>
+            <span id="modalRequestCountBadge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 10px; background: rgba(56, 189, 248, 0.2); color: #38bdf8;">0 Pending</span>
+          </h4>
+          <div id="modalInboundRequestsBox" style="background: #05080e; box-shadow: inset 3px 3px 8px rgba(0,0,0,0.85); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 12px; max-height: 140px; overflow-y: auto; font-size: 0.78rem; color: #94a3b8;">
+            <div style="text-align: center; padding: 8px; color: #64748b;">No pending join requests. Other laptops in 'Node' mode will appear here instantly.</div>
           </div>
         </div>
 
@@ -2112,6 +2153,120 @@
           setTimeout(() => { event.target.textContent = original; }, 2000);
         });
       };
+
+      // ── Real-time Quick Share & Inbound Join Requests ──────────
+      function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      let currentPendingRequestId = null;
+
+      async function pollJoinRequests() {
+        try {
+          const res = await fetch('/api/v1/discovery/pending-requests');
+          if (!res.ok) return;
+          const requests = await res.json();
+          renderJoinRequests(requests);
+        } catch (e) {
+          // silent fail
+        }
+      }
+
+      function renderJoinRequests(requests) {
+        const banner = document.getElementById('joinRequestAlertBanner');
+        const modalBox = document.getElementById('modalInboundRequestsBox');
+        const countBadge = document.getElementById('modalRequestCountBadge');
+
+        if (!requests || requests.length === 0) {
+          if (banner) banner.style.display = 'none';
+          currentPendingRequestId = null;
+          if (modalBox) {
+            modalBox.innerHTML = '<div style="text-align: center; padding: 8px; color: #64748b;">No pending join requests. Other laptops in \'Node\' mode will appear here instantly.</div>';
+          }
+          if (countBadge) countBadge.textContent = '0 Pending';
+          return;
+        }
+
+        if (countBadge) countBadge.textContent = requests.length + ' Pending';
+
+        // Show topmost request in alert banner
+        const topReq = requests[0];
+        currentPendingRequestId = topReq.nodeId;
+        if (banner) {
+          banner.style.display = 'flex';
+          const sub = document.getElementById('bannerRequestSub');
+          if (sub) {
+            const cores = topReq.cpuCores || 4;
+            const ram = topReq.ramGb ? Number(topReq.ramGb).toFixed(1) : '8.0';
+            sub.innerHTML = `IP: <strong>${escapeHtml(topReq.ipAddress || 'unknown')}</strong> &bull; Hostname: <strong>${escapeHtml(topReq.hostname || 'Worker')}</strong> &bull; ${cores} Cores &bull; ${ram} GB RAM`;
+          }
+        }
+
+        // Render list in modal
+        if (modalBox) {
+          modalBox.innerHTML = requests.map(r => {
+            const cores = r.cpuCores || 4;
+            const ram = r.ramGb ? Number(r.ramGb).toFixed(1) : '8.0';
+            const shortId = escapeHtml(r.nodeId ? r.nodeId.substring(0, 8) : 'node');
+            return `
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 8px; margin-bottom: 6px;">
+                <div>
+                  <div style="color: #f8fafc; font-weight: 600;">${escapeHtml(r.hostname || 'Worker Node')} <span style="font-size: 0.7rem; color: #38bdf8;">(${escapeHtml(r.ipAddress || '')})</span></div>
+                  <div style="font-size: 0.72rem; color: #64748b;">Node ID: ${shortId}... &bull; ${cores} Cores &bull; ${ram} GB</div>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                  <button class="btn btn-sm btn-primary" onclick="window.approveJoinRequest('${r.nodeId}')">Approve</button>
+                  <button class="btn btn-sm btn-danger" onclick="window.rejectJoinRequest('${r.nodeId}')">Decline</button>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+
+      window.approveJoinRequest = async function(nodeId) {
+        try {
+          const res = await fetch('/api/v1/discovery/approve-request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nodeId: nodeId })
+          });
+          if (res.ok) {
+            logTerminal(`[QuickShare] Approved node ${nodeId} to join cluster.`);
+            pollJoinRequests();
+            fetchNodes();
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      };
+
+      window.rejectJoinRequest = async function(nodeId) {
+        try {
+          const res = await fetch('/api/v1/discovery/reject-request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nodeId: nodeId })
+          });
+          if (res.ok) {
+            logTerminal(`[QuickShare] Rejected join request for node ${nodeId}.`);
+            pollJoinRequests();
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      };
+
+      document.getElementById('bannerApproveBtn')?.addEventListener('click', () => {
+        if (currentPendingRequestId) window.approveJoinRequest(currentPendingRequestId);
+      });
+      document.getElementById('bannerRejectBtn')?.addEventListener('click', () => {
+        if (currentPendingRequestId) window.rejectJoinRequest(currentPendingRequestId);
+      });
+
+      pollJoinRequests();
+      setInterval(pollJoinRequests, 3000);
 
     })();
   </script>

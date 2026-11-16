@@ -410,8 +410,14 @@ public class ControlPlaneServer {
         com.nextgen.controlplane.spring.RegistryBeans.setRegistries(
                 registry, taskRegistry, jobRegistry);
         com.nextgen.controlplane.spring.ControlPlaneSpringApp.startSpringContext(new String[0]);
+
+        // Start LAN discovery beacon on UDP port 50055 for Google Quick Share / AirDrop nearby discovery
+        com.nextgen.controlplane.discovery.LanDiscoveryBeacon.getInstance().start(
+                grpcPort, 8080, EnvConfig.stringValue("CLUSTER_NAME", "Next-Gen Control Plane"));
+
         LOG.info("  💻 Web Dashboard:   http://localhost:8080/ (also on http://localhost:{}/)", dashboardPort);
         LOG.info("  🌍 REST API:        http://localhost:8080/api/v1");
+        LOG.info("  📡 LAN Discovery:   UDP 50055 (Quick Share beacon active)");
         LOG.info("  🔌 WebSocket (STOMP) ws://localhost:8080/ws");
         LOG.info("  📊 Node JSON API:   http://localhost:{}/api/nodes", dashboardPort);
         LOG.info("══════════════════════════════════════════════════");
@@ -419,6 +425,7 @@ public class ControlPlaneServer {
         // Graceful shutdown hook
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             LOG.info("Shutting down ControlPlane server...");
+            com.nextgen.controlplane.discovery.LanDiscoveryBeacon.getInstance().stop();
             grpcServer.shutdown();
             if (raft.consensusServer() != null) {
                 raft.consensusServer().shutdown();
