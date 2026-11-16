@@ -8,8 +8,13 @@
   <style>
     :root {
       --bg-dark: #070a13;
-      --bg-card: rgba(13, 20, 36, 0.78);
-      --bg-card-hover: rgba(20, 32, 58, 0.9);
+      --bg-card: linear-gradient(145deg, rgba(16, 24, 43, 0.85), rgba(9, 14, 26, 0.9));
+      --bg-card-hover: linear-gradient(145deg, rgba(22, 34, 58, 0.92), rgba(12, 18, 34, 0.95));
+      --card-shadow: 8px 8px 20px rgba(0, 0, 0, 0.65), -6px -6px 16px rgba(255, 255, 255, 0.035);
+      --card-shadow-hover: 12px 12px 28px rgba(0, 0, 0, 0.75), -8px -8px 20px rgba(255, 255, 255, 0.05);
+      --inset-shadow: inset 4px 4px 9px rgba(0, 0, 0, 0.7), inset -3px -3px 7px rgba(255, 255, 255, 0.035);
+      --btn-shadow: 4px 4px 10px rgba(0, 0, 0, 0.5), -3px -3px 8px rgba(255, 255, 255, 0.04);
+      --btn-active: inset 3px 3px 6px rgba(0, 0, 0, 0.7), inset -2px -2px 5px rgba(255, 255, 255, 0.05);
       --border-color: rgba(0, 212, 255, 0.18);
       --border-glow: rgba(0, 212, 255, 0.45);
       --cyan: #00d4ff;
@@ -103,10 +108,11 @@
     }
     .kpi-card {
       background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 12px; padding: 18px 20px;
-      backdrop-filter: blur(10px);
-      transition: transform 0.2s, border-color 0.2s;
+      box-shadow: var(--card-shadow);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px; padding: 20px 22px;
+      backdrop-filter: blur(12px);
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s;
       position: relative; overflow: hidden;
     }
     .kpi-card::before {
@@ -114,7 +120,11 @@
       background: linear-gradient(90deg, transparent, var(--cyan), transparent);
       opacity: 0.4;
     }
-    .kpi-card:hover { transform: translateY(-2px); border-color: var(--border-glow); }
+    .kpi-card:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--card-shadow-hover);
+      border-color: var(--border-glow);
+    }
     .kpi-title {
       font-size: 0.8rem; color: var(--text-muted);
       text-transform: uppercase; letter-spacing: 0.8px;
@@ -136,8 +146,9 @@
 
     .canvas-panel {
       background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 14px; padding: 20px;
+      box-shadow: var(--card-shadow);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px; padding: 20px;
       display: flex; flex-direction: column;
       position: relative;
     }
@@ -152,20 +163,44 @@
     .panel-controls { display: flex; align-items: center; gap: 10px; }
 
     .btn {
-      background: rgba(0, 212, 255, 0.1);
-      border: 1px solid var(--border-color);
-      color: var(--cyan); padding: 6px 14px;
-      border-radius: 6px; font-size: 0.8rem; font-weight: 600;
-      cursor: pointer; transition: all 0.2s;
+      background: linear-gradient(145deg, rgba(20, 30, 52, 0.9), rgba(12, 18, 32, 0.9));
+      box-shadow: var(--btn-shadow);
+      border: 1px solid rgba(0, 212, 255, 0.22);
+      color: var(--cyan); padding: 8px 16px;
+      border-radius: 10px; font-size: 0.82rem; font-weight: 600;
+      cursor: pointer; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
       display: inline-flex; align-items: center; gap: 6px;
     }
     .btn:hover {
-      background: rgba(0, 212, 255, 0.22);
+      background: linear-gradient(145deg, rgba(28, 42, 72, 0.95), rgba(16, 24, 44, 0.95));
       border-color: var(--cyan);
-      box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
+      box-shadow: 6px 6px 16px rgba(0, 0, 0, 0.6), -4px -4px 12px rgba(255, 255, 255, 0.05);
+      transform: translateY(-1px);
     }
-    .btn-primary { background: var(--cyan); color: #070a13; border: none; }
-    .btn-primary:hover { background: #33ddff; box-shadow: 0 0 14px rgba(0, 212, 255, 0.6); }
+    .btn:active {
+      box-shadow: var(--btn-active);
+      transform: translateY(1px);
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #00d4ff, #0077ff);
+      color: #070a13;
+      border: none;
+      box-shadow: 0 4px 16px rgba(0, 212, 255, 0.35);
+    }
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #33ddff, #3388ff);
+      box-shadow: 0 6px 22px rgba(0, 212, 255, 0.55);
+    }
+    .btn-connect-laptops {
+      background: linear-gradient(135deg, rgba(0, 255, 136, 0.15), rgba(0, 212, 255, 0.15));
+      border: 1px solid rgba(0, 255, 136, 0.4);
+      color: var(--green);
+      font-weight: 700;
+    }
+    .btn-connect-laptops:hover {
+      border-color: var(--green);
+      box-shadow: 0 0 16px rgba(0, 255, 136, 0.35);
+    }
 
     .btn-warn { background: rgba(255, 183, 0, 0.15); border-color: rgba(255, 183, 0, 0.4); color: var(--amber); }
     .btn-warn:hover { background: rgba(255, 183, 0, 0.3); }
@@ -316,6 +351,10 @@
         <option value="single">Preset: Single Machine (Same Laptop)</option>
         <option value="cluster">Preset: Distributed Cluster (Multi-Laptop)</option>
       </select>
+
+      <button id="connectWorkersBtn" class="btn btn-connect-laptops" title="Connect other physical laptops as worker nodes">
+        <span>🔗 Connect Worker Laptops</span>
+      </button>
 
       <button id="toggleDeadNodeBtn" class="btn btn-danger" title="Simulate Node Kill/Revive">
         <span>⚠ Simulate Node Crash</span>
@@ -614,6 +653,58 @@
       </div>
     </section>
 
+    <!-- Neumorphic Modal: Connect Worker Laptops -->
+    <div id="workerConnectModal" style="display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(5, 8, 15, 0.85); backdrop-filter: blur(14px); align-items: center; justify-content: center; padding: 20px;">
+      <div style="width: 100%; max-width: 650px; background: linear-gradient(145deg, #10182b, #090e1a); box-shadow: 14px 14px 32px rgba(0,0,0,0.7), -10px -10px 26px rgba(255,255,255,0.03); border: 1px solid rgba(0, 212, 255, 0.25); border-radius: 24px; padding: 32px; position: relative;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 24px;">🔗</span>
+            <div>
+              <h2 style="font-size: 1.25rem; font-weight: 700; color: #f0f6fc;">Connect Worker Laptops</h2>
+              <p style="font-size: 0.78rem; color: #8b9bb4;">Edge Compute Node Joining Instructions</p>
+            </div>
+          </div>
+          <button id="closeWorkerModalBtn" style="background: transparent; border: none; color: #8b9bb4; font-size: 24px; cursor: pointer; padding: 4px 8px;">×</button>
+        </div>
+
+        <div style="background: #060912; box-shadow: inset 4px 4px 8px rgba(0,0,0,0.7), inset -3px -3px 6px rgba(255,255,255,0.03); border: 1px solid rgba(0, 212, 255, 0.12); border-radius: 14px; padding: 18px; margin-bottom: 20px; font-family: var(--font-mono); font-size: 0.82rem;">
+          <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px; margin-bottom: 8px;">
+            <span style="color: #8b9bb4;">Server Host IP:</span>
+            <span id="modalServerIp" style="color: #00d4ff; font-weight: 700;">127.0.0.1</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px; margin-bottom: 8px;">
+            <span style="color: #8b9bb4;">gRPC Port:</span>
+            <span style="color: #00ff88;">50051 (Outbound only)</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px; margin-bottom: 8px;">
+            <span style="color: #8b9bb4;">Web Dashboard:</span>
+            <span id="modalWebUrl" style="color: #38bdf8;">http://localhost:8080/</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px;">
+            <span style="color: #8b9bb4;">Active Nodes:</span>
+            <span id="modalActiveNodes" style="color: #f0f6fc;">0 ALIVE</span>
+          </div>
+        </div>
+
+        <h4 style="font-size: 0.85rem; color: #e8edf5; margin-bottom: 10px;">Select Join Command for Other Laptop:</h4>
+        <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px;">
+          <div style="background: #04060c; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <span id="modalPsCmd" style="font-family: var(--font-mono); font-size: 0.76rem; color: #00ff88; overflow-x: auto; white-space: nowrap;">$env:ROLE="node"; $env:SERVER_HOST="127.0.0.1"; java -jar control-plane-1.0-SNAPSHOT-all.jar</span>
+            <button class="btn btn-sm" onclick="copyModalText('modalPsCmd')">Copy PS</button>
+          </div>
+          <div style="background: #04060c; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <span id="modalBashCmd" style="font-family: var(--font-mono); font-size: 0.76rem; color: #38bdf8; overflow-x: auto; white-space: nowrap;">ROLE=node SERVER_HOST=127.0.0.1 java -jar control-plane-1.0-SNAPSHOT-all.jar</span>
+            <button class="btn btn-sm" onclick="copyModalText('modalBashCmd')">Copy Bash</button>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 0.75rem; color: #8b9bb4;">Workers connect over Wi-Fi/LAN without inbound firewall ports.</span>
+          <button id="modalDoneBtn" class="btn btn-primary">Done</button>
+        </div>
+      </div>
+    </div>
+
   </main>
 
   <!-- 3D Cluster Visualizer Script -->
@@ -778,7 +869,18 @@
         }
 
         if (topologyData.server && topologyData.server.primaryIp) {
-          joinInput.value = `java -jar desktop-ui.jar --role=node --control-plane=${topologyData.server.primaryIp}:50051`;
+          const ip = topologyData.server.primaryIp;
+          joinInput.value = `java -jar desktop-ui.jar --role=node --control-plane=${ip}:50051`;
+          const modalIp = document.getElementById('modalServerIp');
+          if (modalIp) modalIp.textContent = ip;
+          const modalWeb = document.getElementById('modalWebUrl');
+          if (modalWeb) modalWeb.textContent = `http://${ip}:8080/`;
+          const modalPs = document.getElementById('modalPsCmd');
+          if (modalPs) modalPs.textContent = `$env:ROLE="node"; $env:SERVER_HOST="${ip}"; java -jar control-plane-1.0-SNAPSHOT-all.jar`;
+          const modalBash = document.getElementById('modalBashCmd');
+          if (modalBash) modalBash.textContent = `ROLE=node SERVER_HOST=${ip} java -jar control-plane-1.0-SNAPSHOT-all.jar`;
+          const modalNodes = document.getElementById('modalActiveNodes');
+          if (modalNodes) modalNodes.textContent = `${totalNodes} ALIVE`;
         }
       }
 
@@ -1802,7 +1904,40 @@
       setInterval(fetchMetrics, 2500);
       setInterval(fetchNodes, 2500);
 
+      // Connect Worker Modal wire-up
+      const connectBtn = document.getElementById('connectWorkersBtn');
+      const workerModal = document.getElementById('workerConnectModal');
+      const closeWorkerModalBtn = document.getElementById('closeWorkerModalBtn');
+      const modalDoneBtn = document.getElementById('modalDoneBtn');
+
+      if (connectBtn && workerModal) {
+        connectBtn.addEventListener('click', () => {
+          workerModal.style.display = 'flex';
+        });
+      }
+      if (closeWorkerModalBtn && workerModal) {
+        closeWorkerModalBtn.addEventListener('click', () => {
+          workerModal.style.display = 'none';
+        });
+      }
+      if (modalDoneBtn && workerModal) {
+        modalDoneBtn.addEventListener('click', () => {
+          workerModal.style.display = 'none';
+        });
+      }
+
+      window.copyModalText = function(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        navigator.clipboard.writeText(el.innerText).then(() => {
+          const original = event.target.textContent;
+          event.target.textContent = 'Copied!';
+          setTimeout(() => { event.target.textContent = original; }, 2000);
+        });
+      };
+
     })();
   </script>
+  <script src="/js/ambient-3d-animals.js"></script>
 </body>
 </html>

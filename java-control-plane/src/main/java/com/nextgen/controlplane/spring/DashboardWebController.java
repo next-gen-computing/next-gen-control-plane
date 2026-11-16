@@ -30,10 +30,12 @@ public class DashboardWebController {
     private static final Logger LOG = LoggerFactory.getLogger(DashboardWebController.class);
     private final byte[] indexHtmlBytes;
     private final byte[] animalsHtmlBytes;
+    private final byte[] ambient3dJsBytes;
 
     public DashboardWebController() {
         this.indexHtmlBytes = loadClasspathResource("static/index.html", "Dashboard index.html");
         this.animalsHtmlBytes = loadClasspathResource("static/glyph-animals.html", "Glyph Animals ambient canvas");
+        this.ambient3dJsBytes = loadClasspathResource("static/js/ambient-3d-animals.js", "Ambient 3D Fauna JS script");
     }
 
     private static byte[] loadClasspathResource(String path, String description) {
@@ -80,5 +82,19 @@ public class DashboardWebController {
         headers.setContentType(new MediaType("text", "html", StandardCharsets.UTF_8));
         headers.setCacheControl("no-cache, no-store, must-revalidate");
         return new ResponseEntity<>(animalsHtmlBytes, headers, HttpStatus.OK);
+    }
+
+    @GetMapping(value = {"/js/ambient-3d-animals.js", "/ambient-3d-animals.js"}, produces = "application/javascript")
+    @ResponseBody
+    public ResponseEntity<byte[]> getAmbient3dJs() {
+        if (ambient3dJsBytes.length == 0) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .contentType(MediaType.TEXT_PLAIN)
+                    .body("// 404 — ambient-3d-animals.js not found".getBytes(StandardCharsets.UTF_8));
+        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(new MediaType("application", "javascript", StandardCharsets.UTF_8));
+        headers.setCacheControl("public, max-age=3600");
+        return new ResponseEntity<>(ambient3dJsBytes, headers, HttpStatus.OK);
     }
 }

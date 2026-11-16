@@ -247,6 +247,7 @@
                 <groupId>org.xolstice.maven.plugins</groupId>
                 <artifactId>protobuf-maven-plugin</artifactId>
                 <configuration>
+                    <skip>${protobuf.skip}</skip>
                     <protocArtifact>
                         com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}
                     </protocArtifact>

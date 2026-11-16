@@ -98,8 +98,8 @@
 
 .ng-role-card {
     position: relative;
-    background: var(--ng-glass-surface);
-    border: 1px solid var(--ng-glass-border);
+    background: linear-gradient(145deg, rgba(20, 29, 48, 0.88), rgba(11, 17, 30, 0.94));
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: var(--ng-radius-xl);
     padding: var(--ng-space-6);
     cursor: pointer;
@@ -111,13 +111,18 @@
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     box-shadow:
-        0 0 0 1px rgba(0, 212, 255, 0.06) inset,
-        0 24px 48px rgba(0,0,0,0.5),
-        0 0 80px rgba(0, 212, 255, 0.04);
+        8px 8px 24px rgba(0, 0, 0, 0.65),
+        -6px -6px 18px rgba(255, 255, 255, 0.035),
+        0 0 0 1px rgba(0, 212, 255, 0.12) inset;
     transition: transform var(--ng-motion-base) ease,
                 border-color var(--ng-motion-base) ease,
                 box-shadow var(--ng-motion-base) ease;
     overflow: hidden;
+}
+
+.ng-role-card:active {
+    box-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.7), inset -3px -3px 6px rgba(255, 255, 255, 0.04);
+    transform: translateY(1px);
 }
 
 .ng-role-card::after {
@@ -254,7 +259,10 @@
     gap: var(--ng-space-2);
 }
 
-.ng-button:active  { transform: scale(0.97); }
+.ng-button:active  {
+    transform: translateY(1px) scale(0.98);
+    box-shadow: inset 3px 3px 6px rgba(0, 0, 0, 0.7), inset -2px -2px 5px rgba(255, 255, 255, 0.05);
+}
 .ng-button:disabled { opacity: 0.45; cursor: default; pointer-events: none; }
 
 .ng-button-primary {
