@@ -1,16 +1,16 @@
 /**
  * ambient-3d-animals.js — High-Fidelity 3D Ambient Fauna Simulation
  *
- * Renders an ethereal, depth-projected 3D background of vivid polygonal creatures:
- *   1. Cyber Manta Ray (undulating sinusoidal wings, glowing spine, whip-tail)
- *   2. Origami Swift / Geometric Falcon (2-joint articulated wings, 3D banking roll)
- *   3. Deep-Space Leviathan / Cosmic Whale (contoured hull, waving fluke tail, pectoral fins)
- *   4. Prism Dragonfly / Neon Butterfly (dual translucent wings, rapid fluttering, darting)
+ * Renders an ethereal, depth-projected 3D background of vivid, translucent polygonal creatures:
+ *   1. Cyber Manta Ray (celestial cyan/azure translucent wings, bioluminescent spine, whip-tail)
+ *   2. Origami Swift / Geometric Falcon (golden-amber & aurora-rose translucent wings, banking roll)
+ *   3. Deep-Space Leviathan / Cosmic Whale (amethyst-lavender translucent hull, constellation spine)
+ *   4. Prism Dragonfly / Neon Butterfly (dual translucent opal/mint fluttering wings, darting)
  *
- * True 3D projection, directional lighting with normal vectors, depth sorting,
- * and rich mouse interactivity:
+ * True 3D projection, depth sorting, directional lighting, and mouse interactivity:
  *   • Mouse Move: Curious vortex flocking and aerodynamic banking deflection
  *   • Click / Tap: 3D glowing shockwave rings, stardust burst, and startled creature roll
+ *   • Non-intrusive: Soft ethereal transparency (0.38-0.42 opacity) with high contrast against dark neumorphic UI
  */
 (function (global) {
   'use strict';
@@ -74,7 +74,8 @@
       this.canvas.style.height = '100vh';
       this.canvas.style.pointerEvents = 'none';
       this.canvas.style.zIndex = '0';
-      this.canvas.style.opacity = '0.9';
+      // Soft, ethereal, semi-transparent overlay: non-distracting & light
+      this.canvas.style.opacity = '0.40';
 
       const parent = container || document.body;
       parent.insertBefore(this.canvas, parent.firstChild);
@@ -123,14 +124,14 @@
       this.shockwaves.push({
         x: wx, y: wy, z: rand(50, 200),
         r: 10, maxR: rand(240, 360),
-        alpha: 0.95,
-        color: Math.random() > 0.5 ? '#00f0ff' : '#d946ef'
+        alpha: 0.8,
+        color: Math.random() > 0.5 ? '#38bdf8' : '#e879f9'
       });
 
-      // Spawn 18 glowing burst particles
-      for (let i = 0; i < 20; i++) {
+      // Spawn glowing stardust burst particles
+      for (let i = 0; i < 18; i++) {
         const angle = rand(0, PI * 2);
-        const speed = rand(2.5, 9);
+        const speed = rand(2.5, 8);
         this.particles.push({
           x: wx, y: wy, z: rand(50, 200),
           vx: cos(angle) * speed,
@@ -138,12 +139,12 @@
           vz: rand(-3, 3),
           life: 1.0,
           decay: rand(0.015, 0.03),
-          color: Math.random() > 0.4 ? '#00ff88' : '#38bdf8',
-          size: rand(2, 4)
+          color: Math.random() > 0.5 ? '#67e8f9' : '#fbcfe8',
+          size: rand(2, 3.5)
         });
       }
 
-      // Startle nearby creatures!
+      // Startle nearby creatures gently
       this.entities.forEach(ent => {
         const dx = ent.x - wx;
         const dy = ent.y - wy;
@@ -171,12 +172,12 @@
       pill.style.bottom = '18px';
       pill.style.left = '18px';
       pill.style.zIndex = '999';
-      pill.style.background = 'linear-gradient(145deg, #10182b, #090e1a)';
-      pill.style.boxShadow = '5px 5px 12px rgba(0,0,0,0.6), -4px -4px 10px rgba(255,255,255,0.04)';
-      pill.style.border = '1px solid rgba(0, 212, 255, 0.25)';
+      pill.style.background = 'linear-gradient(145deg, #131b2c, #0b101c)';
+      pill.style.boxShadow = '5px 5px 14px rgba(0,0,0,0.65), -3px -3px 10px rgba(255,255,255,0.04)';
+      pill.style.border = '1px solid rgba(56, 189, 248, 0.25)';
       pill.style.borderRadius = '30px';
       pill.style.padding = '6px 14px';
-      pill.style.color = '#7dd3fc';
+      pill.style.color = '#bae6fd';
       pill.style.fontFamily = "'SFMono-Regular', Consolas, Menlo, monospace";
       pill.style.fontSize = '11px';
       pill.style.fontWeight = '600';
@@ -184,21 +185,39 @@
       pill.style.display = 'inline-flex';
       pill.style.alignItems = 'center';
       pill.style.gap = '8px';
-      pill.style.transition = 'all 0.2s ease';
+      pill.style.transition = 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
 
-      pill.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#00ff88;box-shadow:0 0 8px #00ff88"></span><span>3D Fauna: ON</span>`;
+      pill.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#34d399;box-shadow:0 0 8px #34d399"></span><span>3D Fauna: ON</span>`;
+
+      pill.addEventListener('mouseenter', () => {
+        pill.style.transform = 'translateY(-1px)';
+        pill.style.boxShadow = '6px 6px 16px rgba(0,0,0,0.7), -4px -4px 12px rgba(255,255,255,0.06)';
+      });
+      pill.addEventListener('mouseleave', () => {
+        pill.style.transform = 'translateY(0)';
+        pill.style.boxShadow = '5px 5px 14px rgba(0,0,0,0.65), -3px -3px 10px rgba(255,255,255,0.04)';
+      });
+      pill.addEventListener('mousedown', () => {
+        pill.style.transform = 'scale(0.97) translateY(1px)';
+        pill.style.boxShadow = 'inset 3px 3px 6px rgba(0,0,0,0.7), inset -2px -2px 4px rgba(255,255,255,0.04)';
+      });
+      pill.addEventListener('mouseup', () => {
+        pill.style.transform = 'translateY(-1px)';
+      });
 
       pill.addEventListener('click', (e) => {
         e.stopPropagation();
         this.enabled = !this.enabled;
         if (this.enabled) {
           this.canvas.style.display = 'block';
-          pill.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#00ff88;box-shadow:0 0 8px #00ff88"></span><span>3D Fauna: ON</span>`;
-          pill.style.color = '#7dd3fc';
+          pill.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#34d399;box-shadow:0 0 8px #34d399"></span><span>3D Fauna: ON</span>`;
+          pill.style.color = '#bae6fd';
+          pill.style.borderColor = 'rgba(56, 189, 248, 0.25)';
         } else {
           this.canvas.style.display = 'none';
-          pill.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#ef4444;"></span><span>3D Fauna: PAUSED</span>`;
-          pill.style.color = '#8b9bb4';
+          pill.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#f87171;"></span><span>3D Fauna: PAUSED</span>`;
+          pill.style.color = '#94a3b8';
+          pill.style.borderColor = 'rgba(255, 255, 255, 0.08)';
         }
       });
 
@@ -256,15 +275,15 @@
         this.ctx.beginPath();
         this.ctx.arc(px, py, pr, 0, PI * 2);
         this.ctx.strokeStyle = sw.color;
-        this.ctx.globalAlpha = sw.alpha * 0.7;
-        this.ctx.lineWidth = 3 * scale;
+        this.ctx.globalAlpha = sw.alpha * 0.5;
+        this.ctx.lineWidth = 2.5 * scale;
         this.ctx.stroke();
 
         this.ctx.beginPath();
         this.ctx.arc(px, py, pr * 0.85, 0, PI * 2);
         this.ctx.strokeStyle = '#ffffff';
-        this.ctx.globalAlpha = sw.alpha * 0.35;
-        this.ctx.lineWidth = 1.5 * scale;
+        this.ctx.globalAlpha = sw.alpha * 0.25;
+        this.ctx.lineWidth = 1.2 * scale;
         this.ctx.stroke();
         this.ctx.restore();
       }
@@ -291,8 +310,8 @@
         this.ctx.beginPath();
         this.ctx.arc(px, py, Math.max(1, p.size * scale), 0, PI * 2);
         this.ctx.fillStyle = p.color;
-        this.ctx.globalAlpha = p.life * 0.8;
-        this.ctx.shadowBlur = 8;
+        this.ctx.globalAlpha = p.life * 0.65;
+        this.ctx.shadowBlur = 6;
         this.ctx.shadowColor = p.color;
         this.ctx.fill();
         this.ctx.restore();
@@ -360,7 +379,7 @@
     }
   }
 
-  // ─── 1. Cyber Manta Ray ───────────────────────────────────────────────────────
+  // ─── 1. Cyber Manta Ray (Celestial Cyan / Holographic Azure) ──────────────────
   class MantaRay extends Creature {
     constructor() {
       super();
@@ -440,50 +459,61 @@
       ctx.translate(px, py);
       ctx.rotate(this.yaw);
 
-      // Dorsal Body diamond
+      // Dorsal Body dimensions
       const headL = 28 * scale;
       const tailL = -32 * scale;
       const wingR = this.span * scale;
-      const flapY = flap * scale;
 
-      // Draw Left Wing Polygon
+      // Draw Left Wing — Translucent Celestial Cyan
       ctx.beginPath();
       ctx.moveTo(headL, 0);
       ctx.lineTo(4 * scale, -wingR);
       ctx.lineTo(tailL, 0);
       ctx.closePath();
       const gradL = ctx.createLinearGradient(0, -wingR, 0, 0);
-      gradL.addColorStop(0, 'rgba(0, 240, 255, 0.35)');
-      gradL.addColorStop(1, 'rgba(15, 23, 42, 0.7)');
+      gradL.addColorStop(0, 'rgba(56, 189, 248, 0.28)');
+      gradL.addColorStop(0.6, 'rgba(14, 165, 233, 0.12)');
+      gradL.addColorStop(1, 'rgba(56, 189, 248, 0.03)');
       ctx.fillStyle = gradL;
       ctx.fill();
-      ctx.strokeStyle = 'rgba(0, 240, 255, 0.75)';
-      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = 'rgba(125, 211, 252, 0.8)';
+      ctx.lineWidth = 1.1;
       ctx.stroke();
 
-      // Draw Right Wing Polygon
+      // Draw Right Wing — Translucent Electric Violet/Azure
       ctx.beginPath();
       ctx.moveTo(headL, 0);
       ctx.lineTo(4 * scale, wingR);
       ctx.lineTo(tailL, 0);
       ctx.closePath();
       const gradR = ctx.createLinearGradient(0, wingR, 0, 0);
-      gradR.addColorStop(0, 'rgba(168, 85, 247, 0.35)');
-      gradR.addColorStop(1, 'rgba(15, 23, 42, 0.7)');
+      gradR.addColorStop(0, 'rgba(167, 139, 250, 0.28)');
+      gradR.addColorStop(0.6, 'rgba(129, 140, 248, 0.12)');
+      gradR.addColorStop(1, 'rgba(167, 139, 250, 0.03)');
       ctx.fillStyle = gradR;
       ctx.fill();
-      ctx.strokeStyle = 'rgba(168, 85, 247, 0.75)';
-      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = 'rgba(196, 181, 253, 0.8)';
+      ctx.lineWidth = 1.1;
       ctx.stroke();
+
+      // Translucent Center Hull Diamond
+      ctx.beginPath();
+      ctx.moveTo(headL * 0.8, 0);
+      ctx.lineTo(0, -8 * scale);
+      ctx.lineTo(tailL * 0.7, 0);
+      ctx.lineTo(0, 8 * scale);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.fill();
 
       // Bioluminescent central spine
       ctx.beginPath();
       ctx.moveTo(headL, 0);
       ctx.lineTo(tailL, 0);
-      ctx.strokeStyle = '#00ff88';
-      ctx.lineWidth = 2 * scale;
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = '#00ff88';
+      ctx.strokeStyle = '#34d399';
+      ctx.lineWidth = 1.8 * scale;
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = '#34d399';
       ctx.stroke();
 
       // Cephalic horns (mouth fin blades)
@@ -492,8 +522,8 @@
       ctx.lineTo(headL + 12 * scale, -10 * scale);
       ctx.moveTo(headL - 2, 6 * scale);
       ctx.lineTo(headL + 12 * scale, 10 * scale);
-      ctx.strokeStyle = '#00f0ff';
-      ctx.lineWidth = 1.5 * scale;
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.9)';
+      ctx.lineWidth = 1.4 * scale;
       ctx.stroke();
 
       ctx.restore();
@@ -507,14 +537,14 @@
         const pt = this.project(this.tailNodes[i], cx, cy, fov);
         ctx.lineTo(pt.x, pt.y);
       }
-      ctx.strokeStyle = 'rgba(0, 240, 255, 0.55)';
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
       ctx.lineWidth = 1.2 * scale;
       ctx.stroke();
       ctx.restore();
     }
   }
 
-  // ─── 2. Origami Swift / Geometric Falcon ──────────────────────────────────────
+  // ─── 2. Origami Swift / Geometric Falcon (Golden Amber & Rose Quartz) ─────────
   class SwiftBird extends Creature {
     constructor() {
       super();
@@ -542,7 +572,7 @@
           let diff = fleeAngle - this.yaw;
           while (diff < -PI) diff += PI * 2;
           while (diff > PI) diff -= PI * 2;
-          this.yaw += diff * dt * 3.5; // sharp evasive banking
+          this.yaw += diff * dt * 3.5;
         }
       }
 
@@ -577,58 +607,64 @@
       const tail = -16 * scale;
       const bodyW = 5 * scale;
 
-      // Body triangle
+      // Body triangle — Translucent Champagne/Amber
       ctx.beginPath();
       ctx.moveTo(beak, 0);
       ctx.lineTo(-6 * scale, -bodyW);
       ctx.lineTo(tail, 0);
       ctx.lineTo(-6 * scale, bodyW);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(10, 24, 48, 0.85)';
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.18)';
       ctx.fill();
-      ctx.strokeStyle = '#00ff88';
-      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.75)';
+      ctx.lineWidth = 1.1;
       ctx.stroke();
 
-      // Left Articulated Wing
+      // Left Articulated Wing — Translucent Golden Sunset
       const leftTipY = -span * (0.8 + flap * 0.3);
       ctx.beginPath();
       ctx.moveTo(2 * scale, -bodyW);
       ctx.lineTo(-8 * scale, leftTipY);
       ctx.lineTo(-14 * scale, -bodyW * 0.6);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(0, 255, 136, 0.28)';
+      const gradWingL = ctx.createLinearGradient(0, -bodyW, 0, leftTipY);
+      gradWingL.addColorStop(0, 'rgba(251, 191, 36, 0.05)');
+      gradWingL.addColorStop(1, 'rgba(245, 158, 11, 0.28)');
+      ctx.fillStyle = gradWingL;
       ctx.fill();
-      ctx.strokeStyle = '#00ff88';
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.85)';
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      // Right Articulated Wing
+      // Right Articulated Wing — Translucent Aurora Rose
       const rightTipY = span * (0.8 + flap * 0.3);
       ctx.beginPath();
       ctx.moveTo(2 * scale, bodyW);
       ctx.lineTo(-8 * scale, rightTipY);
       ctx.lineTo(-14 * scale, bodyW * 0.6);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(0, 212, 255, 0.28)';
+      const gradWingR = ctx.createLinearGradient(0, bodyW, 0, rightTipY);
+      gradWingR.addColorStop(0, 'rgba(244, 63, 94, 0.05)');
+      gradWingR.addColorStop(1, 'rgba(225, 29, 72, 0.28)');
+      ctx.fillStyle = gradWingR;
       ctx.fill();
-      ctx.strokeStyle = '#00d4ff';
+      ctx.strokeStyle = 'rgba(251, 113, 133, 0.85)';
       ctx.lineWidth = 1;
       ctx.stroke();
 
       // Glowing Beak spark
       ctx.beginPath();
       ctx.arc(beak, 0, 1.8 * scale, 0, PI * 2);
-      ctx.fillStyle = '#fef08a';
+      ctx.fillStyle = '#fffbeb';
       ctx.shadowBlur = 8;
-      ctx.shadowColor = '#fef08a';
+      ctx.shadowColor = '#fbbf24';
       ctx.fill();
 
       ctx.restore();
     }
   }
 
-  // ─── 3. Deep-Space Leviathan / Cosmic Whale ───────────────────────────────────
+  // ─── 3. Deep-Space Leviathan / Cosmic Whale (Amethyst & Astral Violet) ─────────
   class SpaceWhale extends Creature {
     constructor() {
       super();
@@ -673,45 +709,50 @@
       ctx.translate(px, py);
       ctx.rotate(this.yaw);
 
-      // Huge contoured Hull
+      // Translucent Contoured Hull — Amethyst Violet / Starlight
       ctx.beginPath();
       ctx.ellipse(0, 0, len * 0.5, wid * 0.5, 0, 0, PI * 2);
       const grad = ctx.createLinearGradient(-len * 0.5, 0, len * 0.5, 0);
-      grad.addColorStop(0, 'rgba(8, 14, 28, 0.85)');
-      grad.addColorStop(0.5, 'rgba(15, 30, 60, 0.8)');
-      grad.addColorStop(1, 'rgba(8, 14, 28, 0.85)');
+      grad.addColorStop(0, 'rgba(167, 139, 250, 0.10)');
+      grad.addColorStop(0.5, 'rgba(139, 92, 246, 0.24)');
+      grad.addColorStop(1, 'rgba(167, 139, 250, 0.10)');
       ctx.fillStyle = grad;
       ctx.fill();
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
-      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = 'rgba(196, 181, 253, 0.7)';
+      ctx.lineWidth = 1.3;
       ctx.stroke();
 
-      // Ventral ribs
+      // Ventral ribs — Delicate Lavender Soundwaves
       for (let i = -3; i <= 3; i++) {
         const rx = i * (len * 0.1);
         ctx.beginPath();
         ctx.moveTo(rx, -wid * 0.4);
         ctx.lineTo(rx, wid * 0.4);
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.18)';
+        ctx.strokeStyle = 'rgba(216, 180, 254, 0.25)';
+        ctx.lineWidth = 0.9;
         ctx.stroke();
       }
 
-      // Lateral Pectoral Flippers
+      // Lateral Pectoral Flippers — Translucent Celestial Azure
       ctx.beginPath();
       ctx.moveTo(len * 0.1, -wid * 0.45);
       ctx.lineTo(len * 0.2, -wid * 1.1);
       ctx.lineTo(0, -wid * 0.5);
-      ctx.fillStyle = 'rgba(56, 189, 248, 0.3)';
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.22)';
       ctx.fill();
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
+      ctx.stroke();
 
       ctx.beginPath();
       ctx.moveTo(len * 0.1, wid * 0.45);
       ctx.lineTo(len * 0.2, wid * 1.1);
       ctx.lineTo(0, wid * 0.5);
-      ctx.fillStyle = 'rgba(56, 189, 248, 0.3)';
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.22)';
       ctx.fill();
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
+      ctx.stroke();
 
-      // Massive Fluke Tail
+      // Massive Fluke Tail — Royal Shimmering Violet
       const tailX = -len * 0.5;
       ctx.beginPath();
       ctx.moveTo(tailX, 0);
@@ -719,9 +760,10 @@
       ctx.lineTo(tailX - 16 * scale, flukeWave * 0.5);
       ctx.lineTo(tailX - 22 * scale, wid * 0.8 + flukeWave);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(129, 140, 248, 0.4)';
+      ctx.fillStyle = 'rgba(139, 92, 246, 0.32)';
       ctx.fill();
-      ctx.strokeStyle = '#818cf8';
+      ctx.strokeStyle = 'rgba(196, 181, 253, 0.8)';
+      ctx.lineWidth = 1.1;
       ctx.stroke();
 
       // Constellation spine LEDs
@@ -729,9 +771,9 @@
         const sx = i * (len * 0.09);
         ctx.beginPath();
         ctx.arc(sx, 0, 1.8 * scale, 0, PI * 2);
-        ctx.fillStyle = '#38bdf8';
+        ctx.fillStyle = i % 2 === 0 ? '#38bdf8' : '#e879f9';
         ctx.shadowBlur = 6;
-        ctx.shadowColor = '#38bdf8';
+        ctx.shadowColor = ctx.fillStyle;
         ctx.fill();
       }
 
@@ -739,7 +781,7 @@
     }
   }
 
-  // ─── 4. Prism Butterfly / Neon Dragonfly ──────────────────────────────────────
+  // ─── 4. Prism Butterfly / Neon Dragonfly (Opal Pink & Mint Iridescence) ───────
   class PrismButterfly extends Creature {
     constructor() {
       super();
@@ -785,21 +827,25 @@
       // Dual translucent fluttering wings
       const wingW = sz * Math.abs(flap);
 
+      // Top wing: Translucent Opal Pink
       ctx.beginPath();
       ctx.ellipse(-sz * 0.2, -wingW * 0.7, sz * 0.7, wingW, -0.4, 0, PI * 2);
-      ctx.fillStyle = 'rgba(217, 70, 239, 0.4)';
+      ctx.fillStyle = 'rgba(244, 114, 182, 0.28)';
       ctx.fill();
-      ctx.strokeStyle = '#d946ef';
+      ctx.strokeStyle = 'rgba(244, 114, 182, 0.85)';
+      ctx.lineWidth = 1;
       ctx.stroke();
 
+      // Bottom wing: Translucent Seafoam Mint
       ctx.beginPath();
       ctx.ellipse(-sz * 0.2, wingW * 0.7, sz * 0.7, wingW, 0.4, 0, PI * 2);
-      ctx.fillStyle = 'rgba(251, 191, 36, 0.4)';
+      ctx.fillStyle = 'rgba(52, 211, 153, 0.28)';
       ctx.fill();
-      ctx.strokeStyle = '#fbbf24';
+      ctx.strokeStyle = 'rgba(52, 211, 153, 0.85)';
+      ctx.lineWidth = 1;
       ctx.stroke();
 
-      // Slender body
+      // Slender ivory core
       ctx.beginPath();
       ctx.ellipse(0, 0, sz * 0.4, sz * 0.1, 0, 0, PI * 2);
       ctx.fillStyle = '#ffffff';

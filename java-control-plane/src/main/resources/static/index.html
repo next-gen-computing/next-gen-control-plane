@@ -7,23 +7,23 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
   <style>
     :root {
-      --bg-dark: #070a13;
-      --bg-card: linear-gradient(145deg, rgba(16, 24, 43, 0.85), rgba(9, 14, 26, 0.9));
-      --bg-card-hover: linear-gradient(145deg, rgba(22, 34, 58, 0.92), rgba(12, 18, 34, 0.95));
-      --card-shadow: 8px 8px 20px rgba(0, 0, 0, 0.65), -6px -6px 16px rgba(255, 255, 255, 0.035);
-      --card-shadow-hover: 12px 12px 28px rgba(0, 0, 0, 0.75), -8px -8px 20px rgba(255, 255, 255, 0.05);
-      --inset-shadow: inset 4px 4px 9px rgba(0, 0, 0, 0.7), inset -3px -3px 7px rgba(255, 255, 255, 0.035);
-      --btn-shadow: 4px 4px 10px rgba(0, 0, 0, 0.5), -3px -3px 8px rgba(255, 255, 255, 0.04);
-      --btn-active: inset 3px 3px 6px rgba(0, 0, 0, 0.7), inset -2px -2px 5px rgba(255, 255, 255, 0.05);
-      --border-color: rgba(0, 212, 255, 0.18);
-      --border-glow: rgba(0, 212, 255, 0.45);
-      --cyan: #00d4ff;
-      --green: #00ff88;
-      --amber: #ffb700;
-      --red: #ff3366;
-      --purple: #8b5cf6;
-      --text-main: #f0f6fc;
-      --text-muted: #8b9bb4;
+      --bg-dark: #0a0e17;
+      --bg-card: linear-gradient(145deg, #131b2c, #0b101c);
+      --bg-card-hover: linear-gradient(145deg, #182338, #0e1424);
+      --card-shadow: 7px 7px 18px rgba(0, 0, 0, 0.65), -5px -5px 15px rgba(255, 255, 255, 0.035);
+      --card-shadow-hover: 11px 11px 26px rgba(0, 0, 0, 0.75), -7px -7px 18px rgba(255, 255, 255, 0.05);
+      --inset-shadow: inset 4px 4px 10px rgba(0, 0, 0, 0.8), inset -3px -3px 7px rgba(255, 255, 255, 0.03);
+      --btn-shadow: 4px 4px 10px rgba(0, 0, 0, 0.6), -3px -3px 8px rgba(255, 255, 255, 0.04);
+      --btn-active: inset 3px 3px 6px rgba(0, 0, 0, 0.8), inset -2px -2px 5px rgba(255, 255, 255, 0.03);
+      --border-color: rgba(255, 255, 255, 0.06);
+      --border-glow: rgba(56, 189, 248, 0.35);
+      --cyan: #38bdf8;
+      --green: #34d399;
+      --amber: #fbbf24;
+      --red: #f87171;
+      --purple: #a78bfa;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
       --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
       --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
@@ -36,56 +36,89 @@
       overflow-x: hidden;
       min-height: 100vh;
       background-image: 
-        radial-gradient(circle at 50% 0%, rgba(0, 212, 255, 0.08) 0%, transparent 60%),
-        radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
-        linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
-      background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
+        radial-gradient(circle at 50% -10%, rgba(56, 189, 248, 0.07) 0%, transparent 60%),
+        radial-gradient(circle at 85% 30%, rgba(167, 139, 250, 0.05) 0%, transparent 50%),
+        linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 36px 36px, 36px 36px;
     }
 
+    /* ── Responsive Neumorphic Header ── */
     header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 14px 28px;
+      padding: 12px 28px;
       border-bottom: 1px solid var(--border-color);
-      background: rgba(7, 10, 19, 0.88);
-      backdrop-filter: blur(14px);
+      background: rgba(10, 14, 23, 0.94);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
       position: sticky;
       top: 0;
       z-index: 100;
+      gap: 14px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      transition: padding 0.2s ease;
     }
 
-    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
     .brand-logo {
-      width: 36px; height: 36px;
-      background: linear-gradient(135deg, var(--cyan), var(--purple));
-      border-radius: 8px;
+      width: 38px; height: 38px;
+      background: linear-gradient(135deg, #0284c7, #7c3aed);
+      border-radius: 10px;
       display: flex; align-items: center; justify-content: center;
       font-size: 20px; font-weight: bold; color: #fff;
-      box-shadow: 0 0 16px rgba(0, 212, 255, 0.4);
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.4), var(--btn-shadow);
+      border: 1px solid rgba(255, 255, 255, 0.15);
     }
-    .brand-title { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.3px; }
-    .brand-subtitle { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+    .brand-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      color: #f8fafc;
+    }
+    .brand-subtitle {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-top: 2px;
+    }
 
-    .header-actions { display: flex; align-items: center; gap: 14px; }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
 
     .topology-badge {
-      display: flex; align-items: center; gap: 8px;
-      padding: 6px 14px; border-radius: 20px;
-      font-size: 0.82rem; font-weight: 600;
-      background: rgba(0, 255, 136, 0.1);
-      border: 1px solid rgba(0, 255, 136, 0.35);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: #080c14;
+      box-shadow: var(--inset-shadow);
+      border: 1px solid rgba(52, 211, 153, 0.35);
       color: var(--green);
       transition: all 0.3s ease;
+      white-space: nowrap;
     }
     .topology-badge.local {
-      background: rgba(0, 212, 255, 0.1);
-      border-color: rgba(0, 212, 255, 0.35);
+      border-color: rgba(56, 189, 248, 0.35);
       color: var(--cyan);
     }
     .pulse-dot {
-      width: 8px; height: 8px; border-radius: 50%;
+      width: 7px; height: 7px; border-radius: 50%;
       background: currentColor; box-shadow: 0 0 8px currentColor;
       animation: pulse 1.8s infinite;
     }
@@ -94,6 +127,175 @@
       50% { opacity: 0.4; transform: scale(0.85); }
     }
 
+    .select-dropdown {
+      background: #070b12;
+      box-shadow: inset 3px 3px 6px rgba(0, 0, 0, 0.75), inset -2px -2px 4px rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      color: var(--text-main);
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .select-dropdown:focus {
+      border-color: var(--cyan);
+      box-shadow: inset 3px 3px 6px rgba(0, 0, 0, 0.75), 0 0 10px rgba(56, 189, 248, 0.3);
+    }
+
+    /* ── Neumorphic Tactile Buttons ── */
+    .btn {
+      background: linear-gradient(145deg, #141c2c, #0c121d);
+      box-shadow: var(--btn-shadow);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      color: var(--cyan);
+      padding: 7px 14px;
+      border-radius: 10px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      text-decoration: none;
+    }
+    .btn:hover {
+      background: linear-gradient(145deg, #192438, #0e1524);
+      border-color: rgba(56, 189, 248, 0.35);
+      box-shadow: 6px 6px 14px rgba(0, 0, 0, 0.7), -4px -4px 10px rgba(255, 255, 255, 0.05);
+      transform: translateY(-1px);
+    }
+    .btn:active {
+      box-shadow: var(--btn-active);
+      transform: scale(0.975) translateY(1px);
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4), var(--btn-shadow);
+    }
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #0369a1, #1d4ed8);
+      box-shadow: 0 6px 22px rgba(37, 99, 235, 0.6), var(--btn-shadow);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+    .btn-connect-laptops {
+      background: linear-gradient(145deg, rgba(16, 32, 38, 0.95), rgba(10, 20, 25, 0.95));
+      border: 1px solid rgba(52, 211, 153, 0.4);
+      color: var(--green);
+      font-weight: 700;
+    }
+    .btn-connect-laptops:hover {
+      border-color: var(--green);
+      box-shadow: 0 0 16px rgba(52, 211, 153, 0.35), var(--btn-shadow);
+    }
+    .btn-warn {
+      background: linear-gradient(145deg, rgba(38, 30, 16, 0.9), rgba(22, 18, 10, 0.9));
+      border: 1px solid rgba(251, 191, 36, 0.35);
+      color: var(--amber);
+    }
+    .btn-warn:hover {
+      border-color: var(--amber);
+      box-shadow: 0 0 14px rgba(251, 191, 36, 0.3), var(--btn-shadow);
+    }
+    .btn-danger {
+      background: linear-gradient(145deg, rgba(38, 18, 22, 0.9), rgba(24, 10, 12, 0.9));
+      border: 1px solid rgba(248, 113, 113, 0.35);
+      color: var(--red);
+    }
+    .btn-danger:hover {
+      border-color: var(--red);
+      box-shadow: 0 0 14px rgba(248, 113, 113, 0.3), var(--btn-shadow);
+    }
+    .btn-sm { padding: 4px 10px; font-size: 0.72rem; }
+
+    /* ── Responsive Header Layout Breakpoints ── */
+    @media (max-width: 1200px) {
+      header {
+        padding: 10px 18px;
+        gap: 10px;
+      }
+      .header-actions {
+        gap: 6px;
+      }
+      .btn {
+        padding: 6px 10px;
+        font-size: 0.76rem;
+      }
+      .select-dropdown {
+        padding: 6px 8px;
+        font-size: 0.76rem;
+        max-width: 220px;
+      }
+    }
+
+    @media (max-width: 960px) {
+      header {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 12px 18px;
+        gap: 10px;
+      }
+      .brand {
+        justify-content: flex-start;
+        width: 100%;
+      }
+      .header-actions {
+        width: 100%;
+        justify-content: flex-start;
+        gap: 6px;
+      }
+      .select-dropdown {
+        flex: 1 1 auto;
+        min-width: 180px;
+        max-width: none;
+      }
+    }
+
+    @media (max-width: 680px) {
+      header {
+        padding: 10px 14px;
+        gap: 8px;
+      }
+      .brand-subtitle {
+        display: none;
+      }
+      .header-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        width: 100%;
+      }
+      .select-dropdown {
+        grid-column: 1 / -1;
+        width: 100%;
+      }
+      .topology-badge {
+        grid-column: 1 / -1;
+        justify-content: center;
+      }
+      .btn {
+        justify-content: center;
+        padding: 8px 6px;
+        font-size: 0.74rem;
+      }
+    }
+
+    @media (max-width: 420px) {
+      .header-actions {
+        grid-template-columns: 1fr;
+      }
+      .btn {
+        width: 100%;
+      }
+    }
+
+    /* ── Main Layout ── */
     main {
       max-width: 1440px; margin: 0 auto;
       padding: 24px; display: flex;
@@ -109,7 +311,7 @@
     .kpi-card {
       background: var(--bg-card);
       box-shadow: var(--card-shadow);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border-color);
       border-radius: 16px; padding: 20px 22px;
       backdrop-filter: blur(12px);
       transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s;
@@ -121,12 +323,12 @@
       opacity: 0.4;
     }
     .kpi-card:hover {
-      transform: translateY(-3px);
+      transform: translateY(-2px);
       box-shadow: var(--card-shadow-hover);
       border-color: var(--border-glow);
     }
     .kpi-title {
-      font-size: 0.8rem; color: var(--text-muted);
+      font-size: 0.78rem; color: var(--text-muted);
       text-transform: uppercase; letter-spacing: 0.8px;
       margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;
     }
@@ -147,7 +349,7 @@
     .canvas-panel {
       background: var(--bg-card);
       box-shadow: var(--card-shadow);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border-color);
       border-radius: 18px; padding: 20px;
       display: flex; flex-direction: column;
       position: relative;
@@ -159,71 +361,17 @@
     .panel-title {
       font-size: 1rem; font-weight: 600;
       display: flex; align-items: center; gap: 10px;
+      color: var(--text-main);
     }
     .panel-controls { display: flex; align-items: center; gap: 10px; }
 
-    .btn {
-      background: linear-gradient(145deg, rgba(20, 30, 52, 0.9), rgba(12, 18, 32, 0.9));
-      box-shadow: var(--btn-shadow);
-      border: 1px solid rgba(0, 212, 255, 0.22);
-      color: var(--cyan); padding: 8px 16px;
-      border-radius: 10px; font-size: 0.82rem; font-weight: 600;
-      cursor: pointer; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-      display: inline-flex; align-items: center; gap: 6px;
-    }
-    .btn:hover {
-      background: linear-gradient(145deg, rgba(28, 42, 72, 0.95), rgba(16, 24, 44, 0.95));
-      border-color: var(--cyan);
-      box-shadow: 6px 6px 16px rgba(0, 0, 0, 0.6), -4px -4px 12px rgba(255, 255, 255, 0.05);
-      transform: translateY(-1px);
-    }
-    .btn:active {
-      box-shadow: var(--btn-active);
-      transform: translateY(1px);
-    }
-    .btn-primary {
-      background: linear-gradient(135deg, #00d4ff, #0077ff);
-      color: #070a13;
-      border: none;
-      box-shadow: 0 4px 16px rgba(0, 212, 255, 0.35);
-    }
-    .btn-primary:hover {
-      background: linear-gradient(135deg, #33ddff, #3388ff);
-      box-shadow: 0 6px 22px rgba(0, 212, 255, 0.55);
-    }
-    .btn-connect-laptops {
-      background: linear-gradient(135deg, rgba(0, 255, 136, 0.15), rgba(0, 212, 255, 0.15));
-      border: 1px solid rgba(0, 255, 136, 0.4);
-      color: var(--green);
-      font-weight: 700;
-    }
-    .btn-connect-laptops:hover {
-      border-color: var(--green);
-      box-shadow: 0 0 16px rgba(0, 255, 136, 0.35);
-    }
-
-    .btn-warn { background: rgba(255, 183, 0, 0.15); border-color: rgba(255, 183, 0, 0.4); color: var(--amber); }
-    .btn-warn:hover { background: rgba(255, 183, 0, 0.3); }
-
-    .btn-danger { background: rgba(255, 51, 102, 0.15); border-color: rgba(255, 51, 102, 0.4); color: var(--red); }
-    .btn-danger:hover { background: rgba(255, 51, 102, 0.3); }
-
-    .btn-sm { padding: 3px 8px; font-size: 0.72rem; }
-
-    .select-dropdown {
-      background: rgba(7, 10, 19, 0.85);
-      border: 1px solid var(--border-color);
-      color: var(--text-main); padding: 6px 12px;
-      border-radius: 6px; font-size: 0.8rem;
-      cursor: pointer; outline: none;
-    }
-
-    /* 3D Network Canvas Container */
+    /* 3D Network Canvas Container — Deep Inset Carved Well */
     .canvas-container {
       width: 100%; height: 500px;
-      background: radial-gradient(circle at 50% 50%, rgba(13, 24, 46, 0.7) 0%, rgba(7, 10, 19, 0.98) 100%);
-      border-radius: 10px;
-      border: 1px solid rgba(0, 212, 255, 0.15);
+      background: radial-gradient(circle at 50% 50%, rgba(14, 22, 38, 0.8) 0%, #060910 100%);
+      border-radius: 12px;
+      border: 1px solid rgba(0, 0, 0, 0.6);
+      box-shadow: inset 5px 5px 14px rgba(0, 0, 0, 0.85), inset -3px -3px 8px rgba(255, 255, 255, 0.025);
       position: relative; overflow: hidden;
     }
     #clusterCanvas { width: 100%; height: 100%; display: block; cursor: grab; }
@@ -231,25 +379,28 @@
 
     .canvas-overlay-stats {
       position: absolute; bottom: 14px; left: 14px;
-      background: rgba(7, 10, 19, 0.85);
-      border: 1px solid var(--border-color);
-      border-radius: 8px; padding: 8px 14px;
+      background: rgba(10, 14, 23, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 10px; padding: 8px 16px;
       font-size: 0.75rem; color: var(--text-muted);
       font-family: var(--font-mono); display: flex; gap: 16px;
+      box-shadow: 4px 4px 10px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.03);
       pointer-events: none;
     }
 
     /* Side Telemetry Inspector */
     .inspector-panel {
       background: var(--bg-card);
+      box-shadow: var(--card-shadow);
       border: 1px solid var(--border-color);
-      border-radius: 14px; padding: 20px;
+      border-radius: 18px; padding: 20px;
       display: flex; flex-direction: column; gap: 16px;
     }
     .node-detail-card {
-      background: rgba(7, 10, 19, 0.6);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 10px; padding: 16px;
+      background: #080b12;
+      box-shadow: var(--inset-shadow);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      border-radius: 12px; padding: 16px;
     }
     .node-header {
       display: flex; justify-content: space-between;
@@ -263,40 +414,57 @@
       font-size: 0.78rem; color: var(--text-muted); margin-bottom: 4px;
     }
     .meter-bar {
-      height: 6px; background: rgba(255, 255, 255, 0.08);
-      border-radius: 3px; overflow: hidden;
+      height: 7px; background: #05070c;
+      box-shadow: inset 1px 1px 3px rgba(0,0,0,0.8);
+      border-radius: 4px; overflow: hidden;
+      border: 1px solid rgba(0,0,0,0.5);
     }
     .meter-fill {
-      height: 100%; background: var(--cyan);
-      border-radius: 3px; transition: width 0.4s ease;
+      height: 100%; background: linear-gradient(90deg, #0284c7, #38bdf8);
+      border-radius: 4px; transition: width 0.4s ease;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
     }
-    .meter-fill.green { background: var(--green); }
-    .meter-fill.amber { background: var(--amber); }
-    .meter-fill.red { background: var(--red); }
+    .meter-fill.green {
+      background: linear-gradient(90deg, #059669, #34d399);
+      box-shadow: 0 0 8px rgba(52, 211, 153, 0.5);
+    }
+    .meter-fill.amber {
+      background: linear-gradient(90deg, #d97706, #fbbf24);
+      box-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
+    }
+    .meter-fill.red {
+      background: linear-gradient(90deg, #dc2626, #f87171);
+      box-shadow: 0 0 8px rgba(248, 113, 113, 0.5);
+    }
 
     /* Tables */
     .table-panel {
       background: var(--bg-card);
+      box-shadow: var(--card-shadow);
       border: 1px solid var(--border-color);
-      border-radius: 14px; padding: 20px;
+      border-radius: 18px; padding: 22px;
     }
     table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
     th {
-      text-align: left; padding: 10px 14px; color: var(--text-muted);
-      border-bottom: 1px solid var(--border-color); font-weight: 600;
-      text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.6px;
+      text-align: left; padding: 12px 14px; color: var(--text-muted);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06); font-weight: 600;
+      text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.8px;
     }
-    td { padding: 12px 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); color: var(--text-main); }
-    tr:hover td { background: var(--bg-card-hover); }
+    td { padding: 13px 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.035); color: var(--text-main); }
+    tr:hover td { background: rgba(56, 189, 248, 0.035); }
 
     .status-badge {
-      display: inline-block; padding: 3px 8px; border-radius: 4px;
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px; border-radius: 6px;
       font-size: 0.72rem; font-weight: 700; letter-spacing: 0.4px;
+      background: #080c14;
+      box-shadow: inset 2px 2px 4px rgba(0,0,0,0.6), inset -1px -1px 3px rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
     }
-    .status-alive { background: rgba(0, 255, 136, 0.15); color: var(--green); }
-    .status-dead { background: rgba(255, 51, 102, 0.25); color: var(--red); border: 1px solid rgba(255, 51, 102, 0.4); }
-    .status-local { background: rgba(0, 212, 255, 0.15); color: var(--cyan); }
-    .status-remote { background: rgba(139, 92, 246, 0.18); color: var(--purple); }
+    .status-alive { color: var(--green); border-color: rgba(52, 211, 153, 0.3); }
+    .status-dead { color: var(--red); border-color: rgba(248, 113, 113, 0.4); }
+    .status-local { color: var(--cyan); border-color: rgba(56, 189, 248, 0.3); }
+    .status-remote { color: var(--purple); border-color: rgba(167, 139, 250, 0.3); }
 
     .demo-grid {
       display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
@@ -306,25 +474,34 @@
     .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
     .form-label { font-size: 0.8rem; color: var(--text-muted); }
     .form-input {
-      background: rgba(7, 10, 19, 0.75); border: 1px solid var(--border-color);
-      padding: 8px 12px; border-radius: 6px; color: #fff;
+      background: #070b12; border: 1px solid rgba(255, 255, 255, 0.06);
+      box-shadow: inset 3px 3px 7px rgba(0, 0, 0, 0.8), inset -2px -2px 5px rgba(255, 255, 255, 0.03);
+      padding: 9px 13px; border-radius: 8px; color: #f8fafc;
       font-family: var(--font-mono); font-size: 0.85rem; outline: none;
+      transition: all 0.2s ease;
     }
-    .form-input:focus { border-color: var(--cyan); box-shadow: 0 0 8px rgba(0, 212, 255, 0.3); }
+    .form-input:focus {
+      border-color: var(--cyan);
+      box-shadow: inset 3px 3px 7px rgba(0, 0, 0, 0.8), 0 0 10px rgba(56, 189, 248, 0.35);
+    }
 
     .terminal-box {
-      background: #03060c; border: 1px solid rgba(0, 212, 255, 0.15);
-      border-radius: 8px; padding: 12px 14px; font-family: var(--font-mono);
-      font-size: 0.75rem; color: #00ff88; max-height: 220px;
-      overflow-y: auto; line-height: 1.5;
+      background: #05080e;
+      box-shadow: inset 5px 5px 12px rgba(0, 0, 0, 0.9), inset -3px -3px 8px rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(0, 0, 0, 0.7);
+      border-radius: 10px; padding: 14px 16px; font-family: var(--font-mono);
+      font-size: 0.75rem; color: #34d399; max-height: 220px;
+      overflow-y: auto; line-height: 1.55;
     }
     .terminal-line { margin-bottom: 4px; word-break: break-all; }
     .terminal-muted { color: var(--text-muted); }
     .terminal-highlight { color: var(--cyan); font-weight: bold; }
 
     .code-badge {
-      background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.1);
-      padding: 2px 6px; border-radius: 4px; font-family: var(--font-mono); color: var(--cyan);
+      background: #080c14;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      box-shadow: inset 2px 2px 4px rgba(0,0,0,0.6);
+      padding: 3px 7px; border-radius: 6px; font-family: var(--font-mono); color: var(--cyan);
     }
   </style>
 </head>
@@ -654,53 +831,53 @@
     </section>
 
     <!-- Neumorphic Modal: Connect Worker Laptops -->
-    <div id="workerConnectModal" style="display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(5, 8, 15, 0.85); backdrop-filter: blur(14px); align-items: center; justify-content: center; padding: 20px;">
-      <div style="width: 100%; max-width: 650px; background: linear-gradient(145deg, #10182b, #090e1a); box-shadow: 14px 14px 32px rgba(0,0,0,0.7), -10px -10px 26px rgba(255,255,255,0.03); border: 1px solid rgba(0, 212, 255, 0.25); border-radius: 24px; padding: 32px; position: relative;">
+    <div id="workerConnectModal" style="display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(6, 9, 15, 0.88); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); align-items: center; justify-content: center; padding: 20px;">
+      <div style="width: 100%; max-width: 650px; background: linear-gradient(145deg, #131b2c, #0b101c); box-shadow: 16px 16px 36px rgba(0,0,0,0.8), -10px -10px 28px rgba(255,255,255,0.035); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 24px; padding: 32px; position: relative;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 24px;">🔗</span>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 42px; height: 42px; border-radius: 12px; background: linear-gradient(135deg, rgba(52, 211, 153, 0.2), rgba(56, 189, 248, 0.2)); display: flex; align-items: center; justify-content: center; font-size: 20px; box-shadow: var(--btn-shadow); border: 1px solid rgba(52, 211, 153, 0.4);">🔗</div>
             <div>
-              <h2 style="font-size: 1.25rem; font-weight: 700; color: #f0f6fc;">Connect Worker Laptops</h2>
-              <p style="font-size: 0.78rem; color: #8b9bb4;">Edge Compute Node Joining Instructions</p>
+              <h2 style="font-size: 1.25rem; font-weight: 700; color: #f8fafc;">Connect Worker Laptops</h2>
+              <p style="font-size: 0.78rem; color: #94a3b8;">Outbound HTTP/2 gRPC Edge Compute Node Onboarding</p>
             </div>
           </div>
-          <button id="closeWorkerModalBtn" style="background: transparent; border: none; color: #8b9bb4; font-size: 24px; cursor: pointer; padding: 4px 8px;">×</button>
+          <button id="closeWorkerModalBtn" class="btn" style="padding: 6px 10px; border-radius: 50%; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #94a3b8;">×</button>
         </div>
 
-        <div style="background: #060912; box-shadow: inset 4px 4px 8px rgba(0,0,0,0.7), inset -3px -3px 6px rgba(255,255,255,0.03); border: 1px solid rgba(0, 212, 255, 0.12); border-radius: 14px; padding: 18px; margin-bottom: 20px; font-family: var(--font-mono); font-size: 0.82rem;">
+        <div style="background: #060910; box-shadow: inset 4px 4px 10px rgba(0,0,0,0.8), inset -3px -3px 7px rgba(255,255,255,0.03); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 14px; padding: 18px; margin-bottom: 20px; font-family: var(--font-mono); font-size: 0.82rem;">
           <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px; margin-bottom: 8px;">
-            <span style="color: #8b9bb4;">Server Host IP:</span>
-            <span id="modalServerIp" style="color: #00d4ff; font-weight: 700;">127.0.0.1</span>
+            <span style="color: #94a3b8;">Server Host IP:</span>
+            <span id="modalServerIp" style="color: #38bdf8; font-weight: 700;">127.0.0.1</span>
           </div>
           <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px; margin-bottom: 8px;">
-            <span style="color: #8b9bb4;">gRPC Port:</span>
-            <span style="color: #00ff88;">50051 (Outbound only)</span>
+            <span style="color: #94a3b8;">gRPC Port:</span>
+            <span style="color: #34d399; font-weight: 600;">50051 (Outbound only)</span>
           </div>
           <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px; margin-bottom: 8px;">
-            <span style="color: #8b9bb4;">Web Dashboard:</span>
+            <span style="color: #94a3b8;">Web Dashboard:</span>
             <span id="modalWebUrl" style="color: #38bdf8;">http://localhost:8080/</span>
           </div>
           <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px;">
-            <span style="color: #8b9bb4;">Active Nodes:</span>
-            <span id="modalActiveNodes" style="color: #f0f6fc;">0 ALIVE</span>
+            <span style="color: #94a3b8;">Active Nodes:</span>
+            <span id="modalActiveNodes" style="color: #f8fafc; font-weight: 600;">0 ALIVE</span>
           </div>
         </div>
 
-        <h4 style="font-size: 0.85rem; color: #e8edf5; margin-bottom: 10px;">Select Join Command for Other Laptop:</h4>
+        <h4 style="font-size: 0.85rem; color: #e2e8f0; margin-bottom: 10px; font-weight: 600;">Select Join Command for Other Laptop:</h4>
         <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px;">
-          <div style="background: #04060c; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-            <span id="modalPsCmd" style="font-family: var(--font-mono); font-size: 0.76rem; color: #00ff88; overflow-x: auto; white-space: nowrap;">$env:ROLE="node"; $env:SERVER_HOST="127.0.0.1"; java -jar control-plane-1.0-SNAPSHOT-all.jar</span>
+          <div style="background: #05080e; box-shadow: inset 3px 3px 8px rgba(0,0,0,0.85), inset -2px -2px 5px rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <span id="modalPsCmd" style="font-family: var(--font-mono); font-size: 0.76rem; color: #34d399; overflow-x: auto; white-space: nowrap;">$env:ROLE="node"; $env:SERVER_HOST="127.0.0.1"; java -jar control-plane-1.0-SNAPSHOT-all.jar</span>
             <button class="btn btn-sm" onclick="copyModalText('modalPsCmd')">Copy PS</button>
           </div>
-          <div style="background: #04060c; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+          <div style="background: #05080e; box-shadow: inset 3px 3px 8px rgba(0,0,0,0.85), inset -2px -2px 5px rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
             <span id="modalBashCmd" style="font-family: var(--font-mono); font-size: 0.76rem; color: #38bdf8; overflow-x: auto; white-space: nowrap;">ROLE=node SERVER_HOST=127.0.0.1 java -jar control-plane-1.0-SNAPSHOT-all.jar</span>
             <button class="btn btn-sm" onclick="copyModalText('modalBashCmd')">Copy Bash</button>
           </div>
         </div>
 
         <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span style="font-size: 0.75rem; color: #8b9bb4;">Workers connect over Wi-Fi/LAN without inbound firewall ports.</span>
-          <button id="modalDoneBtn" class="btn btn-primary">Done</button>
+          <span style="font-size: 0.75rem; color: #94a3b8;">Workers connect over Wi-Fi/LAN without inbound firewall ports.</span>
+          <button id="modalDoneBtn" class="btn btn-primary" style="padding: 8px 20px;">Done</button>
         </div>
       </div>
     </div>

@@ -503,3 +503,4 @@ public class AppErrorController implements ErrorController {
         """.formatted(status, status, reason, safeMsg, safePath, lanIp, lanIp);
     }
 }
+

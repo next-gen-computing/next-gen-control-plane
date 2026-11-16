@@ -1273,3 +1273,30 @@
     border-radius: var(--ng-radius-sm);
     background: rgba(0,0,0,0.2);
 }
+
+/* ══════════════════════════════════════
+   RESPONSIVE LAYOUT FOR SMALL / MINIMIZED SCREENS
+   ══════════════════════════════════════ */
+@media (max-width: 768px) {
+    .ng-topbar {
+        padding: 0 var(--ng-space-3);
+        height: 48px;
+    }
+    .ng-topbar-title {
+        font-size: var(--ng-font-size-sm);
+    }
+    .ng-sidebar {
+        width: 60px;
+    }
+    .ng-sidebar-brand-text,
+    .ng-nav-button-label,
+    .ng-nav-section-label,
+    .ng-sidebar-collapse-btn span:last-child {
+        display: none !important;
+    }
+    .ng-stat-grid {
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: var(--ng-space-2);
+    }
+}
+
