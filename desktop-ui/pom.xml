@@ -283,6 +283,11 @@
     <profiles>
         <profile>
             <id>use-toolchain</id>
+            <activation>
+                <file>
+                    <exists>${user.home}/.m2/toolchains.xml</exists>
+                </file>
+            </activation>
             <build>
                 <plugins>
                     <plugin>
