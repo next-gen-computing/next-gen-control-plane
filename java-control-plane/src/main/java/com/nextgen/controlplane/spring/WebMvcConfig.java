@@ -26,6 +26,12 @@ public class WebMvcConfig implements WebMvcConfigurer {
     @Override
     public void addViewControllers(ViewControllerRegistry registry) {
         registry.addViewController("/").setViewName("forward:/index.html");
+        registry.addViewController("/dashboard").setViewName("forward:/index.html");
+        registry.addViewController("/dashboard/**").setViewName("forward:/index.html");
+        registry.addViewController("/ui").setViewName("forward:/index.html");
+        registry.addViewController("/ui/**").setViewName("forward:/index.html");
+        registry.addViewController("/index").setViewName("forward:/index.html");
+        registry.addViewController("/index.html").setViewName("forward:/index.html");
     }
 
     @Bean

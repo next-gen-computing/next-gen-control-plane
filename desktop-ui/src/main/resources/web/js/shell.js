@@ -102,6 +102,7 @@ NG.shell = {
         sections.push(['SYSTEM', [
             ['monitoring', 'Monitoring', NG.icons.monitoring, NG.views.monitoring],
             ['settings',   'Settings',  NG.icons.settings,   NG.views.settings],
+            ['animals',    'Glyph Animals', (NG.icons && NG.icons.sparkles) || '✦', NG.views.animals],
         ]]);
 
         const items = sections.flatMap(([, entries]) => entries);

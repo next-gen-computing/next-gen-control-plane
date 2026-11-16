@@ -1,0 +1,528 @@
+{
+  "benchmark": "Raft Consensus Network Partition Resilience (25 Experiments)",
+  "total_experiments": 25,
+  "successful_experiments": 25,
+  "split_brain_occurrences": 0,
+  "uncommitted_data_loss_occurrences": 0,
+  "leader_election_latency_ms": {
+    "mean": 916.0960000000001,
+    "median": 934.1600000000001,
+    "min": 821.33,
+    "max": 999.2,
+    "p95": 994.7765
+  },
+  "all_scenarios_breakdown": {
+    "leader_isolation": [
+      {
+        "experiment_id": 1,
+        "scenario": "LEADER_ISOLATION_MAJORITY_ELECTION",
+        "election_or_failover_latency_ms": 933.83,
+        "term_increments": 1,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 2,
+        "scenario": "LEADER_ISOLATION_MAJORITY_ELECTION",
+        "election_or_failover_latency_ms": 821.33,
+        "term_increments": 1,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 3,
+        "scenario": "LEADER_ISOLATION_MAJORITY_ELECTION",
+        "election_or_failover_latency_ms": 824.65,
+        "term_increments": 1,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 4,
+        "scenario": "LEADER_ISOLATION_MAJORITY_ELECTION",
+        "election_or_failover_latency_ms": 999.2,
+        "term_increments": 1,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 5,
+        "scenario": "LEADER_ISOLATION_MAJORITY_ELECTION",
+        "election_or_failover_latency_ms": 987.41,
+        "term_increments": 1,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      }
+    ],
+    "follower_isolation": [
+      {
+        "experiment_id": 6,
+        "scenario": "FOLLOWER_ISOLATION_MINORITY_PARTITION",
+        "election_or_failover_latency_ms": 15.18,
+        "term_increments": 0,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 7,
+        "scenario": "FOLLOWER_ISOLATION_MINORITY_PARTITION",
+        "election_or_failover_latency_ms": 11.43,
+        "term_increments": 0,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 8,
+        "scenario": "FOLLOWER_ISOLATION_MINORITY_PARTITION",
+        "election_or_failover_latency_ms": 19.54,
+        "term_increments": 0,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 9,
+        "scenario": "FOLLOWER_ISOLATION_MINORITY_PARTITION",
+        "election_or_failover_latency_ms": 10.99,
+        "term_increments": 0,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 10,
+        "scenario": "FOLLOWER_ISOLATION_MINORITY_PARTITION",
+        "election_or_failover_latency_ms": 18.38,
+        "term_increments": 0,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      }
+    ],
+    "split_vote_recovery": [
+      {
+        "experiment_id": 11,
+        "scenario": "SPLIT_VOTE_DEADLOCK_RECOVERY",
+        "election_or_failover_latency_ms": 1830.39,
+        "term_increments": 2,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 12,
+        "scenario": "SPLIT_VOTE_DEADLOCK_RECOVERY",
+        "election_or_failover_latency_ms": 1733.15,
+        "term_increments": 2,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 13,
+        "scenario": "SPLIT_VOTE_DEADLOCK_RECOVERY",
+        "election_or_failover_latency_ms": 1716.08,
+        "term_increments": 2,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 14,
+        "scenario": "SPLIT_VOTE_DEADLOCK_RECOVERY",
+        "election_or_failover_latency_ms": 1593.68,
+        "term_increments": 2,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 15,
+        "scenario": "SPLIT_VOTE_DEADLOCK_RECOVERY",
+        "election_or_failover_latency_ms": 1839.01,
+        "term_increments": 2,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      }
+    ],
+    "figure_8_safety": [
+      {
+        "experiment_id": 16,
+        "scenario": "FIGURE_8_COMMIT_SAFETY_VERIFICATION",
+        "election_or_failover_latency_ms": 989.37,
+        "term_increments": 1,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 17,
+        "scenario": "FIGURE_8_COMMIT_SAFETY_VERIFICATION",
+        "election_or_failover_latency_ms": 849.61,
+        "term_increments": 1,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 18,
+        "scenario": "FIGURE_8_COMMIT_SAFETY_VERIFICATION",
+        "election_or_failover_latency_ms": 934.49,
+        "term_increments": 1,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 19,
+        "scenario": "FIGURE_8_COMMIT_SAFETY_VERIFICATION",
+        "election_or_failover_latency_ms": 965.37,
+        "term_increments": 1,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 20,
+        "scenario": "FIGURE_8_COMMIT_SAFETY_VERIFICATION",
+        "election_or_failover_latency_ms": 855.7,
+        "term_increments": 1,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      }
+    ],
+    "stale_leader_rejoin": [
+      {
+        "experiment_id": 21,
+        "scenario": "STALE_LEADER_REJOIN_AND_WAL_ALIGNMENT",
+        "election_or_failover_latency_ms": 118.22,
+        "term_increments": 0,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 22,
+        "scenario": "STALE_LEADER_REJOIN_AND_WAL_ALIGNMENT",
+        "election_or_failover_latency_ms": 148.63,
+        "term_increments": 0,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 23,
+        "scenario": "STALE_LEADER_REJOIN_AND_WAL_ALIGNMENT",
+        "election_or_failover_latency_ms": 125.43,
+        "term_increments": 0,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 24,
+        "scenario": "STALE_LEADER_REJOIN_AND_WAL_ALIGNMENT",
+        "election_or_failover_latency_ms": 93.15,
+        "term_increments": 0,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      },
+      {
+        "experiment_id": 25,
+        "scenario": "STALE_LEADER_REJOIN_AND_WAL_ALIGNMENT",
+        "election_or_failover_latency_ms": 178.55,
+        "term_increments": 0,
+        "quorum_maintained": true,
+        "split_brain_detected": false,
+        "data_loss_records": 0,
+        "status": "PASSED"
+      }
+    ]
+  },
+  "experiments": [
+    {
+      "experiment_id": 1,
+      "scenario": "LEADER_ISOLATION_MAJORITY_ELECTION",
+      "election_or_failover_latency_ms": 933.83,
+      "term_increments": 1,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 2,
+      "scenario": "LEADER_ISOLATION_MAJORITY_ELECTION",
+      "election_or_failover_latency_ms": 821.33,
+      "term_increments": 1,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 3,
+      "scenario": "LEADER_ISOLATION_MAJORITY_ELECTION",
+      "election_or_failover_latency_ms": 824.65,
+      "term_increments": 1,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 4,
+      "scenario": "LEADER_ISOLATION_MAJORITY_ELECTION",
+      "election_or_failover_latency_ms": 999.2,
+      "term_increments": 1,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 5,
+      "scenario": "LEADER_ISOLATION_MAJORITY_ELECTION",
+      "election_or_failover_latency_ms": 987.41,
+      "term_increments": 1,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 6,
+      "scenario": "FOLLOWER_ISOLATION_MINORITY_PARTITION",
+      "election_or_failover_latency_ms": 15.18,
+      "term_increments": 0,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 7,
+      "scenario": "FOLLOWER_ISOLATION_MINORITY_PARTITION",
+      "election_or_failover_latency_ms": 11.43,
+      "term_increments": 0,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 8,
+      "scenario": "FOLLOWER_ISOLATION_MINORITY_PARTITION",
+      "election_or_failover_latency_ms": 19.54,
+      "term_increments": 0,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 9,
+      "scenario": "FOLLOWER_ISOLATION_MINORITY_PARTITION",
+      "election_or_failover_latency_ms": 10.99,
+      "term_increments": 0,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 10,
+      "scenario": "FOLLOWER_ISOLATION_MINORITY_PARTITION",
+      "election_or_failover_latency_ms": 18.38,
+      "term_increments": 0,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 11,
+      "scenario": "SPLIT_VOTE_DEADLOCK_RECOVERY",
+      "election_or_failover_latency_ms": 1830.39,
+      "term_increments": 2,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 12,
+      "scenario": "SPLIT_VOTE_DEADLOCK_RECOVERY",
+      "election_or_failover_latency_ms": 1733.15,
+      "term_increments": 2,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 13,
+      "scenario": "SPLIT_VOTE_DEADLOCK_RECOVERY",
+      "election_or_failover_latency_ms": 1716.08,
+      "term_increments": 2,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 14,
+      "scenario": "SPLIT_VOTE_DEADLOCK_RECOVERY",
+      "election_or_failover_latency_ms": 1593.68,
+      "term_increments": 2,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 15,
+      "scenario": "SPLIT_VOTE_DEADLOCK_RECOVERY",
+      "election_or_failover_latency_ms": 1839.01,
+      "term_increments": 2,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 16,
+      "scenario": "FIGURE_8_COMMIT_SAFETY_VERIFICATION",
+      "election_or_failover_latency_ms": 989.37,
+      "term_increments": 1,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 17,
+      "scenario": "FIGURE_8_COMMIT_SAFETY_VERIFICATION",
+      "election_or_failover_latency_ms": 849.61,
+      "term_increments": 1,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 18,
+      "scenario": "FIGURE_8_COMMIT_SAFETY_VERIFICATION",
+      "election_or_failover_latency_ms": 934.49,
+      "term_increments": 1,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 19,
+      "scenario": "FIGURE_8_COMMIT_SAFETY_VERIFICATION",
+      "election_or_failover_latency_ms": 965.37,
+      "term_increments": 1,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 20,
+      "scenario": "FIGURE_8_COMMIT_SAFETY_VERIFICATION",
+      "election_or_failover_latency_ms": 855.7,
+      "term_increments": 1,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 21,
+      "scenario": "STALE_LEADER_REJOIN_AND_WAL_ALIGNMENT",
+      "election_or_failover_latency_ms": 118.22,
+      "term_increments": 0,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 22,
+      "scenario": "STALE_LEADER_REJOIN_AND_WAL_ALIGNMENT",
+      "election_or_failover_latency_ms": 148.63,
+      "term_increments": 0,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 23,
+      "scenario": "STALE_LEADER_REJOIN_AND_WAL_ALIGNMENT",
+      "election_or_failover_latency_ms": 125.43,
+      "term_increments": 0,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 24,
+      "scenario": "STALE_LEADER_REJOIN_AND_WAL_ALIGNMENT",
+      "election_or_failover_latency_ms": 93.15,
+      "term_increments": 0,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    },
+    {
+      "experiment_id": 25,
+      "scenario": "STALE_LEADER_REJOIN_AND_WAL_ALIGNMENT",
+      "election_or_failover_latency_ms": 178.55,
+      "term_increments": 0,
+      "quorum_maintained": true,
+      "split_brain_detected": false,
+      "data_loss_records": 0,
+      "status": "PASSED"
+    }
+  ]
+}

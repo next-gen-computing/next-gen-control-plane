@@ -143,7 +143,10 @@ public class NodeAgent {
             .register();
 
     public static void start() throws IOException, InterruptedException {
-        String nodeId = EnvConfig.stringValue("NODE_ID", "unknown");
+        String hostname = InetAddress.getLocalHost().getHostName();
+        String ip = InetAddress.getLocalHost().getHostAddress();
+        String defaultNodeId = "node-" + hostname.toLowerCase().replaceAll("[^a-z0-9-]", "-");
+        String nodeId = EnvConfig.stringValue("NODE_ID", defaultNodeId);
         String controlPlaneHost = EnvConfig.stringValue("CONTROL_PLANE_HOST", "control-plane");
         int controlPlanePort = EnvConfig.intValue("CONTROL_PLANE_PORT", DEFAULT_CONTROL_PLANE_PORT);
         int metricsPort = EnvConfig.intValue("NODE_METRICS_PORT", DEFAULT_METRICS_PORT);
@@ -155,9 +158,6 @@ public class NodeAgent {
                 EnvConfig.longValue("RECONNECT_MAX_DELAY_MS", 30_000L),
                 EnvConfig.doubleValue("RECONNECT_MULTIPLIER", 2.0),
                 EnvConfig.doubleValue("RECONNECT_JITTER", 0.2));
-
-        String hostname = InetAddress.getLocalHost().getHostName();
-        String ip = InetAddress.getLocalHost().getHostAddress();
 
         LOG.info("══════════════════════════════════════════════════");
         LOG.info("  🖥  NodeAgent '{}' starting...", nodeId);

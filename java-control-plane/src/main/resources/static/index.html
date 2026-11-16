@@ -395,8 +395,8 @@
         <div class="canvas-container">
           <canvas id="clusterCanvas"></canvas>
           <div class="canvas-overlay-stats">
-            <div>ORBIT: <span id="orbitAngleText" style="color: #fff;">0°</span></div>
-            <div>STATUS: <span id="orbitStatusText" style="color: var(--green);">HEALTHY</span></div>
+            <div>ORBIT: <span id="orbitAngleText" style="color: #fff;">0° (IDLE)</span></div>
+            <div>STATUS: <span id="orbitStatusText" style="color: var(--amber);">NO NODES CONNECTED</span></div>
             <div>ACTIVE TASKS: <span id="orbitActiveTaskCount" style="color: var(--amber);">0</span></div>
           </div>
         </div>
@@ -678,7 +678,7 @@
           const res = await fetch('/api/v1/topology');
           if (res.ok) {
             topologyData = await res.json();
-            if (topologyData.nodes && topologyData.nodes.length > 0) {
+            if (topologyData.nodes) {
               nodesList = topologyData.nodes;
               updateNodesUI();
             }
@@ -702,7 +702,7 @@
           const res = await fetch('/api/v1/topology');
           if (res.ok) {
             const data = await res.json();
-            if (data.nodes && data.nodes.length > 0) {
+            if (data.nodes) {
               nodesList = data.nodes;
               updateNodesUI();
             }
@@ -736,17 +736,30 @@
         const canvasBadge = document.getElementById('canvasModeBadge');
         const joinInput = document.getElementById('joinCmdText');
 
+        const totalNodes = topologyData.totalNodes != null ? topologyData.totalNodes : (topologyData.nodes ? topologyData.nodes.length : 0);
         let isDistributed = topologyData.remoteNodeCount > 0;
         if (presentationMode === 'cluster') isDistributed = true;
         if (presentationMode === 'single') isDistributed = false;
 
-        if (isDistributed) {
+        if (totalNodes === 0 && presentationMode === 'auto') {
+          badge.className = 'topology-badge';
+          badge.style.background = 'rgba(255, 183, 3, 0.12)';
+          badge.style.borderColor = 'rgba(255, 183, 3, 0.35)';
+          badge.style.color = 'var(--amber)';
+          label.textContent = 'STANDBY (0 NODES CONNECTED)';
+          canvasBadge.className = 'status-badge';
+          canvasBadge.style.background = 'rgba(255, 183, 3, 0.15)';
+          canvasBadge.style.color = 'var(--amber)';
+          canvasBadge.textContent = 'Awaiting Workers';
+        } else if (isDistributed) {
           badge.className = 'topology-badge';
           badge.style.background = 'rgba(139, 92, 246, 0.15)';
           badge.style.borderColor = 'rgba(139, 92, 246, 0.4)';
           badge.style.color = '#a78bfa';
           label.textContent = 'DISTRIBUTED CLUSTER (MULTI-LAPTOP)';
           canvasBadge.className = 'status-badge status-remote';
+          canvasBadge.style.background = '';
+          canvasBadge.style.color = '';
           canvasBadge.textContent = 'Multi-Laptop Mode';
         } else {
           badge.className = 'topology-badge local';
@@ -755,6 +768,8 @@
           badge.style.color = '';
           label.textContent = 'SINGLE MACHINE (SAME LAPTOP)';
           canvasBadge.className = 'status-badge status-local';
+          canvasBadge.style.background = '';
+          canvasBadge.style.color = '';
           canvasBadge.textContent = 'Single Laptop Mode';
         }
 
@@ -796,17 +811,11 @@
       function getEffectiveNodes() {
         let displayNodes = nodesList.map(n => Object.assign({}, n));
 
-        // Presentation simulation fallback if zero real nodes connected
-        if (displayNodes.length === 0 && presentationMode === 'cluster') {
+        // Presentation simulation fallback ONLY if user explicitly selects cluster demo
+        if (displayNodes.length === 0 && presentationMode === 'cluster-demo') {
           displayNodes = [
-            { nodeId: 'node-dell-xps', hostname: 'Dell-XPS-15', ip: '192.168.1.42', status: 'ALIVE', isLocal: false, osName: 'Windows 11', cpuCores: 16, totalMemoryBytes: 34359738368, cpuUsage: 14.5, memoryUsage: 38.2, deviceType: 'windows' },
-            { nodeId: 'node-macbook-pro', hostname: 'MacBook-Pro-M2', ip: '192.168.1.88', status: 'ALIVE', isLocal: false, osName: 'macOS Darwin', cpuCores: 12, totalMemoryBytes: 17179869184, cpuUsage: 9.8, memoryUsage: 44.0, deviceType: 'mac' },
-            { nodeId: 'node-thinkpad-linux', hostname: 'ThinkPad-Ubuntu', ip: '192.168.1.105', status: 'ALIVE', isLocal: false, osName: 'Linux 6.8', cpuCores: 8, totalMemoryBytes: 17179869184, cpuUsage: 22.1, memoryUsage: 51.5, deviceType: 'linux' }
-          ];
-        } else if (displayNodes.length === 0) {
-          displayNodes = [
-            { nodeId: 'local-worker-1', hostname: 'localhost-worker-1', ip: '127.0.0.1', status: 'ALIVE', isLocal: true, osName: 'Windows 11', cpuCores: 8, totalMemoryBytes: 17179869184, cpuUsage: 11.2, memoryUsage: 35.0, deviceType: 'windows' },
-            { nodeId: 'local-worker-2', hostname: 'localhost-worker-2', ip: '127.0.0.1', status: 'ALIVE', isLocal: true, osName: 'Windows 11', cpuCores: 8, totalMemoryBytes: 17179869184, cpuUsage: 14.0, memoryUsage: 42.0, deviceType: 'windows' }
+            { nodeId: 'sim-dell-xps', hostname: 'Dell-XPS-15', ip: '192.168.1.42', status: 'ALIVE', isLocal: false, osName: 'Windows 11', cpuCores: 16, totalMemoryBytes: 34359738368, cpuUsage: 14.5, memoryUsage: 38.2, deviceType: 'windows' },
+            { nodeId: 'sim-macbook-pro', hostname: 'MacBook-Pro-M2', ip: '192.168.1.88', status: 'ALIVE', isLocal: false, osName: 'macOS Darwin', cpuCores: 12, totalMemoryBytes: 17179869184, cpuUsage: 9.8, memoryUsage: 44.0, deviceType: 'mac' }
           ];
         }
 
@@ -835,6 +844,26 @@
         subKpi.textContent = `${displayNodes.filter(n => n.isLocal).length} local, ${displayNodes.filter(n => !n.isLocal).length} remote connected`;
         countLabel.textContent = `${displayNodes.length} nodes registered`;
 
+        if (displayNodes.length === 0) {
+          document.getElementById('orbitStatusText').textContent = 'NO NODES CONNECTED';
+          document.getElementById('orbitStatusText').style.color = 'var(--amber)';
+          document.getElementById('orbitAngleText').textContent = '0° (IDLE)';
+          updateSplitOptions(0);
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="7" style="text-align: center; padding: 36px 16px; color: var(--text-muted); font-size: 13px;">
+                <div style="font-size: 26px; margin-bottom: 8px;">📡</div>
+                <strong style="color: var(--text); font-size: 14px;">No Worker Nodes Connected</strong><br>
+                <span style="font-size: 12px; color: var(--text-muted);">The cluster is currently idle. Connect worker laptops or run a local worker to begin distributed computing:</span><br>
+                <div style="margin-top: 12px;">
+                  <code style="display: inline-block; padding: 6px 14px; background: rgba(255,255,255,0.06); border: 1px solid var(--border); border-radius: 6px; font-size: 12px; font-family: monospace; color: var(--cyan);">$env:ROLE="worker"; java -jar control-plane-1.0-SNAPSHOT-all.jar</code>
+                </div>
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
         if (deadNodes.length > 0) {
           document.getElementById('orbitStatusText').textContent = `DEGRADED (${deadNodes.length} DEAD)`;
           document.getElementById('orbitStatusText').style.color = 'var(--red)';
@@ -847,12 +876,35 @@
         updateSplitOptions(aliveNodes.length);
 
         tbody.innerHTML = displayNodes.map(n => {
-          const isDead = n.isDead;
+          const isPhysicallyDead = String(n.status || '').toUpperCase() === 'DEAD' || String(n.status || '').toUpperCase() === 'SUSPECTED_DEAD' || String(n.status || '').toUpperCase() === 'OFFLINE' || String(n.status || '').toUpperCase() === 'DEREGISTERED';
+          const isSimulatedDead = !!manualKilledNodes[n.nodeId];
+          const isDead = isPhysicallyDead || isSimulatedDead;
           const isLoc = n.isLocal || n.ip === '127.0.0.1' || n.ip === 'localhost';
           const ramGb = n.totalMemoryBytes ? (n.totalMemoryBytes / (1024**3)).toFixed(1) + ' GB' : '16 GB';
           const cpuVal = n.cpuUsage != null ? n.cpuUsage.toFixed(1) + '%' : '12.0%';
           const devIcon = (n.osName || '').toLowerCase().includes('mac') ? '💻 MacBook' : ((n.osName || '').toLowerCase().includes('linux') ? '🖥️ Linux Tower' : '💻 Windows PC');
           
+          let actionButtonHtml = '';
+          if (isPhysicallyDead) {
+            actionButtonHtml = `
+              <button class="btn btn-sm" style="border: 1px solid rgba(255, 51, 102, 0.4); color: var(--red); background: rgba(255, 51, 102, 0.1);" onclick="window.toggleNodeKill('${n.nodeId}')">
+                ⏹ Process Dead (Terminal)
+              </button>
+            `;
+          } else if (isSimulatedDead) {
+            actionButtonHtml = `
+              <button class="btn btn-sm btn-primary" onclick="window.toggleNodeKill('${n.nodeId}')">
+                ✔ Resume Node
+              </button>
+            `;
+          } else {
+            actionButtonHtml = `
+              <button class="btn btn-sm btn-danger" onclick="window.toggleNodeKill('${n.nodeId}')">
+                ⚠ Simulate Crash
+              </button>
+            `;
+          }
+
           return `
             <tr style="${isDead ? 'opacity: 0.75; background: rgba(255, 51, 102, 0.05);' : ''}">
               <td style="font-family: var(--font-mono); color: var(--cyan);">${n.nodeId}</td>
@@ -860,7 +912,7 @@
               <td style="font-weight: 600;">${n.hostname || 'Unknown'}</td>
               <td style="font-family: var(--font-mono);">${n.ip || '127.0.0.1'}</td>
               <td><span class="status-badge ${isLoc ? 'status-local' : 'status-remote'}">${isLoc ? 'Local Machine' : 'Remote Edge'}</span></td>
-              <td><span class="status-badge ${isDead ? 'status-dead' : 'status-alive'}">${isDead ? 'DEAD (UNREACHABLE)' : 'ALIVE'}</span></td>
+              <td><span class="status-badge ${isDead ? 'status-dead' : 'status-alive'}">${isPhysicallyDead ? 'PROCESS TERMINATED (OFFLINE)' : (isSimulatedDead ? 'SIMULATED CRASH' : 'ALIVE')}</span></td>
               <td>${n.cpuCores || 8} cores / ${ramGb}</td>
               <td>
                 <div style="display: flex; align-items: center; gap: 8px;">
@@ -869,9 +921,7 @@
                 </div>
               </td>
               <td>
-                <button class="btn btn-sm ${isDead ? 'btn-primary' : 'btn-danger'}" onclick="window.toggleNodeKill('${n.nodeId}')">
-                  ${isDead ? '✔ Revive' : '⚠ Kill Node'}
-                </button>
+                ${actionButtonHtml}
               </td>
             </tr>
           `;
@@ -906,12 +956,22 @@
       }
 
       window.toggleNodeKill = function(nodeId) {
+        const rawNode = nodesList.find(n => n.nodeId === nodeId);
+        const rawStatus = rawNode ? String(rawNode.status || '').toUpperCase() : '';
+        const isPhysicallyDead = rawStatus === 'DEAD' || rawStatus === 'SUSPECTED_DEAD' || rawStatus === 'OFFLINE' || rawStatus === 'DEREGISTERED';
+
+        if (isPhysicallyDead) {
+          logTerminal(`[CLUSTER ALERT] Cannot revive Node [${nodeId}] from dashboard: Node process was killed in terminal. Start NodeAgent in terminal to re-join cluster.`, 'error');
+          alert(`Node [${nodeId}] cannot be revived from the web dashboard because its physical process was terminated in the terminal.\n\nTo reconnect this node, please re-run the NodeAgent in your terminal:\n\n$env:ROLE="agent"; java -jar java-control-plane/target/control-plane-1.0-SNAPSHOT-all.jar`);
+          return;
+        }
+
         if (manualKilledNodes[nodeId]) {
           delete manualKilledNodes[nodeId];
-          logTerminal(`Node [${nodeId}] revived! Re-enrolled in Raft cluster.`, 'success');
+          logTerminal(`[CHAOS SIMULATION] Node [${nodeId}] simulated crash cleared. Node re-admitted for workload scheduling.`, 'success');
         } else {
           manualKilledNodes[nodeId] = true;
-          logTerminal(`Node [${nodeId}] simulated crash! Connection severed. Initiating automatic failover...`, 'error');
+          logTerminal(`[CHAOS SIMULATION] Node [${nodeId}] simulated crash! Connection severed. Initiating automatic failover...`, 'error');
 
           // Check if any in-flight task was assigned to this node and trigger immediate failover!
           triggerImmediateFailover(nodeId);
@@ -1076,9 +1136,12 @@
       // Header Failure Toggle
       document.getElementById('toggleDeadNodeBtn').addEventListener('click', () => {
         const effective = getEffectiveNodes();
-        if (effective.length === 0) return;
-        const target = effective.find(n => !n.isDead) || effective[0];
-        window.toggleNodeKill(target.nodeId);
+        const liveTarget = effective.find(n => !n.isDead);
+        if (!liveTarget) {
+          logTerminal('[CHAOS SIMULATION] No active healthy nodes available to simulate crash on.', 'error');
+          return;
+        }
+        window.toggleNodeKill(liveTarget.nodeId);
       });
 
       // ── Proactive Migration Live Benchmark Trigger ────────────────────────
@@ -1310,13 +1373,24 @@
         const cx = width / 2;
         const cy = height / 2;
 
-        if (!isDragging) {
+        // 1. Calculate Live Node Fleet
+        const rawNodes = getEffectiveNodes();
+        const aliveNodes = rawNodes.filter(n => !n.isDead);
+        const deadNodes = rawNodes.filter(n => n.isDead);
+
+        // Only rotate orbit when alive nodes are connected and orbiting
+        if (!isDragging && aliveNodes.length > 0) {
           rotationAngle += 0.002;
+        } else if (aliveNodes.length === 0) {
+          rotationAngle = 0;
         }
-        document.getElementById('orbitAngleText').textContent = Math.round((rotationAngle * 180 / Math.PI) % 360) + '°';
+
+        document.getElementById('orbitAngleText').textContent = aliveNodes.length > 0
+          ? Math.round((rotationAngle * 180 / Math.PI) % 360) + '°'
+          : '0° (IDLE)';
         document.getElementById('orbitActiveTaskCount').textContent = activeWorkPackets.length;
 
-        // 1. Perspective Grid
+        // 2. Perspective Grid
         if (showGrid) {
           ctx.save();
           ctx.strokeStyle = 'rgba(0, 212, 255, 0.04)';
@@ -1339,20 +1413,16 @@
           ctx.restore();
         }
 
-        // 2. Orbit Ellipse Ring
+        // 3. Orbit Ellipse Ring
         ctx.save();
-        ctx.strokeStyle = 'rgba(0, 212, 255, 0.12)';
+        ctx.strokeStyle = aliveNodes.length > 0 ? 'rgba(0, 212, 255, 0.12)' : 'rgba(255, 255, 255, 0.04)';
         ctx.lineWidth = 1.2;
         ctx.beginPath();
         ctx.ellipse(cx, cy, width * 0.35, height * 0.28, 0, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
 
-        // 3. Node Calculation (Visible On-Screen Positioning for Alive and Dead)
-        const rawNodes = getEffectiveNodes();
-        const aliveNodes = rawNodes.filter(n => !n.isDead);
-        const deadNodes = rawNodes.filter(n => n.isDead);
-
+        // 4. Node Calculation (Visible On-Screen Positioning for Alive and Dead)
         const nodeRenderList = [];
 
         // Alive nodes in regular orbit
@@ -1378,16 +1448,26 @@
         // Sort by Z for proper 3D depth rendering
         nodeRenderList.sort((a, b) => a.z - b.z);
 
-        // 4. Draw Nodes Behind Server
+        // 5. Draw Nodes Behind Server
         nodeRenderList.filter(p => p.z < 0).forEach(renderNodeAndConnection);
 
-        // 5. Draw Central 3D Server Rack
+        // 6. Draw Central 3D Server Rack
         draw3DServerRack(cx, cy);
 
-        // 6. Draw Nodes In Front of Server
+        // Standby notice when 0 nodes are connected
+        if (aliveNodes.length === 0 && deadNodes.length === 0) {
+          ctx.save();
+          ctx.fillStyle = 'rgba(232, 235, 247, 0.45)';
+          ctx.font = '12px "Geist Mono", monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('STANDBY — AWAITING WORKER NODE REGISTRATIONS (gRPC :50051)', cx, cy + 115);
+          ctx.restore();
+        }
+
+        // 7. Draw Nodes In Front of Server
         nodeRenderList.filter(p => p.z >= 0).forEach(renderNodeAndConnection);
 
-        // 7. Render Active Task Packets (Server -> Node, Node Computing, Failover Reroute, Node -> Server)
+        // 8. Render Active Task Packets (Server -> Node, Node Computing, Failover Reroute, Node -> Server)
         renderTaskPackets(cx, cy, nodeRenderList);
 
         // Update server absorption ripples
