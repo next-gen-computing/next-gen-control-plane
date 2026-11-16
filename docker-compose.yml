@@ -41,10 +41,10 @@ services:
       - NEXTGEN_DATA_DIR=/root/.nextgen/data
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
     ports:
-      - "50051:50051"   # gRPC — the only port a real node needs to reach
-      - "9090:9090"     # Prometheus metrics
-      - "8085:8085"     # Dashboard API (/api/nodes)
-      - "8080:8080"     # Spring Boot REST API & WebSocket
+      - "${GRPC_PORT:-50051}:50051"   # gRPC — the only port a real node needs to reach
+      - "${METRICS_PORT:-9090}:9090"     # Prometheus metrics
+      - "${DASHBOARD_PORT:-8085}:8085"     # Dashboard API (/api/nodes)
+      - "${HTTP_PORT:-8080}:8080"     # Spring Boot REST API & WebSocket
     volumes:
       # The CA and server key live here. Without a volume a restart mints a brand
       # new CA and every previously-enrolled node is instantly untrusted.

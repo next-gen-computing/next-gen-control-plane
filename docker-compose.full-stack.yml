@@ -66,10 +66,10 @@ services:
       - nextgen_data:/data
       - nextgen_pki:/pki
     ports:
-      - "50051:50051"   # gRPC
-      - "8080:8080"     # Spring REST API + WebSocket
-      - "8085:8085"     # Legacy dashboard JSON API
-      - "9091:9091"     # Prometheus metrics
+      - "${GRPC_PORT:-50051}:50051"   # gRPC
+      - "${HTTP_PORT:-8080}:8080"     # Spring REST API + WebSocket
+      - "${DASHBOARD_PORT:-8085}:8085" # Legacy dashboard JSON API
+      - "${METRICS_PORT:-9091}:9091"  # Prometheus metrics
     depends_on:
       db:
         condition: service_healthy
