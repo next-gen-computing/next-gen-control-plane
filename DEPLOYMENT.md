@@ -516,6 +516,19 @@ docker run -d --name worker-laptop \
 2. Inspect live telemetry at `http://localhost:8085/api/nodes`.
 3. Check if ML risk scoring is enabled without a running predictor; if unneeded, ensure `ML_RISK_SCORER_ENABLED=false` to use deterministic kernel heuristics.
 
+### Symptom: Docker fails with `bind: Only one usage of each socket address is normally permitted`
+1. **Host Port Collision**: This happens when Docker attempts to bind port `8085`, `8080`, or `50051` while a native `java -jar` instance of the control plane is already running on the same host machine.
+2. **Resolution Option A (Stop Host Process)**: Terminate the native server running in your terminal (`Ctrl + C`), then re-run `docker compose up`.
+3. **Resolution Option B (Port Override)**: Change the published host ports without modifying compose files by providing environment variables:
+   ```bash
+   DASHBOARD_PORT=8086 HTTP_PORT=8081 GRPC_PORT=50052 docker compose -f docker-compose.full-stack.yml up -d
+   ```
+
+### Symptom: Maven build fails with `No toolchain found for type jdk [ version='21' ]`
+1. **Cause**: `desktop-ui` previously required an explicit `~/.m2/toolchains.xml` definition for JDK 21.
+2. **Resolution**: Toolchain enforcement has been moved into the opt-in profile `use-toolchain`. Standard builds (`mvn clean install -DskipTests`) now build directly against the active JDK 21 in `JAVA_HOME` across Windows, macOS, and Linux without requiring `toolchains.xml`.
+3. **File Lock Warning (`Failed to delete ... control-plane-1.0-SNAPSHOT-all.jar`)**: On Windows, Maven cannot overwrite or delete a JAR file if a running Java process holds an active file lock on it. Press `Ctrl + C` in the running server/node terminal before executing `mvn clean`.
+
 ---
 *Next-Gen Control Plane — High-Performance Distributed Systems Engineering.*
 
