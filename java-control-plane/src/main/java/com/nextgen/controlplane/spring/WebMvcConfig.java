@@ -6,13 +6,14 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
-import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.List;
 
 /**
  * Spring MVC configuration: CORS (dev-mode allow-all), static web UI resource mapping.
+ * Note: Root and dashboard routes are handled directly by {@link DashboardWebController}
+ * to prevent circular forward loops.
  */
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
@@ -21,17 +22,6 @@ public class WebMvcConfig implements WebMvcConfigurer {
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         registry.addResourceHandler("/**")
                 .addResourceLocations("classpath:/static/");
-    }
-
-    @Override
-    public void addViewControllers(ViewControllerRegistry registry) {
-        registry.addViewController("/").setViewName("forward:/index.html");
-        registry.addViewController("/dashboard").setViewName("forward:/index.html");
-        registry.addViewController("/dashboard/**").setViewName("forward:/index.html");
-        registry.addViewController("/ui").setViewName("forward:/index.html");
-        registry.addViewController("/ui/**").setViewName("forward:/index.html");
-        registry.addViewController("/index").setViewName("forward:/index.html");
-        registry.addViewController("/index.html").setViewName("forward:/index.html");
     }
 
     @Bean
