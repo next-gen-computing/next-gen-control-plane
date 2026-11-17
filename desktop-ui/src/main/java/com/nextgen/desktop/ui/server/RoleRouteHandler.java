@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
@@ -95,6 +96,10 @@ public class RoleRouteHandler implements HttpHandler {
                 requireMethod(exchange, method, "POST", () -> handleDiscoverPing(exchange));
             } else if (path.endsWith("/discover/request-join")) {
                 requireMethod(exchange, method, "POST", () -> handleDiscoverRequestJoin(exchange));
+            } else if (path.endsWith("/discover/join-status")) {
+                requireMethod(exchange, method, "GET", () -> handleDiscoverJoinStatus(exchange));
+            } else if (path.endsWith("/hardware")) {
+                requireMethod(exchange, method, "GET", () -> handleHardwareInfo(exchange));
             } else if (path.endsWith("/server-info")) {
                 requireMethod(exchange, method, "GET", () -> handleServerInfo(exchange));
             } else if (path.endsWith("/docker-info")) {
@@ -508,6 +513,72 @@ public class RoleRouteHandler implements HttpHandler {
             }
         } catch (Exception e) {
             JsonSupport.sendJson(exchange, 502, Map.of("ok", false, "error", "Could not reach target server: " + e.getMessage()));
+        }
+    }
+
+    private void handleHardwareInfo(HttpExchange exchange) throws IOException {
+        String os = System.getProperty("os.name", "Windows");
+        String osArch = System.getProperty("os.arch", "x86_64");
+        String lowerOs = os.toLowerCase(Locale.ROOT);
+        String deviceType = "windows";
+        if (lowerOs.contains("mac") || lowerOs.contains("darwin") || lowerOs.contains("apple")) {
+            deviceType = "mac";
+        } else if (lowerOs.contains("nux") || lowerOs.contains("nix") || lowerOs.contains("ubuntu")) {
+            deviceType = "linux";
+        }
+
+        int cores = Runtime.getRuntime().availableProcessors();
+        long mem = 0;
+        try {
+            java.lang.management.OperatingSystemMXBean osBean = java.lang.management.ManagementFactory.getOperatingSystemMXBean();
+            if (osBean instanceof com.sun.management.OperatingSystemMXBean sunBean) {
+                mem = sunBean.getTotalMemorySize();
+            }
+        } catch (Throwable ignored) {}
+        if (mem <= 0) mem = Runtime.getRuntime().maxMemory();
+        double ramGb = Math.round((mem / (1024.0 * 1024.0 * 1024.0)) * 10.0) / 10.0;
+
+        String hostname = "laptop";
+        try {
+            hostname = java.net.InetAddress.getLocalHost().getHostName();
+        } catch (Exception ignored) {}
+
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("deviceType", deviceType);
+        info.put("osName", os);
+        info.put("osArch", osArch);
+        info.put("cores", cores);
+        info.put("ramGb", ramGb);
+        info.put("hostname", hostname);
+        info.put("lanIp", ServerIdCodec.detectLanIp());
+        JsonSupport.sendJson(exchange, 200, info);
+    }
+
+    private void handleDiscoverJoinStatus(HttpExchange exchange) throws IOException {
+        Map<String, String> q = parseQuery(exchange.getRequestURI());
+        String nodeId = q.getOrDefault("nodeId", "");
+        String srv = q.getOrDefault("serverAddress", "127.0.0.1:8080");
+        if (!srv.startsWith("http://") && !srv.startsWith("https://")) {
+            srv = "http://" + srv;
+        }
+        if (srv.contains(":50051")) {
+            srv = srv.replace(":50051", ":8080");
+        }
+        try {
+            URI targetUri = URI.create(srv + "/api/v1/discovery/join-status?nodeId=" + java.net.URLEncoder.encode(nodeId, StandardCharsets.UTF_8));
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) targetUri.toURL().openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(2500);
+            conn.setReadTimeout(2500);
+            int code = conn.getResponseCode();
+            if (code == 200) {
+                Map<?, ?> resp = JsonSupport.MAPPER.readValue(conn.getInputStream(), Map.class);
+                JsonSupport.sendJson(exchange, 200, resp);
+            } else {
+                JsonSupport.sendJson(exchange, code, Map.of("status", "ERROR", "error", "HTTP " + code));
+            }
+        } catch (Exception e) {
+            JsonSupport.sendJson(exchange, 502, Map.of("status", "UNREACHABLE", "error", e.getMessage()));
         }
     }
 

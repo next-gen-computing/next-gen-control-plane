@@ -41,6 +41,12 @@ public final class LanDiscoveryBeacon {
     private volatile int nodeCount = 0;
     private volatile String status = "READY_FOR_NODES";
     private volatile boolean requiresToken = false;
+    private volatile String osName = "Windows";
+    private volatile String osArch = "x86_64";
+    private volatile String deviceType = "windows";
+    private volatile int cores = 8;
+    private volatile double ramGb = 16.0;
+    private volatile boolean zeroTrustEnforced = true;
 
     private LanDiscoveryBeacon() {
         resolveLocalIdentity();
@@ -121,6 +127,12 @@ public final class LanDiscoveryBeacon {
         data.put("nodeCount", nodeCount);
         data.put("status", status);
         data.put("requiresToken", requiresToken);
+        data.put("osName", osName);
+        data.put("osArch", osArch);
+        data.put("deviceType", deviceType);
+        data.put("cores", cores);
+        data.put("ramGb", ramGb);
+        data.put("zeroTrustEnforced", zeroTrustEnforced);
         data.put("timestamp", System.currentTimeMillis());
         return data;
     }
@@ -217,6 +229,35 @@ public final class LanDiscoveryBeacon {
         } catch (Exception e) {
             this.clusterId = "NGX-CLUSTER";
         }
+
+        this.osName = System.getProperty("os.name", "Windows");
+        this.osArch = System.getProperty("os.arch", "x86_64");
+        String lowerOs = this.osName.toLowerCase(Locale.ROOT);
+        if (lowerOs.contains("mac") || lowerOs.contains("darwin") || lowerOs.contains("apple")) {
+            this.deviceType = "mac";
+        } else if (lowerOs.contains("nux") || lowerOs.contains("nix") || lowerOs.contains("aix")) {
+            this.deviceType = "linux";
+        } else {
+            this.deviceType = "windows";
+        }
+        this.cores = Runtime.getRuntime().availableProcessors();
+        long mem = 0;
+        try {
+            java.lang.management.OperatingSystemMXBean osBean = java.lang.management.ManagementFactory.getOperatingSystemMXBean();
+            if (osBean instanceof com.sun.management.OperatingSystemMXBean sunBean) {
+                mem = sunBean.getTotalMemorySize();
+            }
+        } catch (Throwable ignored) {}
+        if (mem <= 0) {
+            mem = Runtime.getRuntime().maxMemory();
+        }
+        this.ramGb = Math.round((mem / (1024.0 * 1024.0 * 1024.0)) * 10.0) / 10.0;
     }
+
+    public String getDeviceType() { return deviceType; }
+    public String getOsName() { return osName; }
+    public String getOsArch() { return osArch; }
+    public int getCores() { return cores; }
+    public double getRamGb() { return ramGb; }
 }
 

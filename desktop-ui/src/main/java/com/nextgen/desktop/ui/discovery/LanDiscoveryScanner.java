@@ -94,6 +94,11 @@ public final class LanDiscoveryScanner {
             m.put("nodeCount", s.nodeCount);
             m.put("networkType", s.networkType);
             m.put("requiresToken", s.requiresToken);
+            m.put("deviceType", s.deviceType);
+            m.put("osName", s.osName);
+            m.put("cores", s.cores);
+            m.put("ramGb", s.ramGb);
+            m.put("zeroTrustEnforced", s.zeroTrustEnforced);
             m.put("reachable", true);
             result.add(m);
         }
@@ -191,6 +196,11 @@ public final class LanDiscoveryScanner {
             String hostname = host;
             int nodes = 0;
             boolean requiresToken = false;
+            String deviceType = "windows";
+            String osName = "Windows";
+            int cores = 8;
+            double ramGb = 16.0;
+            boolean zeroTrust = true;
 
             try {
                 URI beaconUri = URI.create("http://" + host + ":8080/api/v1/discovery/beacon");
@@ -207,6 +217,11 @@ public final class LanDiscoveryScanner {
                         if (hn != null) hostname = hn.toString();
                         nodes = meta.get("nodeCount") instanceof Number n ? n.intValue() : 0;
                         requiresToken = Boolean.TRUE.equals(meta.get("requiresToken"));
+                        if (meta.get("deviceType") != null) deviceType = meta.get("deviceType").toString();
+                        if (meta.get("osName") != null) osName = meta.get("osName").toString();
+                        if (meta.get("cores") instanceof Number n) cores = n.intValue();
+                        if (meta.get("ramGb") instanceof Number n) ramGb = n.doubleValue();
+                        zeroTrust = Boolean.TRUE.equals(meta.get("zeroTrustEnforced"));
                     }
                 }
             } catch (Exception ignored) {
@@ -226,6 +241,11 @@ public final class LanDiscoveryScanner {
                     nodes,
                     host.equals("127.0.0.1") || host.equals("localhost") ? "Local Loopback" : "Wi-Fi / Hotspot LAN",
                     requiresToken,
+                    deviceType,
+                    osName,
+                    cores,
+                    ramGb,
+                    zeroTrust,
                     System.currentTimeMillis()
             ));
         } catch (Exception ignored) {
@@ -250,6 +270,11 @@ public final class LanDiscoveryScanner {
             int webPort = map.get("webPort") instanceof Number n ? n.intValue() : 8080;
             int nodeCount = map.get("nodeCount") instanceof Number n ? n.intValue() : 0;
             boolean requiresToken = Boolean.TRUE.equals(map.get("requiresToken"));
+            String deviceType = map.get("deviceType") != null ? map.get("deviceType").toString() : "windows";
+            String osName = map.get("osName") != null ? map.get("osName").toString() : "Windows";
+            int cores = map.get("cores") instanceof Number n ? n.intValue() : 8;
+            double ramGb = map.get("ramGb") instanceof Number n ? n.doubleValue() : 16.0;
+            boolean zeroTrust = Boolean.TRUE.equals(map.get("zeroTrustEnforced"));
 
             String address = ip + ":" + grpcPort;
 
@@ -275,6 +300,11 @@ public final class LanDiscoveryScanner {
                     nodeCount,
                     networkType,
                     requiresToken,
+                    deviceType,
+                    osName,
+                    cores,
+                    ramGb,
+                    zeroTrust,
                     System.currentTimeMillis()
             ));
             LOG.debug("Discovered server beacon: {} at {}", clusterName, address);
@@ -293,6 +323,11 @@ public final class LanDiscoveryScanner {
             int nodeCount,
             String networkType,
             boolean requiresToken,
+            String deviceType,
+            String osName,
+            int cores,
+            double ramGb,
+            boolean zeroTrustEnforced,
             long lastSeen
     ) {}
 }

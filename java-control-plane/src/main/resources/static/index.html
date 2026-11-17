@@ -874,73 +874,82 @@
       </div>
     </section>
 
-    <!-- Neumorphic Modal: Connect Worker Laptops -->
-    <div id="workerConnectModal" style="display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(8, 11, 16, 0.88); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); align-items: center; justify-content: center; padding: 20px;">
-      <div style="width: 100%; max-width: 650px; background: linear-gradient(145deg, #161b26, #10141e); box-shadow: 16px 16px 36px rgba(0,0,0,0.8), -8px -8px 24px rgba(255,255,255,0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 20px; padding: 30px; position: relative;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <!-- Neumorphic Modal: Connect Worker Laptops & 3D Green Radar Scanner -->
+    <div id="workerConnectModal" style="display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(8, 11, 16, 0.9); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); align-items: center; justify-content: center; padding: 20px;">
+      <div style="width: 100%; max-width: 740px; max-height: 90vh; overflow-y: auto; background: linear-gradient(145deg, #161b26, #0e121a); box-shadow: 16px 16px 36px rgba(0,0,0,0.85), -8px -8px 24px rgba(255,255,255,0.03); border: 1px solid rgba(16, 185, 129, 0.28); border-radius: 20px; padding: 26px; position: relative;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
           <div style="display: flex; align-items: center; gap: 12px;">
-            <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(59, 130, 246, 0.15)); display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: var(--btn-shadow); border: 1px solid rgba(59, 130, 246, 0.3);">🔗</div>
+            <div style="width: 42px; height: 42px; border-radius: 10px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(59, 130, 246, 0.15)); display: flex; align-items: center; justify-content: center; font-size: 20px; box-shadow: var(--btn-shadow); border: 1px solid rgba(16, 185, 129, 0.4);">📡</div>
             <div>
-              <h2 style="font-size: 1.2rem; font-weight: 700; color: #f1f5f9;">Connect Worker Laptops</h2>
-              <p style="font-size: 0.76rem; color: #94a3b8;">Outbound HTTP/2 gRPC Edge Compute Node Onboarding</p>
+              <h2 style="font-size: 1.25rem; font-weight: 700; color: #f1f5f9;">Airspace Radar &amp; Worker Node Onboarding</h2>
+              <p style="font-size: 0.76rem; color: #94a3b8;">3D Green Sonar Scanner with Zero-Trust Security Gate</p>
             </div>
           </div>
           <button id="closeWorkerModalBtn" class="btn" style="padding: 6px 10px; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 16px; color: #94a3b8;">×</button>
         </div>
 
-        <div style="background: #0b0e15; box-shadow: inset 4px 4px 10px rgba(0,0,0,0.8), inset -2px -2px 6px rgba(255,255,255,0.025); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 12px; padding: 16px; margin-bottom: 16px; font-family: var(--font-mono); font-size: 0.8rem;">
-          <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px; margin-bottom: 8px;">
+        <!-- 3D Green Avionics & Sonar Airspace Radar -->
+        <div style="background: #020b06; border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 14px; padding: 12px; margin-bottom: 16px; box-shadow: inset 0 0 25px rgba(0,0,0,0.85);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-family: var(--font-mono); font-size: 0.72rem;">
+            <span style="color: #10b981; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+              <span style="width: 7px; height: 7px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 8px #22c55e;"></span>
+              3D GREEN SONAR &amp; AVIONICS RADAR // AIRSPACE UDP 50055
+            </span>
+            <span style="color: #34d399; background: rgba(16, 185, 129, 0.15); padding: 2px 8px; border-radius: 10px; border: 1px solid rgba(16, 185, 129, 0.3);">🛡️ ZERO-TRUST GATE: ACTIVE</span>
+          </div>
+          <div style="width: 100%; height: 280px; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 10px;">
+            <canvas id="modalRadarCanvas" width="680" height="280" style="width: 100%; height: 100%; display: block;"></canvas>
+          </div>
+        </div>
+
+        <!-- Server Host Endpoint Specs -->
+        <div style="background: #090c12; box-shadow: inset 4px 4px 10px rgba(0,0,0,0.8), inset -2px -2px 6px rgba(255,255,255,0.025); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 12px; padding: 14px; margin-bottom: 16px; font-family: var(--font-mono); font-size: 0.78rem;">
+          <div style="display: grid; grid-template-columns: 140px 1fr; gap: 6px; margin-bottom: 6px;">
             <span style="color: #94a3b8;">Server Host IP:</span>
             <span id="modalServerIp" style="color: #60a5fa; font-weight: 700;">127.0.0.1</span>
           </div>
-          <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px; margin-bottom: 8px;">
+          <div style="display: grid; grid-template-columns: 140px 1fr; gap: 6px; margin-bottom: 6px;">
             <span style="color: #94a3b8;">gRPC Port:</span>
             <span style="color: #10b981; font-weight: 600;">50051 (Outbound only)</span>
           </div>
-          <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px; margin-bottom: 8px;">
+          <div style="display: grid; grid-template-columns: 140px 1fr; gap: 6px; margin-bottom: 6px;">
             <span style="color: #94a3b8;">Web Dashboard:</span>
             <span id="modalWebUrl" style="color: #60a5fa;">http://localhost:8080/</span>
           </div>
-          <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px;">
+          <div style="display: grid; grid-template-columns: 140px 1fr; gap: 6px;">
             <span style="color: #94a3b8;">Active Nodes:</span>
             <span id="modalActiveNodes" style="color: #f1f5f9; font-weight: 600;">0 ALIVE</span>
           </div>
         </div>
 
-        <!-- Quick Share LAN Beacon Status -->
-        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
-            <div>
-              <div style="font-size: 0.82rem; font-weight: 700; color: #10b981;">📡 Quick Share LAN Beacon Broadcasting</div>
-              <div style="font-size: 0.72rem; color: #94a3b8;">Port UDP 50055 &bull; Nearby laptops running Desktop UI / Node mode auto-detect this server.</div>
-            </div>
-          </div>
-          <span class="code-badge" style="font-size: 0.7rem; color: #10b981; border-color: rgba(16, 185, 129, 0.3);">ACTIVE</span>
-        </div>
-
         <!-- Inbound Join Requests container -->
-        <div id="modalPendingRequestsSection" style="margin-bottom: 20px;">
+        <div id="modalPendingRequestsSection" style="margin-bottom: 18px;">
           <h4 style="font-size: 0.82rem; color: #e2e8f0; margin-bottom: 8px; font-weight: 600; display: flex; align-items: center; justify-content: space-between;">
-            <span>Nearby &amp; WAN Join Requests:</span>
+            <span>Nearby &amp; WAN Inbound Join Requests:</span>
             <span id="modalRequestCountBadge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); color: #60a5fa;">0 Pending</span>
           </h4>
-          <div id="modalInboundRequestsBox" style="background: #090c12; box-shadow: inset 3px 3px 8px rgba(0,0,0,0.85); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 12px; max-height: 140px; overflow-y: auto; font-size: 0.78rem; color: #94a3b8;">
-            <div style="text-align: center; padding: 8px; color: #64748b;">No pending join requests. Other laptops in 'Node' mode will appear here instantly.</div>
+          <div id="modalInboundRequestsBox" style="background: #090c12; box-shadow: inset 3px 3px 8px rgba(0,0,0,0.85); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 12px; max-height: 160px; overflow-y: auto; font-size: 0.78rem; color: #94a3b8;">
+            <div style="text-align: center; padding: 8px; color: #64748b;">No pending join requests. Laptops in 'Node' mode will appear here instantly with their hardware specs.</div>
           </div>
         </div>
 
-        <h4 style="font-size: 0.82rem; color: #e2e8f0; margin-bottom: 10px; font-weight: 600;">Select Join Command for Other Laptop:</h4>
-        <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px;">
-          <div style="background: #090c12; box-shadow: inset 3px 3px 8px rgba(0,0,0,0.85); border: 1px solid rgba(255,255,255,0.05); border-radius: 9px; padding: 11px 13px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+        <!-- Zero-Trust Security Policy Notice -->
+        <div style="background: rgba(16, 185, 129, 0.06); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 10px; padding: 10px 14px; margin-bottom: 18px; font-size: 0.72rem; color: #94a3b8; display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 16px;">🛡️</span>
+          <div>
+            <strong style="color: #34d399;">Zero-Trust Compute Policy:</strong> No anonymous machine can access cluster data or execute jobs without explicit administrator permission. All task payloads and returned results are SHA-256 integrity verified.
+          </div>
+        </div>
+
+        <h4 style="font-size: 0.82rem; color: #e2e8f0; margin-bottom: 10px; font-weight: 600;">CLI Join Commands for Remote Laptops:</h4>
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">
+          <div style="background: #090c12; box-shadow: inset 3px 3px 8px rgba(0,0,0,0.85); border: 1px solid rgba(255,255,255,0.05); border-radius: 9px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
             <span id="modalPsCmd" style="font-family: var(--font-mono); font-size: 0.75rem; color: #10b981; overflow-x: auto; white-space: nowrap;">$env:ROLE="node"; $env:SERVER_HOST="127.0.0.1"; java -jar control-plane-1.0-SNAPSHOT-all.jar</span>
             <button class="btn btn-sm" onclick="copyModalText('modalPsCmd')">Copy PS</button>
           </div>
-          <div style="background: #090c12; box-shadow: inset 3px 3px 8px rgba(0,0,0,0.85); border: 1px solid rgba(255,255,255,0.05); border-radius: 9px; padding: 11px 13px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+          <div style="background: #090c12; box-shadow: inset 3px 3px 8px rgba(0,0,0,0.85); border: 1px solid rgba(255,255,255,0.05); border-radius: 9px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
             <span id="modalBashCmd" style="font-family: var(--font-mono); font-size: 0.75rem; color: #60a5fa; overflow-x: auto; white-space: nowrap;">ROLE=node SERVER_HOST=127.0.0.1 java -jar control-plane-1.0-SNAPSHOT-all.jar</span>
             <button class="btn btn-sm" onclick="copyModalText('modalBashCmd')">Copy Bash</button>
-          </div>
-        </div>
           </div>
         </div>
 
@@ -948,6 +957,8 @@
           <span style="font-size: 0.75rem; color: #94a3b8;">Workers connect over Wi-Fi/LAN without inbound firewall ports.</span>
           <button id="modalDoneBtn" class="btn btn-primary" style="padding: 8px 20px;">Done</button>
         </div>
+      </div>
+    </div>
       </div>
     </div>
 
@@ -2156,9 +2167,29 @@
       const closeWorkerModalBtn = document.getElementById('closeWorkerModalBtn');
       const modalDoneBtn = document.getElementById('modalDoneBtn');
 
+      let modalRadar = null;
+      function initModalRadar() {
+        const radarCanvas = document.getElementById('modalRadarCanvas');
+        if (radarCanvas && window.RadarScanner && !modalRadar) {
+          modalRadar = new window.RadarScanner(radarCanvas, {
+            rpm: 42,
+            rangeMeters: 50,
+            zeroTrustEnforced: true,
+            isServerMode: true,
+            onTargetSelect: (t) => {
+              if (!t.isApproved && t.nodeId) {
+                window.approveJoinRequest(t.nodeId);
+              }
+            }
+          });
+        }
+      }
+
       if (connectBtn && workerModal) {
         connectBtn.addEventListener('click', () => {
           workerModal.style.display = 'flex';
+          initModalRadar();
+          pollJoinRequests();
         });
       }
       if (closeWorkerModalBtn && workerModal) {
@@ -2192,10 +2223,20 @@
 
       async function pollJoinRequests() {
         try {
-          const res = await fetch('/api/v1/discovery/pending-requests');
-          if (!res.ok) return;
-          const requests = await res.json();
-          renderJoinRequests(requests);
+          const [reqRes, radarRes] = await Promise.all([
+            fetch('/api/v1/discovery/pending-requests'),
+            fetch('/api/v1/discovery/radar-targets')
+          ]);
+          if (reqRes.ok) {
+            const requests = await reqRes.json();
+            renderJoinRequests(requests);
+          }
+          if (radarRes.ok) {
+            const targets = await radarRes.json();
+            if (modalRadar) {
+              modalRadar.setTargets(targets);
+            }
+          }
         } catch (e) {
           // silent fail
         }
@@ -2210,7 +2251,7 @@
           if (banner) banner.style.display = 'none';
           currentPendingRequestId = null;
           if (modalBox) {
-            modalBox.innerHTML = '<div style="text-align: center; padding: 8px; color: #64748b;">No pending join requests. Other laptops in \'Node\' mode will appear here instantly.</div>';
+            modalBox.innerHTML = '<div style="text-align: center; padding: 12px; color: #64748b;">No pending join requests. Remote laptops in \'Node\' mode will appear on the 3D Radar and here instantly.</div>';
           }
           if (countBadge) countBadge.textContent = '0 Pending';
           return;
@@ -2225,26 +2266,35 @@
           banner.style.display = 'flex';
           const sub = document.getElementById('bannerRequestSub');
           if (sub) {
-            const cores = topReq.cpuCores || 4;
+            const cores = topReq.cores || topReq.cpuCores || 4;
             const ram = topReq.ramGb ? Number(topReq.ramGb).toFixed(1) : '8.0';
-            sub.innerHTML = `IP: <strong>${escapeHtml(topReq.ipAddress || 'unknown')}</strong> &bull; Hostname: <strong>${escapeHtml(topReq.hostname || 'Worker')}</strong> &bull; ${cores} Cores &bull; ${ram} GB RAM`;
+            const dev = (topReq.deviceType || 'windows').toLowerCase();
+            const icon = dev === 'mac' ? '🍏' : (dev === 'linux' ? '🐧' : '🪟');
+            const devName = dev === 'mac' ? 'MacBook' : (dev === 'linux' ? 'Linux Box' : 'Windows 11');
+            sub.innerHTML = `Hardware: <strong>${icon} ${devName}</strong> &bull; IP: <strong>${escapeHtml(topReq.ip || topReq.ipAddress || 'unknown')}</strong> &bull; Hostname: <strong>${escapeHtml(topReq.hostname || 'Worker')}</strong> &bull; ${cores} Cores &bull; ${ram} GB RAM &bull; <span style="color:#fbbf24;">🛡️ QUARANTINED</span>`;
           }
         }
 
-        // Render list in modal
+        // Render list in modal with rich device silhouette and specs
         if (modalBox) {
           modalBox.innerHTML = requests.map(r => {
-            const cores = r.cpuCores || 4;
+            const cores = r.cores || r.cpuCores || 4;
             const ram = r.ramGb ? Number(r.ramGb).toFixed(1) : '8.0';
             const shortId = escapeHtml(r.nodeId ? r.nodeId.substring(0, 8) : 'node');
+            const dev = (r.deviceType || 'windows').toLowerCase();
+            const icon = dev === 'mac' ? '🍏' : (dev === 'linux' ? '🐧' : '🪟');
+            const devName = dev === 'mac' ? 'Apple MacBook Pro' : (dev === 'linux' ? 'Linux Workstation' : 'Windows 11 Laptop');
             return `
-              <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 8px; margin-bottom: 6px;">
-                <div>
-                  <div style="color: #f1f5f9; font-weight: 600;">${escapeHtml(r.hostname || 'Worker Node')} <span style="font-size: 0.7rem; color: #60a5fa;">(${escapeHtml(r.ipAddress || '')})</span></div>
-                  <div style="font-size: 0.72rem; color: #64748b;">Node ID: ${shortId}... &bull; ${cores} Cores &bull; ${ram} GB</div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 10px; margin-bottom: 8px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <div style="font-size: 22px; width: 36px; height: 36px; border-radius: 8px; background: rgba(16, 185, 129, 0.12); display: flex; align-items: center; justify-content: center; border: 1px solid rgba(16, 185, 129, 0.3);">${icon}</div>
+                  <div>
+                    <div style="color: #f1f5f9; font-weight: 700; font-size: 0.85rem;">${escapeHtml(r.hostname || 'Worker Node')} <span style="font-size: 0.72rem; color: #10b981;">[${devName}]</span></div>
+                    <div style="font-size: 0.72rem; color: #94a3b8; font-family: var(--font-mono);">${escapeHtml(r.ip || r.ipAddress || '')} &bull; ${cores} Cores &bull; ${ram} GB &bull; <span style="color: #fbbf24; font-weight: 600;">🛡️ QUARANTINE</span></div>
+                  </div>
                 </div>
-                <div style="display: flex; gap: 6px;">
-                  <button class="btn btn-sm btn-primary" onclick="window.approveJoinRequest('${r.nodeId}')">Approve</button>
+                <div style="display: flex; gap: 8px;">
+                  <button class="btn btn-sm btn-primary" style="background: linear-gradient(135deg, #10b981, #059669); border-color: #34d399;" onclick="window.approveJoinRequest('${r.nodeId}')">✅ Approve &amp; Admit</button>
                   <button class="btn btn-sm btn-danger" onclick="window.rejectJoinRequest('${r.nodeId}')">Decline</button>
                 </div>
               </div>
@@ -2261,7 +2311,7 @@
             body: JSON.stringify({ nodeId: nodeId })
           });
           if (res.ok) {
-            logTerminal(`[QuickShare] Approved node ${nodeId} to join cluster.`);
+            logTerminal(`[Zero-Trust Gate] Approved node '${nodeId}' to join cluster.`);
             pollJoinRequests();
             fetchNodes();
           }
@@ -2278,7 +2328,7 @@
             body: JSON.stringify({ nodeId: nodeId })
           });
           if (res.ok) {
-            logTerminal(`[QuickShare] Rejected join request for node ${nodeId}.`);
+            logTerminal(`[Zero-Trust Gate] Rejected & severed join request for node '${nodeId}'.`);
             pollJoinRequests();
           }
         } catch (e) {
@@ -2294,10 +2344,11 @@
       });
 
       pollJoinRequests();
-      setInterval(pollJoinRequests, 3000);
+      setInterval(pollJoinRequests, 2500);
 
     })();
   </script>
+  <script src="/js/radar-scanner.js"></script>
   <script src="/js/ambient-3d-animals.js"></script>
 </body>
 </html>

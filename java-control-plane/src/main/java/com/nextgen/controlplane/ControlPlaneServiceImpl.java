@@ -365,6 +365,31 @@ public class ControlPlaneServiceImpl extends ControlPlaneServiceGrpc.ControlPlan
                     .withDescription("node_id must not be blank").asRuntimeException());
             return;
         }
+
+        // Zero-Trust Security Gate: Deny unapproved nodes and record them in quarantine for operator radar approval
+        if (!com.nextgen.security.NodeAdmissionGate.getInstance().isAdmitted(id, request.getIp())) {
+            String os = "";
+            String arch = "";
+            int cores = 4;
+            double ram = 8.0;
+            if (request.hasCapabilities()) {
+                var caps = request.getCapabilities();
+                os = caps.getOsName();
+                arch = caps.getOsArch();
+                cores = caps.getCpuCores() > 0 ? caps.getCpuCores() : 4;
+                if (caps.getTotalMemoryBytes() > 0) {
+                    ram = Math.round((caps.getTotalMemoryBytes() / (1024.0 * 1024.0 * 1024.0)) * 10.0) / 10.0;
+                }
+            }
+            com.nextgen.security.NodeAdmissionGate.getInstance().requestAdmission(id, request.getHostname(), request.getIp(),
+                    os, arch, cores, ram);
+            LOG.warn("🛡️ [Zero-Trust Security Gate] Intercepted unapproved node '{}' from {}. Placed in quarantine pending operator approval.",
+                    id, request.getIp());
+            responseObserver.onError(Status.PERMISSION_DENIED
+                    .withDescription("Zero-Trust Security Gate: Node '" + id + "' requires administrator approval to join.").asRuntimeException());
+            return;
+        }
+
         LOG.info("📥 RegisterNode: id={}, ip={}, hostname={}", id, request.getIp(), request.getHostname());
 
         boolean resumedExisting;

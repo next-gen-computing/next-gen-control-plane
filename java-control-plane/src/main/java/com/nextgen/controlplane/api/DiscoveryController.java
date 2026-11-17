@@ -2,6 +2,7 @@ package com.nextgen.controlplane.api;
 
 import com.nextgen.controlplane.NodeRegistry;
 import com.nextgen.controlplane.discovery.LanDiscoveryBeacon;
+import com.nextgen.security.NodeAdmissionGate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -13,7 +14,7 @@ import java.util.concurrent.*;
 
 /**
  * REST controller for LAN Quick Share discovery, Worldwide / WAN Cluster Explorer,
- * real socket ping checks, and inbound node join requests with zero simulation.
+ * real socket ping checks, 3D Green Radar Scanner targets, and Zero-Trust Node Admission Gate.
  */
 @RestController
 @RequestMapping("/api/v1/discovery")
@@ -21,9 +22,6 @@ public class DiscoveryController {
     private static final Logger LOG = LoggerFactory.getLogger(DiscoveryController.class);
 
     private final NodeRegistry nodeRegistry;
-
-    // Concurrent store for pending node join requests (e.g. from remote laptops)
-    private final Map<String, Map<String, Object>> pendingJoinRequests = new ConcurrentHashMap<>();
 
     public DiscoveryController(NodeRegistry nodeRegistry) {
         this.nodeRegistry = nodeRegistry;
@@ -46,42 +44,32 @@ public class DiscoveryController {
      */
     @GetMapping("/pending-requests")
     public ResponseEntity<List<Map<String, Object>>> getPendingRequests() {
-        return ResponseEntity.ok(new ArrayList<>(pendingJoinRequests.values()));
+        return ResponseEntity.ok(NodeAdmissionGate.getInstance().getPendingRequestsList());
     }
 
     /**
      * POST /api/v1/discovery/join-request
-     * Inbound worker nodes (across LAN or WAN) submit their hardware specs to join the cluster.
+     * Inbound worker nodes submit their hardware specs to join the cluster.
+     * Held in quarantine until approved by the server operator.
      */
     @PostMapping("/join-request")
     public ResponseEntity<Map<String, Object>> submitJoinRequest(@RequestBody Map<String, Object> req) {
         String nodeId = String.valueOf(req.getOrDefault("nodeId", "node-" + UUID.randomUUID().toString().substring(0, 8)));
         String hostname = String.valueOf(req.getOrDefault("hostname", "remote-laptop"));
         String ip = String.valueOf(req.getOrDefault("ip", "unknown"));
+        String os = String.valueOf(req.getOrDefault("os", "Unknown OS"));
+        String osArch = String.valueOf(req.getOrDefault("osArch", "x86_64"));
         int cores = req.get("cores") instanceof Number n ? n.intValue() : 4;
         double ramGb = req.get("ramGb") instanceof Number n ? n.doubleValue() : 8.0;
-        String os = String.valueOf(req.getOrDefault("os", "Unknown OS"));
 
-        Map<String, Object> record = new LinkedHashMap<>();
-        record.put("requestId", UUID.randomUUID().toString());
-        record.put("nodeId", nodeId);
-        record.put("hostname", hostname);
-        record.put("ip", ip);
-        record.put("cores", cores);
-        record.put("ramGb", ramGb);
-        record.put("os", os);
-        record.put("status", "PENDING_APPROVAL");
-        record.put("receivedAt", System.currentTimeMillis());
-
-        pendingJoinRequests.put(nodeId, record);
-        LOG.info("📥 Inbound Node Join Request received from {} [{}] ({}, {} cores, {} GB RAM)",
-                hostname, ip, os, cores, ramGb);
+        var pending = NodeAdmissionGate.getInstance().requestAdmission(nodeId, hostname, ip, os, osArch, cores, ramGb);
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("ok", true);
-        response.put("status", "PENDING");
-        response.put("message", "Join request submitted to server operator for approval");
-        response.put("requestId", record.get("requestId"));
+        response.put("status", "PENDING_APPROVAL");
+        response.put("message", "Join request held in Zero-Trust quarantine pending server operator approval");
+        response.put("requestId", pending.requestId());
+        response.put("nodeId", nodeId);
         return ResponseEntity.ok(response);
     }
 
@@ -92,17 +80,17 @@ public class DiscoveryController {
     @PostMapping("/approve-request")
     public ResponseEntity<Map<String, Object>> approveJoinRequest(@RequestBody Map<String, String> body) {
         String nodeId = body.get("nodeId");
-        if (nodeId == null || !pendingJoinRequests.containsKey(nodeId)) {
-            return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "Request not found"));
+        if (nodeId == null || nodeId.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "nodeId is required"));
         }
 
-        Map<String, Object> record = pendingJoinRequests.remove(nodeId);
-        record.put("status", "APPROVED");
+        String token = NodeAdmissionGate.getInstance().approveNode(nodeId);
         LOG.info("✅ Operator approved node join request for {}", nodeId);
 
         return ResponseEntity.ok(Map.of(
                 "ok", true,
                 "nodeId", nodeId,
+                "token", token,
                 "grpcPort", 50051,
                 "status", "APPROVED"
         ));
@@ -116,10 +104,106 @@ public class DiscoveryController {
     public ResponseEntity<Map<String, Object>> rejectJoinRequest(@RequestBody Map<String, String> body) {
         String nodeId = body.get("nodeId");
         if (nodeId != null) {
-            pendingJoinRequests.remove(nodeId);
+            NodeAdmissionGate.getInstance().rejectNode(nodeId);
             LOG.info("❌ Operator rejected node join request for {}", nodeId);
         }
         return ResponseEntity.ok(Map.of("ok", true));
+    }
+
+    /**
+     * GET /api/v1/discovery/join-status
+     * Polled by worker machines to check their admission ticket status.
+     */
+    @GetMapping("/join-status")
+    public ResponseEntity<Map<String, Object>> getJoinStatus(@RequestParam("nodeId") String nodeId) {
+        return ResponseEntity.ok(NodeAdmissionGate.getInstance().getAdmissionStatus(nodeId));
+    }
+
+    /**
+     * GET /api/v1/discovery/radar-targets
+     * Returns all nearby detected systems & nodes for the 3D Green Radar Scanner HUD.
+     */
+    @GetMapping("/radar-targets")
+    public ResponseEntity<List<Map<String, Object>>> getRadarTargets() {
+        List<Map<String, Object>> targets = new ArrayList<>();
+        var beacon = LanDiscoveryBeacon.getInstance();
+        Map<String, Object> beaconData = beacon.getBeaconData();
+
+        // 1. Center Radar Station (Host Controller)
+        Map<String, Object> hostTarget = new LinkedHashMap<>();
+        hostTarget.put("nodeId", "control-plane-host");
+        hostTarget.put("hostname", beaconData.get("hostname"));
+        hostTarget.put("ip", beaconData.get("ip"));
+        hostTarget.put("port", beaconData.get("grpcPort"));
+        hostTarget.put("deviceType", beaconData.get("deviceType"));
+        hostTarget.put("os", beaconData.get("osName"));
+        hostTarget.put("osArch", beaconData.get("osArch"));
+        hostTarget.put("cores", beaconData.get("cores"));
+        hostTarget.put("ramGb", beaconData.get("ramGb"));
+        hostTarget.put("status", "HOST_CONTROLLER");
+        hostTarget.put("isApproved", true);
+        hostTarget.put("latencyMs", 1);
+        hostTarget.put("isLocal", true);
+        targets.add(hostTarget);
+
+        // 2. Active Cluster Nodes from NodeRegistry
+        for (var node : nodeRegistry.snapshot()) {
+            if (node.getNodeId().equals("control-plane-host")) continue;
+            Map<String, Object> t = new LinkedHashMap<>();
+            t.put("nodeId", node.getNodeId());
+            t.put("hostname", node.getHostname());
+            t.put("ip", node.getIp());
+            t.put("port", node.getPort());
+
+            String os = "";
+            String arch = "";
+            int cores = 4;
+            double ram = 8.0;
+            String devType = "windows";
+            if (node.getCapabilities() != null) {
+                os = node.getCapabilities().getOsName();
+                arch = node.getCapabilities().getOsArch();
+                cores = node.getCapabilities().getCpuCores() > 0 ? node.getCapabilities().getCpuCores() : 4;
+                if (node.getCapabilities().getTotalMemoryBytes() > 0) {
+                    ram = Math.round((node.getCapabilities().getTotalMemoryBytes() / (1024.0 * 1024.0 * 1024.0)) * 10.0) / 10.0;
+                }
+            }
+            String lowerOs = (os + " " + node.getHostname()).toLowerCase(Locale.ROOT);
+            if (lowerOs.contains("mac") || lowerOs.contains("darwin") || lowerOs.contains("apple")) {
+                devType = "mac";
+            } else if (lowerOs.contains("nux") || lowerOs.contains("nix") || lowerOs.contains("ubuntu")) {
+                devType = "linux";
+            }
+            t.put("deviceType", devType);
+            t.put("os", os.isEmpty() ? "Verified Node OS" : os);
+            t.put("osArch", arch);
+            t.put("cores", cores);
+            t.put("ramGb", ram);
+            t.put("status", node.getStatus().name());
+            t.put("isApproved", true);
+            t.put("latencyMs", 3);
+            targets.add(t);
+        }
+
+        // 3. Quarantined Pending Inbound Join Requests
+        for (var req : NodeAdmissionGate.getInstance().getPendingRequestsList()) {
+            Map<String, Object> t = new LinkedHashMap<>();
+            t.put("nodeId", req.get("nodeId"));
+            t.put("hostname", req.get("hostname"));
+            t.put("ip", req.get("ip"));
+            t.put("port", 50051);
+            t.put("deviceType", req.get("deviceType"));
+            t.put("os", req.get("os"));
+            t.put("osArch", req.get("osArch"));
+            t.put("cores", req.get("cores"));
+            t.put("ramGb", req.get("ramGb"));
+            t.put("status", "PENDING_APPROVAL");
+            t.put("isApproved", false);
+            t.put("latencyMs", 5);
+            targets.add(t);
+        }
+
+        return ResponseEntity.ok(targets);
     }
 
     /**
