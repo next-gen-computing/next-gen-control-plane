@@ -101,6 +101,7 @@
         <os.plugin.version>1.7.1</os.plugin.version>
         <skipTests>false</skipTests>
         <jacoco.skip>${skipTests}</jacoco.skip>
+        <protobuf.skip>false</protobuf.skip>
     </properties>
 
     <dependencyManagement>

@@ -6,69 +6,69 @@
    ═══════════════════════════════════════════════════════════════ */
 
 :root.theme-dark {
-    /* ── Backgrounds ── */
-    --ng-bg:             #050810;
-    --ng-surface:        #0A0F1E;
-    --ng-surface-raised: #0F1628;
-    --ng-surface-high:   #161E35;
-    --ng-input:          #0F1628;
-    --ng-border:         rgba(99, 179, 237, 0.10);
-    --ng-hover:          rgba(99, 179, 237, 0.06);
-    --ng-track:          rgba(255, 255, 255, 0.08);
+    /* ── Backgrounds: Obsidian Slate ── */
+    --ng-bg:             #0d1117;
+    --ng-surface:        #151b24;
+    --ng-surface-raised: #1b222e;
+    --ng-surface-high:   #232c3b;
+    --ng-input:          #111620;
+    --ng-border:         rgba(255, 255, 255, 0.08);
+    --ng-hover:          rgba(255, 255, 255, 0.04);
+    --ng-track:          rgba(255, 255, 255, 0.06);
 
     /* ── Text ── */
-    --ng-text:           #E8F4FD;
-    --ng-text-muted:     #8BAFC8;
-    --ng-text-subtle:    #4A6B87;
+    --ng-text:           #f1f5f9;
+    --ng-text-muted:     #94a3b8;
+    --ng-text-subtle:    #64748b;
 
-    /* ── Primary accent: electric teal/cyan ── */
-    --ng-accent:         #00D4FF;
-    --ng-accent-strong:  #0096CC;
-    --ng-accent-soft:    rgba(0, 212, 255, 0.12);
-    --ng-accent-glow:    rgba(0, 212, 255, 0.25);
-    --ng-on-accent:      #000D18;
+    /* ── Primary accent: Precision Cobalt Sapphire ── */
+    --ng-accent:         #3b82f6;
+    --ng-accent-strong:  #2563eb;
+    --ng-accent-soft:    rgba(59, 130, 246, 0.12);
+    --ng-accent-glow:    rgba(59, 130, 246, 0.20);
+    --ng-on-accent:      #ffffff;
 
-    /* ── Secondary accent: violet/indigo ── */
-    --ng-accent2:        #7C3AED;
-    --ng-accent2-soft:   rgba(124, 58, 237, 0.15);
-    --ng-accent2-glow:   rgba(124, 58, 237, 0.30);
+    /* ── Secondary accent: Refined Indigo ── */
+    --ng-accent2:        #6366f1;
+    --ng-accent2-soft:   rgba(99, 102, 241, 0.12);
+    --ng-accent2-glow:   rgba(99, 102, 241, 0.20);
 
-    /* ── Tertiary: neon green for healthy ── */
-    --ng-accent3:        #00FF88;
-    --ng-accent3-soft:   rgba(0, 255, 136, 0.10);
+    /* ── Tertiary: Forest Emerald for healthy ── */
+    --ng-accent3:        #10b981;
+    --ng-accent3-soft:   rgba(16, 185, 129, 0.10);
 
     /* ── Chrome (sidebar/topbar/statusbar) ── */
-    --ng-chrome-bg:      #03060F;
-    --ng-chrome-border:  rgba(0, 212, 255, 0.08);
+    --ng-chrome-bg:      #0a0e14;
+    --ng-chrome-border:  rgba(255, 255, 255, 0.07);
 
     /* ── Glass / neumorphism ── */
-    --ng-relief-shadow:    rgba(0, 0, 0, 0.6);
-    --ng-relief-highlight: rgba(0, 212, 255, 0.04);
-    --ng-glass-surface:    rgba(10, 15, 30, 0.72);
-    --ng-glass-border:     rgba(0, 212, 255, 0.14);
-    --ng-screen-glow:      rgba(0, 212, 255, 0.08);
-    --ng-screen-glow-cool: rgba(124, 58, 237, 0.06);
-    --ng-input-surface:    rgba(3, 6, 15, 0.50);
-    --ng-input-border:     rgba(99, 179, 237, 0.18);
+    --ng-relief-shadow:    rgba(0, 0, 0, 0.65);
+    --ng-relief-highlight: rgba(255, 255, 255, 0.04);
+    --ng-glass-surface:    rgba(21, 27, 36, 0.82);
+    --ng-glass-border:     rgba(255, 255, 255, 0.09);
+    --ng-screen-glow:      rgba(59, 130, 246, 0.04);
+    --ng-screen-glow-cool: rgba(99, 102, 241, 0.03);
+    --ng-input-surface:    rgba(13, 17, 23, 0.70);
+    --ng-input-border:     rgba(255, 255, 255, 0.09);
 
     /* ── Charts ── */
-    --ng-gridline:       rgba(99, 179, 237, 0.05);
-    --ng-axis:           rgba(99, 179, 237, 0.12);
+    --ng-gridline:       rgba(255, 255, 255, 0.04);
+    --ng-axis:           rgba(255, 255, 255, 0.10);
 
     /* ── Scrollbars ── */
-    --ng-scrollbar:       rgba(0, 212, 255, 0.18);
-    --ng-scrollbar-hover: rgba(0, 212, 255, 0.36);
+    --ng-scrollbar:       rgba(255, 255, 255, 0.14);
+    --ng-scrollbar-hover: rgba(255, 255, 255, 0.26);
 
     /* ── Semantic surfaces ── */
-    --ng-warn-surface:   rgba(255, 170, 0, 0.10);
-    --ng-danger-surface: rgba(255, 50, 80, 0.12);
-    --ng-success-surface: rgba(0, 255, 136, 0.08);
+    --ng-warn-surface:   rgba(245, 158, 11, 0.12);
+    --ng-danger-surface: rgba(239, 68, 68, 0.12);
+    --ng-success-surface: rgba(16, 185, 129, 0.10);
 
     /* ── Network animation ── */
-    --ng-net-node:       rgba(0, 212, 255, 0.85);
-    --ng-net-edge:       rgba(0, 212, 255, 0.18);
-    --ng-net-pulse:      rgba(0, 212, 255, 0.6);
-    --ng-net-server:     rgba(124, 58, 237, 0.90);
+    --ng-net-node:       rgba(59, 130, 246, 0.90);
+    --ng-net-edge:       rgba(255, 255, 255, 0.08);
+    --ng-net-pulse:      rgba(59, 130, 246, 0.50);
+    --ng-net-server:     rgba(16, 185, 129, 0.90);
 }
 
 :root.theme-light {

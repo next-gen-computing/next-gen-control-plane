@@ -80,3 +80,34 @@ export function relativeTime(ms: number): string {
   if (age < 3_600_000) return `${Math.floor(age / 60_000)}m ago`;
   return `${Math.floor(age / 3_600_000)}h ago`;
 }
+
+/**
+ * Dynamically resolves the API base URL.
+ * Automatically adapts when accessed from other laptops across LAN/Wi-Fi,
+ * and fixes container-internal names (like 'http://java-cp:8080') for client browsers.
+ */
+export function getApiBase(): string {
+  if (typeof window !== "undefined") {
+    const envBase = process.env.NEXT_PUBLIC_API_BASE;
+    if (envBase && !envBase.includes("java-cp")) {
+      return envBase;
+    }
+    const host = window.location.hostname || "localhost";
+    const port = (window.location.port === "8080" || window.location.port === "8085") ? window.location.port : "8080";
+    return `${window.location.protocol}//${host}:${port}`;
+  }
+  const env = process.env.NEXT_PUBLIC_API_BASE;
+  return (env && !env.includes("java-cp")) ? env : "http://localhost:8080";
+}
+
+/**
+ * Dynamically resolves the WebSocket base URL.
+ */
+export function getWsBase(): string {
+  if (typeof window !== "undefined") {
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host = window.location.hostname || "localhost";
+    return `${proto}//${host}:8080`;
+  }
+  return process.env.NEXT_PUBLIC_WS_BASE || "ws://localhost:8080";
+}

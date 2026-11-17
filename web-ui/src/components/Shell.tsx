@@ -4,8 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ConnectionErrorModal } from "./ConnectionErrorModal";
-
-const API = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
+import { getApiBase } from "@/lib/utils";
 
 const NAV = [
   { href: "/", icon: "⬡", label: "Dashboard" },
@@ -21,9 +20,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [apiOk, setApiOk] = useState<boolean | null>(null);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [hasDismissed, setHasDismissed] = useState(false);
+  const apiBase = getApiBase();
 
   const checkHealth = () =>
-    fetch(`${API}/api/v1/health`, { signal: AbortSignal.timeout(3000) })
+    fetch(`${apiBase}/api/v1/health`, { signal: AbortSignal.timeout(3000) })
       .then((res) => {
         if (res.ok) {
           setApiOk(true);
@@ -92,7 +92,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       {/* ── Network & Server Connection Error Modal ── */}
       <ConnectionErrorModal
-        apiBase={API}
+        apiBase={apiBase}
         isOpen={showErrorModal}
         onRetry={() => {
           checkHealth();

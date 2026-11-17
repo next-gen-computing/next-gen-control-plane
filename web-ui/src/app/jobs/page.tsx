@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { Shell } from "@/components/Shell";
+import { getApiBase } from "@/lib/utils";
 
-const API = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
+const API = getApiBase();
 
 interface Job {
   jobId: string; kind: string; state: string;

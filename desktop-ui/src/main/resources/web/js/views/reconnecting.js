@@ -17,10 +17,8 @@ NG.views.reconnecting = {
 
         container.innerHTML = `
             <div class="ng-screen ng-onboarding-bg" style="position:relative; overflow:hidden;">
-                <!-- Ambient Subtle Canvas Background -->
-                <div style="position:absolute; inset:0; opacity:0.35; pointer-events:none; z-index:0;">
-                    <iframe src="glyph-animals.html" style="width:100%; height:100%; border:none;" title="Ambient Background"></iframe>
-                </div>
+                <!-- Ambient Subtle Radial Glow -->
+                <div style="position:absolute; inset:0; background:radial-gradient(circle at 50% 35%, rgba(99,102,241,0.12) 0%, rgba(15,23,42,0) 70%); pointer-events:none; z-index:0;"></div>
 
                 <div class="ng-screen-content" style="position:relative; z-index:1; max-width:620px;">
                     <div class="ng-brand" style="text-align:center; margin-bottom:24px;">

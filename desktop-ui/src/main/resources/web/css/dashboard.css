@@ -428,8 +428,8 @@
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     box-shadow:
-        0 0 0 1px rgba(0,212,255,0.04) inset,
-        0 8px 24px rgba(0,0,0,0.4);
+        6px 6px 16px rgba(0, 0, 0, 0.60),
+        -3px -3px 10px rgba(255, 255, 255, 0.035);
     transition: border-color var(--ng-motion-base) ease, box-shadow var(--ng-motion-base) ease, transform var(--ng-motion-base) ease;
     animation: ng-fade-in var(--ng-motion-card) ease both;
     cursor: default;
@@ -448,8 +448,11 @@
 }
 
 .ng-stat-tile:hover {
-    border-color: rgba(0,212,255,0.20);
-    box-shadow: 0 0 0 1px rgba(0,212,255,0.10) inset, 0 0 24px rgba(0,212,255,0.06), 0 12px 32px rgba(0,0,0,0.5);
+    border-color: rgba(59, 130, 246, 0.30);
+    box-shadow:
+        8px 8px 22px rgba(0, 0, 0, 0.70),
+        -4px -4px 14px rgba(255, 255, 255, 0.045),
+        0 4px 16px rgba(59, 130, 246, 0.10);
     transform: translateY(-2px);
 }
 
@@ -503,12 +506,12 @@
     align-items: center;
     gap: var(--ng-space-3);
     background: var(--ng-accent-soft);
-    border: 1px solid rgba(0, 212, 255, 0.20);
+    border: 1px solid rgba(59, 130, 246, 0.25);
     border-radius: var(--ng-radius-sm);
     padding: var(--ng-space-3) var(--ng-space-4);
     font-size: var(--ng-font-size-xs);
     color: var(--ng-accent);
-    box-shadow: 0 0 20px rgba(0,212,255,0.05);
+    box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.4);
 }
 
 .ng-dashboard-callout::before {
@@ -598,8 +601,8 @@
 }
 
 .ng-node-card:hover {
-    border-color: rgba(0,212,255,0.20);
-    box-shadow: 0 0 32px rgba(0,212,255,0.06), 0 16px 40px rgba(0,0,0,0.4);
+    border-color: rgba(59, 130, 246, 0.35);
+    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.12), 0 16px 40px rgba(0,0,0,0.5);
     transform: translateY(-2px);
 }
 
@@ -927,7 +930,7 @@
     transition: border-color var(--ng-motion-base) ease;
 }
 
-.ng-job-card:hover { border-color: rgba(0,212,255,0.18); }
+.ng-job-card:hover { border-color: rgba(59, 130, 246, 0.25); }
 
 .ng-job-header {
     display: flex;
@@ -1100,7 +1103,7 @@
     font-size: var(--ng-font-size-xs);
     color: var(--ng-accent);
     background: var(--ng-accent-soft);
-    border: 1px solid rgba(0,212,255,0.15);
+    border: 1px solid rgba(59, 130, 246, 0.25);
     border-radius: var(--ng-radius-xs);
     padding: 2px var(--ng-space-2);
 }
@@ -1205,13 +1208,13 @@
 }
 
 .ng-pill:hover {
-    border-color: rgba(0,212,255,0.25);
+    border-color: rgba(59, 130, 246, 0.35);
     color: var(--ng-text);
 }
 
 .ng-pill.is-active {
     background: var(--ng-accent-soft);
-    border-color: rgba(0,212,255,0.35);
+    border-color: rgba(59, 130, 246, 0.45);
     color: var(--ng-accent);
 }
 
@@ -1273,3 +1276,63 @@
     border-radius: var(--ng-radius-sm);
     background: rgba(0,0,0,0.2);
 }
+
+/* ══════════════════════════════════════
+   RESPONSIVE LAYOUT FOR SMALL / MINIMIZED SCREENS (ui-ux-pro-max standard)
+   ══════════════════════════════════════ */
+@media (max-width: 900px) {
+    .ng-chart-row {
+        flex-direction: column;
+    }
+    .ng-stat-row {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: var(--ng-space-3);
+    }
+}
+
+@media (max-width: 768px) {
+    .ng-topbar {
+        padding: 0 var(--ng-space-3);
+        height: 48px;
+    }
+    .ng-topbar-title {
+        font-size: var(--ng-font-size-sm);
+    }
+    .ng-sidebar {
+        width: 56px;
+    }
+    .ng-sidebar-brand-text,
+    .ng-nav-button-label,
+    .ng-nav-section-label,
+    .ng-sidebar-collapse-btn span:last-child {
+        display: none !important;
+    }
+    .ng-stat-row,
+    .ng-stat-grid {
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        gap: var(--ng-space-2);
+    }
+    .ng-node-grid {
+        grid-template-columns: 1fr;
+    }
+    .ng-page {
+        padding: var(--ng-space-3);
+    }
+}
+
+@media (max-width: 480px) {
+    .ng-topbar {
+        padding: 0 var(--ng-space-2);
+        height: 44px;
+    }
+    .ng-topbar-title-text {
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .ng-role-grid {
+        grid-template-columns: 1fr;
+    }
+}
+

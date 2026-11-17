@@ -34,8 +34,11 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
@@ -85,7 +88,19 @@ public class RoleRouteHandler implements HttpHandler {
             // requireMethod resolves the path to its one real route FIRST, then checks the method, so a
             // wrong method on a real path gets 405 + Allow instead — mirrors AccountRouteHandler's
             // identical fix.
-            if (path.endsWith("/server-info")) {
+            if (path.endsWith("/discover/nearby") || path.endsWith("/nearby")) {
+                requireMethod(exchange, method, "GET", () -> handleDiscoverNearby(exchange));
+            } else if (path.endsWith("/discover/wan") || path.endsWith("/wan-clusters")) {
+                requireMethod(exchange, method, "GET", () -> handleDiscoverWan(exchange));
+            } else if (path.endsWith("/discover/ping")) {
+                requireMethod(exchange, method, "POST", () -> handleDiscoverPing(exchange));
+            } else if (path.endsWith("/discover/request-join")) {
+                requireMethod(exchange, method, "POST", () -> handleDiscoverRequestJoin(exchange));
+            } else if (path.endsWith("/discover/join-status")) {
+                requireMethod(exchange, method, "GET", () -> handleDiscoverJoinStatus(exchange));
+            } else if (path.endsWith("/hardware")) {
+                requireMethod(exchange, method, "GET", () -> handleHardwareInfo(exchange));
+            } else if (path.endsWith("/server-info")) {
                 requireMethod(exchange, method, "GET", () -> handleServerInfo(exchange));
             } else if (path.endsWith("/docker-info")) {
                 requireMethod(exchange, method, "GET", () -> handleDockerInfo(exchange));
@@ -405,6 +420,166 @@ public class RoleRouteHandler implements HttpHandler {
             Thread.sleep(200);
         }
         LOG.warn("Control plane did not become reachable within {}ms", budgetMillis);
+    }
+
+    // ── Quick Share / AirDrop LAN & WAN Discovery Endpoints ───────────────
+
+    private void handleDiscoverNearby(HttpExchange exchange) throws IOException {
+        var servers = com.nextgen.desktop.ui.discovery.LanDiscoveryScanner.getInstance().getDiscoveredServers();
+        JsonSupport.sendJson(exchange, 200, servers);
+    }
+
+    private void handleDiscoverWan(HttpExchange exchange) throws IOException {
+        List<Map<String, Object>> directory = new ArrayList<>();
+        // Live socket probe on local and seed endpoints with exact measured latency
+        String[] wanSeeds = { "127.0.0.1:50051", "localhost:50051" };
+        for (String seed : wanSeeds) {
+            var hostPort = ConnectionDiagnostics.parseAddress(seed, ServerIdCodec.DEFAULT_PORT);
+            long start = System.currentTimeMillis();
+            var result = ConnectionDiagnostics.probe(hostPort.host(), hostPort.port(), 1500);
+            long latency = result.reachable() ? Math.max(1, System.currentTimeMillis() - start) : -1;
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("clusterName", "Next-Gen Edge Cluster [" + hostPort.host() + "]");
+            m.put("hostname", hostPort.host());
+            m.put("address", seed);
+            m.put("webUrl", "http://" + hostPort.host() + ":8080");
+            m.put("region", "Edge Backbone");
+            m.put("latencyMs", latency);
+            m.put("reachable", result.reachable());
+            m.put("isLocal", true);
+            directory.add(m);
+        }
+        JsonSupport.sendJson(exchange, 200, directory);
+    }
+
+    private void handleDiscoverPing(HttpExchange exchange) throws IOException {
+        Map<?, ?> body;
+        try {
+            body = JsonSupport.MAPPER.readValue(exchange.getRequestBody(), Map.class);
+        } catch (Exception e) {
+            body = Map.of();
+        }
+        Object addrObj = body.get("address");
+        String address = addrObj != null ? addrObj.toString() : "127.0.0.1:50051";
+        var hostPort = ConnectionDiagnostics.parseAddress(address, ServerIdCodec.DEFAULT_PORT);
+        long start = System.currentTimeMillis();
+        var result = ConnectionDiagnostics.probe(hostPort.host(), hostPort.port(), 3000);
+        long latency = result.reachable() ? Math.max(1, System.currentTimeMillis() - start) : -1;
+        String reason = result.reachable() ? "Online" : (result.message() != null ? result.message() : "Unreachable");
+        Map<String, Object> res = new LinkedHashMap<>();
+        res.put("address", address);
+        res.put("host", hostPort.host());
+        res.put("port", hostPort.port());
+        res.put("reachable", result.reachable());
+        res.put("latencyMs", latency);
+        res.put("message", reason);
+        JsonSupport.sendJson(exchange, 200, res);
+    }
+
+    private void handleDiscoverRequestJoin(HttpExchange exchange) throws IOException {
+        Map<?, ?> body;
+        try {
+            body = JsonSupport.MAPPER.readValue(exchange.getRequestBody(), Map.class);
+        } catch (Exception e) {
+            body = Map.of();
+        }
+        Object srvObj = body.get("serverAddress");
+        String serverAddress = srvObj != null ? srvObj.toString() : "127.0.0.1:8080";
+        if (!serverAddress.startsWith("http://") && !serverAddress.startsWith("https://")) {
+            serverAddress = "http://" + serverAddress;
+        }
+        if (serverAddress.contains(":50051")) {
+            serverAddress = serverAddress.replace(":50051", ":8080");
+        }
+
+        try {
+            URI targetUri = URI.create(serverAddress + "/api/v1/discovery/join-request");
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) targetUri.toURL().openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(3000);
+            conn.setReadTimeout(3000);
+
+            byte[] jsonBytes = JsonSupport.MAPPER.writeValueAsBytes(body);
+            conn.getOutputStream().write(jsonBytes);
+
+            int code = conn.getResponseCode();
+            if (code >= 200 && code < 300) {
+                Map<?, ?> resp = JsonSupport.MAPPER.readValue(conn.getInputStream(), Map.class);
+                JsonSupport.sendJson(exchange, 200, resp);
+            } else {
+                JsonSupport.sendJson(exchange, code, Map.of("ok", false, "error", "Server responded with HTTP " + code));
+            }
+        } catch (Exception e) {
+            JsonSupport.sendJson(exchange, 502, Map.of("ok", false, "error", "Could not reach target server: " + e.getMessage()));
+        }
+    }
+
+    private void handleHardwareInfo(HttpExchange exchange) throws IOException {
+        String os = System.getProperty("os.name", "Windows");
+        String osArch = System.getProperty("os.arch", "x86_64");
+        String lowerOs = os.toLowerCase(Locale.ROOT);
+        String deviceType = "windows";
+        if (lowerOs.contains("mac") || lowerOs.contains("darwin") || lowerOs.contains("apple")) {
+            deviceType = "mac";
+        } else if (lowerOs.contains("nux") || lowerOs.contains("nix") || lowerOs.contains("ubuntu")) {
+            deviceType = "linux";
+        }
+
+        int cores = Runtime.getRuntime().availableProcessors();
+        long mem = 0;
+        try {
+            java.lang.management.OperatingSystemMXBean osBean = java.lang.management.ManagementFactory.getOperatingSystemMXBean();
+            if (osBean instanceof com.sun.management.OperatingSystemMXBean sunBean) {
+                mem = sunBean.getTotalMemorySize();
+            }
+        } catch (Throwable ignored) {}
+        if (mem <= 0) mem = Runtime.getRuntime().maxMemory();
+        double ramGb = Math.round((mem / (1024.0 * 1024.0 * 1024.0)) * 10.0) / 10.0;
+
+        String hostname = "laptop";
+        try {
+            hostname = java.net.InetAddress.getLocalHost().getHostName();
+        } catch (Exception ignored) {}
+
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("deviceType", deviceType);
+        info.put("osName", os);
+        info.put("osArch", osArch);
+        info.put("cores", cores);
+        info.put("ramGb", ramGb);
+        info.put("hostname", hostname);
+        info.put("lanIp", ServerIdCodec.detectLanIp());
+        JsonSupport.sendJson(exchange, 200, info);
+    }
+
+    private void handleDiscoverJoinStatus(HttpExchange exchange) throws IOException {
+        Map<String, String> q = parseQuery(exchange.getRequestURI());
+        String nodeId = q.getOrDefault("nodeId", "");
+        String srv = q.getOrDefault("serverAddress", "127.0.0.1:8080");
+        if (!srv.startsWith("http://") && !srv.startsWith("https://")) {
+            srv = "http://" + srv;
+        }
+        if (srv.contains(":50051")) {
+            srv = srv.replace(":50051", ":8080");
+        }
+        try {
+            URI targetUri = URI.create(srv + "/api/v1/discovery/join-status?nodeId=" + java.net.URLEncoder.encode(nodeId, StandardCharsets.UTF_8));
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) targetUri.toURL().openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(2500);
+            conn.setReadTimeout(2500);
+            int code = conn.getResponseCode();
+            if (code == 200) {
+                Map<?, ?> resp = JsonSupport.MAPPER.readValue(conn.getInputStream(), Map.class);
+                JsonSupport.sendJson(exchange, 200, resp);
+            } else {
+                JsonSupport.sendJson(exchange, code, Map.of("status", "ERROR", "error", "HTTP " + code));
+            }
+        } catch (Exception e) {
+            JsonSupport.sendJson(exchange, 502, Map.of("status", "UNREACHABLE", "error", e.getMessage()));
+        }
     }
 
     // ── GET /api/role/probe?address=host:port ──────────────────────────────

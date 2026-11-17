@@ -160,6 +160,9 @@ public class LocalUiServer {
         server.createContext("/api/account/", new AccountRouteHandler(accountService));
 
         server.createContext("/api/tasks", new TasksRouteHandler(taskExecutionService, monitoringService));
+        CustomTasksRouteHandler customTasksHandler = new CustomTasksRouteHandler();
+        server.createContext("/api/custom-tasks/execute", customTasksHandler);
+        server.createContext("/api/custom-tasks/active-status", customTasksHandler);
         tasksStream = new TasksStreamHandler(taskExecutionService, POLL_INTERVAL_MS);
         server.createContext("/api/tasks/stream", tasksStream);
 

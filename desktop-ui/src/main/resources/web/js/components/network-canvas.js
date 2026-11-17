@@ -68,16 +68,16 @@
         return 'server';
     }
 
-    /* ─── Colour palette ──────────────────────────────────────── */
+    /* ─── Colour palette (Pro-Max Developer Obsidian & Cobalt) ── */
     const PAL = {
-        accent:    '#00D4FF',
-        accent2:   '#7C3AED',
-        healthy:   '#00CC6A',
-        offline:   '#FF3250',
-        degraded:  '#FFAA00',
-        unknown:   '#6B7B9E',
-        star:      'rgba(160,200,255,',
-        ambient:   'rgba(0,212,255,',
+        accent:    '#3B82F6',
+        accent2:   '#64748B',
+        healthy:   '#10B981',
+        offline:   '#EF4444',
+        degraded:  '#F59E0B',
+        unknown:   '#64748B',
+        star:      'rgba(226,232,240,',
+        ambient:   'rgba(59,130,246,',
     };
 
     function isNodeDead(rn) {
@@ -169,8 +169,8 @@
         ctx.save();
         ctx.clip();
         const sg = ctx.createLinearGradient(-mw/2, -mh/2 - 10, -mw/2, mh/2 - 10);
-        sg.addColorStop(0, 'rgba(0,212,255,0.25)');
-        sg.addColorStop(1, 'rgba(124,58,237,0.12)');
+        sg.addColorStop(0, 'rgba(59,130,246,0.25)');
+        sg.addColorStop(1, 'rgba(100,116,139,0.12)');
         ctx.fillStyle = sg;
         ctx.fillRect(-mw/2, -mh/2 - 10, mw, mh);
         ctx.restore();
@@ -207,8 +207,8 @@
         clip.roundRect(-lw/2 + 3, -lh/2 - 6 + 3, lw - 6, lh - 6, 1);
         ctx.clip(clip);
         const sg = ctx.createLinearGradient(0, -lh/2 - 6, 0, lh/2 - 6);
-        sg.addColorStop(0, 'rgba(0,212,255,0.22)');
-        sg.addColorStop(1, 'rgba(124,58,237,0.10)');
+        sg.addColorStop(0, 'rgba(59,130,246,0.22)');
+        sg.addColorStop(1, 'rgba(100,116,139,0.10)');
         ctx.fillStyle = sg;
         ctx.fillRect(-lw/2, -lh/2 - 6, lw, lh);
         ctx.restore();
@@ -244,8 +244,8 @@
         ctx.lineTo(w/2 + 8, h/2 - 6);
         ctx.lineTo(w/2,     h/2);
         ctx.closePath();
-        ctx.fillStyle   = 'rgba(0,212,255,0.08)';
-        ctx.strokeStyle = 'rgba(0,212,255,0.20)';
+        ctx.fillStyle   = 'rgba(59,130,246,0.08)';
+        ctx.strokeStyle = 'rgba(59,130,246,0.20)';
         ctx.fill(); ctx.stroke();
 
         // Top face
@@ -255,7 +255,7 @@
         ctx.lineTo( w/2 + 8, -h/2 - 6);
         ctx.lineTo( w/2,     -h/2);
         ctx.closePath();
-        ctx.fillStyle = 'rgba(0,212,255,0.15)';
+        ctx.fillStyle = 'rgba(59,130,246,0.15)';
         ctx.fill(); ctx.stroke();
 
         // Terminal prompt
@@ -328,7 +328,7 @@
         ctx.beginPath();
         ctx.roundRect(-rw/2, -rh/2, rw, rh, [4, 4, 2, 2]);
         ctx.fillStyle   = '#070d1a';
-        ctx.strokeStyle = `rgba(0,212,255,${0.45 + glowAlpha * 0.35})`;
+        ctx.strokeStyle = `rgba(59,130,246,${0.45 + glowAlpha * 0.35})`;
         ctx.lineWidth   = 2;
         ctx.fill(); ctx.stroke();
 
@@ -339,8 +339,8 @@
         ctx.lineTo(rw/2 + 16,  rh/2 - 12);
         ctx.lineTo(rw/2,       rh/2);
         ctx.closePath();
-        ctx.fillStyle   = 'rgba(0,212,255,0.08)';
-        ctx.strokeStyle = 'rgba(0,212,255,0.25)';
+        ctx.fillStyle   = 'rgba(59,130,246,0.08)';
+        ctx.strokeStyle = 'rgba(59,130,246,0.25)';
         ctx.lineWidth   = 1;
         ctx.fill(); ctx.stroke();
 
@@ -351,8 +351,8 @@
         ctx.lineTo( rw/2 + 16, -rh/2 - 12);
         ctx.lineTo( rw/2,      -rh/2);
         ctx.closePath();
-        ctx.fillStyle   = 'rgba(0,212,255,0.16)';
-        ctx.strokeStyle = 'rgba(0,212,255,0.35)';
+        ctx.fillStyle   = 'rgba(59,130,246,0.16)';
+        ctx.strokeStyle = 'rgba(59,130,246,0.35)';
         ctx.fill(); ctx.stroke();
 
         // 7 Rack Unit shelves with LEDs & Drive Bays
@@ -361,7 +361,7 @@
             ctx.beginPath();
             ctx.roundRect(-rw/2 + 4, uy, rw - 8, 9.5, 1);
             ctx.fillStyle   = '#0c1626';
-            ctx.strokeStyle = 'rgba(0,212,255,0.2)';
+            ctx.strokeStyle = 'rgba(59,130,246,0.2)';
             ctx.lineWidth   = 0.6;
             ctx.fill(); ctx.stroke();
 
@@ -379,7 +379,7 @@
             const barW = (rw - 24) * (0.35 + 0.45 * Math.abs(Math.sin(spinAngle * 2.5 + u)));
             ctx.beginPath();
             ctx.roundRect(-rw/2 + 15, uy + 2.5, barW, 4, 1);
-            ctx.fillStyle = 'rgba(0,212,255,0.22)';
+            ctx.fillStyle = 'rgba(59,130,246,0.22)';
             ctx.fill();
         }
 
@@ -394,13 +394,13 @@
             ctx.rotate(Math.PI / 2);
             ctx.beginPath();
             ctx.ellipse(0, -fanR/2, 2, fanR/2, 0, 0, Math.PI);
-            ctx.fillStyle = 'rgba(0,212,255,0.45)';
+            ctx.fillStyle = 'rgba(59,130,246,0.45)';
             ctx.fill();
         }
         ctx.restore();
 
         // Controller Badge
-        ctx.fillStyle = '#00d4ff';
+        ctx.fillStyle = '#3B82F6';
         ctx.font      = 'bold 8px sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('CONTROL PLANE', 0, rh/2 + 16);
@@ -513,7 +513,7 @@
                 ctx.beginPath();
                 ctx.moveTo(sx, sy);
                 ctx.lineTo(rn.x, rn.y);
-                ctx.strokeStyle = 'rgba(0, 212, 255, 0.22)';
+                ctx.strokeStyle = 'rgba(59, 130, 246, 0.22)';
                 ctx.lineWidth   = 1.2 * rn.depth;
                 ctx.stroke();
             }
@@ -541,8 +541,8 @@
                 const py = lerp(sy, rn.y, task.t);
 
                 ctx.save();
-                ctx.fillStyle   = '#00d4ff';
-                ctx.shadowColor = '#00d4ff';
+                ctx.fillStyle   = '#3B82F6';
+                ctx.shadowColor = '#3B82F6';
                 ctx.shadowBlur  = 14;
                 ctx.beginPath();
                 ctx.arc(px, py, 5 * rn.depth, 0, Math.PI * 2);
@@ -707,7 +707,7 @@
                 const cpuVal = rn.cpuUsage || (rn.isProcessing ? 78 : 12);
                 ctx.fillStyle = 'rgba(255,255,255,0.15)';
                 ctx.fillRect(rn.x - barW/2, labelY + 18, barW, 3.5);
-                ctx.fillStyle = rn.isProcessing ? '#ffb700' : '#00d4ff';
+                ctx.fillStyle = rn.isProcessing ? '#f59e0b' : '#3b82f6';
                 ctx.fillRect(rn.x - barW/2, labelY + 18, barW * (cpuVal / 100), 3.5);
             }
             ctx.restore();
