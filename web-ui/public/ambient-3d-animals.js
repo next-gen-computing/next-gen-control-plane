@@ -74,8 +74,8 @@
       this.canvas.style.height = '100vh';
       this.canvas.style.pointerEvents = 'none';
       this.canvas.style.zIndex = '0';
-      // Soft, ethereal, semi-transparent overlay: non-distracting & light
-      this.canvas.style.opacity = '0.40';
+      // Soft, delicate, ethereal transparency: non-distracting background presence
+      this.canvas.style.opacity = '0.20';
 
       const parent = container || document.body;
       parent.insertBefore(this.canvas, parent.firstChild);
@@ -124,8 +124,8 @@
       this.shockwaves.push({
         x: wx, y: wy, z: rand(50, 200),
         r: 10, maxR: rand(240, 360),
-        alpha: 0.8,
-        color: Math.random() > 0.5 ? '#38bdf8' : '#e879f9'
+        alpha: 0.6,
+        color: Math.random() > 0.5 ? 'rgba(226, 232, 240, 0.6)' : 'rgba(251, 191, 36, 0.5)'
       });
 
       // Spawn glowing stardust burst particles
@@ -139,7 +139,7 @@
           vz: rand(-3, 3),
           life: 1.0,
           decay: rand(0.015, 0.03),
-          color: Math.random() > 0.5 ? '#67e8f9' : '#fbcfe8',
+          color: Math.random() > 0.5 ? 'rgba(241, 245, 249, 0.7)' : 'rgba(253, 230, 138, 0.6)',
           size: rand(2, 3.5)
         });
       }
@@ -172,12 +172,12 @@
       pill.style.bottom = '18px';
       pill.style.left = '18px';
       pill.style.zIndex = '999';
-      pill.style.background = 'linear-gradient(145deg, #131b2c, #0b101c)';
-      pill.style.boxShadow = '5px 5px 14px rgba(0,0,0,0.65), -3px -3px 10px rgba(255,255,255,0.04)';
-      pill.style.border = '1px solid rgba(56, 189, 248, 0.25)';
+      pill.style.background = 'linear-gradient(145deg, #151a24, #0f131c)';
+      pill.style.boxShadow = '5px 5px 14px rgba(0,0,0,0.65), -3px -3px 10px rgba(255,255,255,0.035)';
+      pill.style.border = '1px solid rgba(255, 255, 255, 0.08)';
       pill.style.borderRadius = '30px';
       pill.style.padding = '6px 14px';
-      pill.style.color = '#bae6fd';
+      pill.style.color = '#cbd5e1';
       pill.style.fontFamily = "'SFMono-Regular', Consolas, Menlo, monospace";
       pill.style.fontSize = '11px';
       pill.style.fontWeight = '600';
@@ -187,19 +187,19 @@
       pill.style.gap = '8px';
       pill.style.transition = 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
 
-      pill.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#34d399;box-shadow:0 0 8px #34d399"></span><span>3D Fauna: ON</span>`;
+      pill.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10b981;box-shadow:0 0 8px #10b981"></span><span>3D Fauna: ON</span>`;
 
       pill.addEventListener('mouseenter', () => {
         pill.style.transform = 'translateY(-1px)';
-        pill.style.boxShadow = '6px 6px 16px rgba(0,0,0,0.7), -4px -4px 12px rgba(255,255,255,0.06)';
+        pill.style.boxShadow = '6px 6px 16px rgba(0,0,0,0.7), -4px -4px 12px rgba(255,255,255,0.05)';
       });
       pill.addEventListener('mouseleave', () => {
         pill.style.transform = 'translateY(0)';
-        pill.style.boxShadow = '5px 5px 14px rgba(0,0,0,0.65), -3px -3px 10px rgba(255,255,255,0.04)';
+        pill.style.boxShadow = '5px 5px 14px rgba(0,0,0,0.65), -3px -3px 10px rgba(255,255,255,0.035)';
       });
       pill.addEventListener('mousedown', () => {
         pill.style.transform = 'scale(0.97) translateY(1px)';
-        pill.style.boxShadow = 'inset 3px 3px 6px rgba(0,0,0,0.7), inset -2px -2px 4px rgba(255,255,255,0.04)';
+        pill.style.boxShadow = 'inset 3px 3px 6px rgba(0,0,0,0.7), inset -2px -2px 4px rgba(255,255,255,0.035)';
       });
       pill.addEventListener('mouseup', () => {
         pill.style.transform = 'translateY(-1px)';
@@ -210,14 +210,14 @@
         this.enabled = !this.enabled;
         if (this.enabled) {
           this.canvas.style.display = 'block';
-          pill.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#34d399;box-shadow:0 0 8px #34d399"></span><span>3D Fauna: ON</span>`;
-          pill.style.color = '#bae6fd';
-          pill.style.borderColor = 'rgba(56, 189, 248, 0.25)';
+          pill.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10b981;box-shadow:0 0 8px #10b981"></span><span>3D Fauna: ON</span>`;
+          pill.style.color = '#cbd5e1';
+          pill.style.borderColor = 'rgba(255, 255, 255, 0.12)';
         } else {
           this.canvas.style.display = 'none';
-          pill.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#f87171;"></span><span>3D Fauna: PAUSED</span>`;
-          pill.style.color = '#94a3b8';
-          pill.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+          pill.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#ef4444;"></span><span>3D Fauna: PAUSED</span>`;
+          pill.style.color = '#64748b';
+          pill.style.borderColor = 'rgba(255, 255, 255, 0.06)';
         }
       });
 
@@ -464,36 +464,36 @@
       const tailL = -32 * scale;
       const wingR = this.span * scale;
 
-      // Draw Left Wing — Translucent Celestial Cyan
+      // Draw Left Wing — Translucent Pearlescent Moonlight Silver
       ctx.beginPath();
       ctx.moveTo(headL, 0);
       ctx.lineTo(4 * scale, -wingR);
       ctx.lineTo(tailL, 0);
       ctx.closePath();
       const gradL = ctx.createLinearGradient(0, -wingR, 0, 0);
-      gradL.addColorStop(0, 'rgba(56, 189, 248, 0.28)');
-      gradL.addColorStop(0.6, 'rgba(14, 165, 233, 0.12)');
-      gradL.addColorStop(1, 'rgba(56, 189, 248, 0.03)');
+      gradL.addColorStop(0, 'rgba(241, 245, 249, 0.16)');
+      gradL.addColorStop(0.6, 'rgba(203, 213, 225, 0.08)');
+      gradL.addColorStop(1, 'rgba(148, 163, 184, 0.02)');
       ctx.fillStyle = gradL;
       ctx.fill();
-      ctx.strokeStyle = 'rgba(125, 211, 252, 0.8)';
-      ctx.lineWidth = 1.1;
+      ctx.strokeStyle = 'rgba(226, 232, 240, 0.55)';
+      ctx.lineWidth = 1.0;
       ctx.stroke();
 
-      // Draw Right Wing — Translucent Electric Violet/Azure
+      // Draw Right Wing — Translucent Platinum
       ctx.beginPath();
       ctx.moveTo(headL, 0);
       ctx.lineTo(4 * scale, wingR);
       ctx.lineTo(tailL, 0);
       ctx.closePath();
       const gradR = ctx.createLinearGradient(0, wingR, 0, 0);
-      gradR.addColorStop(0, 'rgba(167, 139, 250, 0.28)');
-      gradR.addColorStop(0.6, 'rgba(129, 140, 248, 0.12)');
-      gradR.addColorStop(1, 'rgba(167, 139, 250, 0.03)');
+      gradR.addColorStop(0, 'rgba(226, 232, 240, 0.16)');
+      gradR.addColorStop(0.6, 'rgba(203, 213, 225, 0.08)');
+      gradR.addColorStop(1, 'rgba(148, 163, 184, 0.02)');
       ctx.fillStyle = gradR;
       ctx.fill();
-      ctx.strokeStyle = 'rgba(196, 181, 253, 0.8)';
-      ctx.lineWidth = 1.1;
+      ctx.strokeStyle = 'rgba(203, 213, 225, 0.55)';
+      ctx.lineWidth = 1.0;
       ctx.stroke();
 
       // Translucent Center Hull Diamond
@@ -503,17 +503,17 @@
       ctx.lineTo(tailL * 0.7, 0);
       ctx.lineTo(0, 8 * scale);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
       ctx.fill();
 
-      // Bioluminescent central spine
+      // Moonlight central spine
       ctx.beginPath();
       ctx.moveTo(headL, 0);
       ctx.lineTo(tailL, 0);
-      ctx.strokeStyle = '#34d399';
-      ctx.lineWidth = 1.8 * scale;
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = '#34d399';
+      ctx.strokeStyle = 'rgba(248, 250, 252, 0.75)';
+      ctx.lineWidth = 1.5 * scale;
+      ctx.shadowBlur = 6;
+      ctx.shadowColor = 'rgba(248, 250, 252, 0.4)';
       ctx.stroke();
 
       // Cephalic horns (mouth fin blades)
@@ -522,8 +522,8 @@
       ctx.lineTo(headL + 12 * scale, -10 * scale);
       ctx.moveTo(headL - 2, 6 * scale);
       ctx.lineTo(headL + 12 * scale, 10 * scale);
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.9)';
-      ctx.lineWidth = 1.4 * scale;
+      ctx.strokeStyle = 'rgba(226, 232, 240, 0.6)';
+      ctx.lineWidth = 1.2 * scale;
       ctx.stroke();
 
       ctx.restore();
@@ -537,8 +537,8 @@
         const pt = this.project(this.tailNodes[i], cx, cy, fov);
         ctx.lineTo(pt.x, pt.y);
       }
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
-      ctx.lineWidth = 1.2 * scale;
+      ctx.strokeStyle = 'rgba(203, 213, 225, 0.35)';
+      ctx.lineWidth = 1.0 * scale;
       ctx.stroke();
       ctx.restore();
     }
@@ -620,7 +620,7 @@
       ctx.lineWidth = 1.1;
       ctx.stroke();
 
-      // Left Articulated Wing — Translucent Golden Sunset
+      // Left Articulated Wing — Translucent Warm Champagne Gold
       const leftTipY = -span * (0.8 + flap * 0.3);
       ctx.beginPath();
       ctx.moveTo(2 * scale, -bodyW);
@@ -628,15 +628,15 @@
       ctx.lineTo(-14 * scale, -bodyW * 0.6);
       ctx.closePath();
       const gradWingL = ctx.createLinearGradient(0, -bodyW, 0, leftTipY);
-      gradWingL.addColorStop(0, 'rgba(251, 191, 36, 0.05)');
-      gradWingL.addColorStop(1, 'rgba(245, 158, 11, 0.28)');
+      gradWingL.addColorStop(0, 'rgba(251, 191, 36, 0.03)');
+      gradWingL.addColorStop(1, 'rgba(245, 158, 11, 0.18)');
       ctx.fillStyle = gradWingL;
       ctx.fill();
-      ctx.strokeStyle = 'rgba(251, 191, 36, 0.85)';
+      ctx.strokeStyle = 'rgba(252, 211, 77, 0.55)';
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      // Right Articulated Wing — Translucent Aurora Rose
+      // Right Articulated Wing — Translucent Soft Amber
       const rightTipY = span * (0.8 + flap * 0.3);
       ctx.beginPath();
       ctx.moveTo(2 * scale, bodyW);
@@ -644,11 +644,11 @@
       ctx.lineTo(-14 * scale, bodyW * 0.6);
       ctx.closePath();
       const gradWingR = ctx.createLinearGradient(0, bodyW, 0, rightTipY);
-      gradWingR.addColorStop(0, 'rgba(244, 63, 94, 0.05)');
-      gradWingR.addColorStop(1, 'rgba(225, 29, 72, 0.28)');
+      gradWingR.addColorStop(0, 'rgba(253, 230, 138, 0.03)');
+      gradWingR.addColorStop(1, 'rgba(217, 119, 6, 0.18)');
       ctx.fillStyle = gradWingR;
       ctx.fill();
-      ctx.strokeStyle = 'rgba(251, 113, 133, 0.85)';
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.55)';
       ctx.lineWidth = 1;
       ctx.stroke();
 
@@ -656,8 +656,8 @@
       ctx.beginPath();
       ctx.arc(beak, 0, 1.8 * scale, 0, PI * 2);
       ctx.fillStyle = '#fffbeb';
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = '#fbbf24';
+      ctx.shadowBlur = 6;
+      ctx.shadowColor = 'rgba(251, 191, 36, 0.5)';
       ctx.fill();
 
       ctx.restore();
@@ -709,38 +709,38 @@
       ctx.translate(px, py);
       ctx.rotate(this.yaw);
 
-      // Translucent Contoured Hull — Amethyst Violet / Starlight
+      // Translucent Contoured Hull — Platinum Slate / Moonlight
       ctx.beginPath();
       ctx.ellipse(0, 0, len * 0.5, wid * 0.5, 0, 0, PI * 2);
       const grad = ctx.createLinearGradient(-len * 0.5, 0, len * 0.5, 0);
-      grad.addColorStop(0, 'rgba(167, 139, 250, 0.10)');
-      grad.addColorStop(0.5, 'rgba(139, 92, 246, 0.24)');
-      grad.addColorStop(1, 'rgba(167, 139, 250, 0.10)');
+      grad.addColorStop(0, 'rgba(203, 213, 225, 0.05)');
+      grad.addColorStop(0.5, 'rgba(148, 163, 184, 0.16)');
+      grad.addColorStop(1, 'rgba(203, 213, 225, 0.05)');
       ctx.fillStyle = grad;
       ctx.fill();
-      ctx.strokeStyle = 'rgba(196, 181, 253, 0.7)';
-      ctx.lineWidth = 1.3;
+      ctx.strokeStyle = 'rgba(226, 232, 240, 0.5)';
+      ctx.lineWidth = 1.1;
       ctx.stroke();
 
-      // Ventral ribs — Delicate Lavender Soundwaves
+      // Ventral ribs — Delicate Platinum Soundwaves
       for (let i = -3; i <= 3; i++) {
         const rx = i * (len * 0.1);
         ctx.beginPath();
         ctx.moveTo(rx, -wid * 0.4);
         ctx.lineTo(rx, wid * 0.4);
-        ctx.strokeStyle = 'rgba(216, 180, 254, 0.25)';
-        ctx.lineWidth = 0.9;
+        ctx.strokeStyle = 'rgba(203, 213, 225, 0.20)';
+        ctx.lineWidth = 0.8;
         ctx.stroke();
       }
 
-      // Lateral Pectoral Flippers — Translucent Celestial Azure
+      // Lateral Pectoral Flippers — Translucent Frosted Silver
       ctx.beginPath();
       ctx.moveTo(len * 0.1, -wid * 0.45);
       ctx.lineTo(len * 0.2, -wid * 1.1);
       ctx.lineTo(0, -wid * 0.5);
-      ctx.fillStyle = 'rgba(56, 189, 248, 0.22)';
+      ctx.fillStyle = 'rgba(226, 232, 240, 0.12)';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
+      ctx.strokeStyle = 'rgba(203, 213, 225, 0.5)';
       ctx.stroke();
 
       ctx.beginPath();
@@ -827,21 +827,21 @@
       // Dual translucent fluttering wings
       const wingW = sz * Math.abs(flap);
 
-      // Top wing: Translucent Opal Pink
+      // Top wing: Translucent Frosted Crystal
       ctx.beginPath();
       ctx.ellipse(-sz * 0.2, -wingW * 0.7, sz * 0.7, wingW, -0.4, 0, PI * 2);
-      ctx.fillStyle = 'rgba(244, 114, 182, 0.28)';
+      ctx.fillStyle = 'rgba(241, 245, 249, 0.16)';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(244, 114, 182, 0.85)';
+      ctx.strokeStyle = 'rgba(226, 232, 240, 0.55)';
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      // Bottom wing: Translucent Seafoam Mint
+      // Bottom wing: Translucent Opal Ivory
       ctx.beginPath();
       ctx.ellipse(-sz * 0.2, wingW * 0.7, sz * 0.7, wingW, 0.4, 0, PI * 2);
-      ctx.fillStyle = 'rgba(52, 211, 153, 0.28)';
+      ctx.fillStyle = 'rgba(253, 230, 138, 0.12)';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(52, 211, 153, 0.85)';
+      ctx.strokeStyle = 'rgba(252, 211, 77, 0.50)';
       ctx.lineWidth = 1;
       ctx.stroke();
 

@@ -96,7 +96,7 @@ NG.views.nodeJoin = {
                     margin-bottom: 20px;
                 }
                 .ng-device-card {
-                    background: linear-gradient(145deg, #131b2c, #0b101c);
+                    background: linear-gradient(145deg, #161b26, #10141e);
                     border: 1px solid rgba(255, 255, 255, 0.08);
                     box-shadow: 6px 6px 16px rgba(0,0,0,0.6), -4px -4px 12px rgba(255,255,255,0.03);
                     border-radius: 14px;
@@ -401,7 +401,7 @@ NG.views.nodeJoin = {
                                             ● ${s.latencyMs}ms
                                         </span>
                                         <span>•</span>
-                                        <span style="color:#38bdf8;">${s.networkType || 'LAN'}</span>
+                                        <span style="color:var(--ng-accent);">${s.networkType || 'LAN'}</span>
                                     </div>
                                 </div>
                             </div>
