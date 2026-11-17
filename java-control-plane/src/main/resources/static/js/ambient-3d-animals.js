@@ -75,7 +75,7 @@
       this.canvas.style.pointerEvents = 'none';
       this.canvas.style.zIndex = '0';
       // Soft, delicate, ethereal transparency: non-distracting background presence
-      this.canvas.style.opacity = '0.20';
+      this.canvas.style.opacity = '0.14';
 
       const parent = container || document.body;
       parent.insertBefore(this.canvas, parent.firstChild);
@@ -747,12 +747,12 @@
       ctx.moveTo(len * 0.1, wid * 0.45);
       ctx.lineTo(len * 0.2, wid * 1.1);
       ctx.lineTo(0, wid * 0.5);
-      ctx.fillStyle = 'rgba(56, 189, 248, 0.22)';
+      ctx.fillStyle = 'rgba(226, 232, 240, 0.16)';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
+      ctx.strokeStyle = 'rgba(203, 213, 225, 0.5)';
       ctx.stroke();
 
-      // Massive Fluke Tail — Royal Shimmering Violet
+      // Massive Fluke Tail — Translucent Moonlight Platinum
       const tailX = -len * 0.5;
       ctx.beginPath();
       ctx.moveTo(tailX, 0);
@@ -760,18 +760,18 @@
       ctx.lineTo(tailX - 16 * scale, flukeWave * 0.5);
       ctx.lineTo(tailX - 22 * scale, wid * 0.8 + flukeWave);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(139, 92, 246, 0.32)';
+      ctx.fillStyle = 'rgba(241, 245, 249, 0.18)';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(196, 181, 253, 0.8)';
+      ctx.strokeStyle = 'rgba(226, 232, 240, 0.65)';
       ctx.lineWidth = 1.1;
       ctx.stroke();
 
-      // Constellation spine LEDs
+      // Constellation spine LEDs — Soft Champagne & Platinum Stardust
       for (let i = -4; i <= 3; i++) {
         const sx = i * (len * 0.09);
         ctx.beginPath();
         ctx.arc(sx, 0, 1.8 * scale, 0, PI * 2);
-        ctx.fillStyle = i % 2 === 0 ? '#38bdf8' : '#e879f9';
+        ctx.fillStyle = i % 2 === 0 ? '#fef08a' : '#f8fafc';
         ctx.shadowBlur = 6;
         ctx.shadowColor = ctx.fillStyle;
         ctx.fill();

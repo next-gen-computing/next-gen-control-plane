@@ -111,9 +111,9 @@
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     box-shadow:
-        8px 8px 24px rgba(0, 0, 0, 0.65),
-        -6px -6px 18px rgba(255, 255, 255, 0.035),
-        0 0 0 1px rgba(0, 212, 255, 0.12) inset;
+        7px 7px 20px rgba(0, 0, 0, 0.65),
+        -4px -4px 14px rgba(255, 255, 255, 0.035),
+        inset 1px 1px 1px rgba(255, 255, 255, 0.06);
     transition: transform var(--ng-motion-base) ease,
                 border-color var(--ng-motion-base) ease,
                 box-shadow var(--ng-motion-base) ease;
@@ -129,19 +129,19 @@
     content: '';
     position: absolute;
     inset: 0;
-    background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(0,212,255,0.06), transparent);
+    background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(59, 130, 246, 0.08), transparent);
     pointer-events: none;
     opacity: 0;
     transition: opacity var(--ng-motion-base) ease;
 }
 
 .ng-role-card:hover {
-    border-color: rgba(0, 212, 255, 0.4);
+    border-color: rgba(59, 130, 246, 0.35);
     transform: translateY(-3px);
     box-shadow:
-        0 0 0 1px rgba(0, 212, 255, 0.20) inset,
-        0 32px 64px rgba(0,0,0,0.6),
-        0 0 40px rgba(0, 212, 255, 0.12);
+        9px 9px 26px rgba(0, 0, 0, 0.75),
+        -5px -5px 18px rgba(255, 255, 255, 0.045),
+        0 4px 20px rgba(59, 130, 246, 0.15);
 }
 
 .ng-role-card:hover::after { opacity: 1; }
@@ -178,18 +178,18 @@
     flex-direction: column;
     gap: var(--ng-space-4);
     box-shadow:
-        0 0 0 1px rgba(0, 212, 255, 0.04) inset,
-        0 16px 40px rgba(0,0,0,0.4);
+        6px 6px 18px rgba(0, 0, 0, 0.60),
+        -3px -3px 10px rgba(255, 255, 255, 0.035);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
 }
 
 .ng-card-hero {
-    border-color: rgba(0, 212, 255, 0.20);
+    border-color: rgba(59, 130, 246, 0.25);
     box-shadow:
-        0 0 0 1px rgba(0, 212, 255, 0.10) inset,
-        0 0 60px rgba(0, 212, 255, 0.06),
-        0 24px 56px rgba(0,0,0,0.5);
+        8px 8px 24px rgba(0, 0, 0, 0.70),
+        -4px -4px 14px rgba(255, 255, 255, 0.045),
+        0 4px 20px rgba(59, 130, 246, 0.10);
 }
 
 /* ══════════════════════════════════════
@@ -226,7 +226,7 @@
 .ng-input::placeholder { color: var(--ng-text-subtle); }
 
 .ng-input:hover {
-    border-color: rgba(0, 212, 255, 0.30);
+    border-color: rgba(59, 130, 246, 0.35);
 }
 
 .ng-input:focus {
@@ -286,7 +286,7 @@
 .ng-button-secondary:hover:not(:disabled) {
     color: var(--ng-text);
     border-color: var(--ng-accent);
-    box-shadow: 0 0 16px rgba(0, 212, 255, 0.10);
+    box-shadow: 4px 4px 12px rgba(0, 0, 0, 0.5), -2px -2px 6px rgba(255, 255, 255, 0.03);
 }
 
 .ng-button-ghost {
@@ -435,7 +435,7 @@
     padding: 6px var(--ng-space-4);
     font-size: var(--ng-font-size-2xs);
     color: var(--ng-text-muted);
-    background: rgba(0, 212, 255, 0.03);
+    background: rgba(255, 255, 255, 0.02);
     border-bottom: 1px solid var(--ng-border);
 }
 
@@ -515,9 +515,9 @@
 }
 
 .ng-auth-tab.is-active {
-    background: var(--ng-glass-surface);
+    background: var(--ng-surface-raised);
     color: var(--ng-accent);
-    box-shadow: 0 0 12px rgba(0, 212, 255, 0.15);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 .ng-button-github {
@@ -597,7 +597,7 @@
     font-weight: 700;
     letter-spacing: 0.20em;
     background: var(--ng-input-surface);
-    border: 1px dashed rgba(0, 212, 255, 0.25);
+    border: 1px dashed rgba(59, 130, 246, 0.35);
     border-radius: var(--ng-radius-sm);
     padding: var(--ng-space-4);
     color: var(--ng-accent);
@@ -625,7 +625,7 @@
 
 .ng-account-switch-item:hover {
     border-color: var(--ng-accent);
-    box-shadow: 0 0 12px rgba(0, 212, 255, 0.10);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 /* ══════════════════════════════════════
@@ -647,7 +647,7 @@
 .ng-badge-warn     { background: var(--ng-warn-surface);     color: var(--ng-status-warning);  border: 1px solid rgba(255,170,0,0.25); }
 .ng-badge-critical { background: var(--ng-danger-surface);   color: var(--ng-status-critical); border: 1px solid rgba(255,50,80,0.25); }
 .ng-badge-unknown  { background: rgba(107,123,158,0.12);     color: var(--ng-status-unknown);  border: 1px solid rgba(107,123,158,0.25); }
-.ng-badge-accent   { background: var(--ng-accent-soft);      color: var(--ng-accent);          border: 1px solid rgba(0,212,255,0.25); }
+.ng-badge-accent   { background: var(--ng-accent-soft);      color: var(--ng-accent);          border: 1px solid rgba(59, 130, 246, 0.25); }
 
 /* ══════════════════════════════════════
    DIVIDER

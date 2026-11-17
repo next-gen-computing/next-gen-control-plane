@@ -7,36 +7,38 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
   <style>
     :root {
-      /* Surface System: Deep Charcoal Obsidian with Warm Titanium Accents */
-      --bg-dark: #0b0f17;
-      --bg-card: linear-gradient(145deg, #151a24, #0f141d);
-      --bg-card-hover: linear-gradient(145deg, #19202c, #121722);
+      /* Surface System: Deep Obsidian Slate (ui-ux-pro-max developer dashboard) */
+      --bg-dark: #0a0e17;
+      --bg-card: linear-gradient(145deg, #141a24, #0f141d);
+      --bg-card-hover: linear-gradient(145deg, #18202c, #111722);
+      --bg-inset: #0c1017;
 
-      /* Pure Neumorphic Tactile Elevation */
-      --card-shadow: 7px 7px 18px rgba(0, 0, 0, 0.60), -4px -4px 14px rgba(255, 255, 255, 0.035);
-      --card-shadow-hover: 10px 10px 26px rgba(0, 0, 0, 0.70), -6px -6px 18px rgba(255, 255, 255, 0.045);
-      --inset-shadow: inset 3px 3px 7px rgba(0, 0, 0, 0.75), inset -2px -2px 5px rgba(255, 255, 255, 0.025);
-      --btn-shadow: 4px 4px 10px rgba(0, 0, 0, 0.55), -2px -2px 6px rgba(255, 255, 255, 0.035);
+      /* Double light-source Dark Neumorphic Elevation */
+      --card-shadow: 6px 6px 16px rgba(0, 0, 0, 0.65), -3px -3px 10px rgba(255, 255, 255, 0.035);
+      --card-shadow-hover: 8px 8px 22px rgba(0, 0, 0, 0.75), -4px -4px 14px rgba(255, 255, 255, 0.05);
+      --inset-shadow: inset 3px 3px 7px rgba(0, 0, 0, 0.70), inset -2px -2px 5px rgba(255, 255, 255, 0.025);
+      --btn-shadow: 3px 3px 8px rgba(0, 0, 0, 0.55), -2px -2px 6px rgba(255, 255, 255, 0.035);
       --btn-active: inset 2px 2px 5px rgba(0, 0, 0, 0.75), inset -1px -1px 3px rgba(255, 255, 255, 0.03);
 
-      --border-color: rgba(255, 255, 255, 0.07);
-      --border-glow: rgba(59, 130, 246, 0.35);
+      --border-color: rgba(255, 255, 255, 0.06);
+      --border-top-highlight: rgba(255, 255, 255, 0.10);
+      --border-glow: rgba(37, 99, 235, 0.35);
 
-      /* Executive Precision Palette (No AI neon soup) */
-      --primary: #3b82f6;          /* Cobalt Sapphire */
-      --primary-hover: #2563eb;
-      --cyan: #38bdf8;             /* Sky Steel */
-      --green: #10b981;            /* Emerald */
-      --amber: #f59e0b;            /* Golden Amber */
-      --red: #ef4444;              /* Coral Red */
-      --purple: #8b5cf6;           /* Slate Violet */
+      /* Developer Tool & Cloud Precision Palette (ui-ux-pro-max-skill) */
+      --primary: #2563eb;          /* Precision Cobalt Blue */
+      --primary-hover: #1d4ed8;
+      --accent: #3b82f6;           /* Sky Blue Focus */
+      --green: #10b981;            /* Emerald Run */
+      --amber: #f59e0b;            /* Golden Amber Warning */
+      --red: #ef4444;              /* Coral Red Crash */
+      --slate-steel: #64748b;
 
-      --text-main: #f1f5f9;
+      --text-main: #f8fafc;
       --text-muted: #94a3b8;
       --text-subtle: #64748b;
 
-      --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-      --font-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, Menlo, monospace;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -47,29 +49,36 @@
       overflow-x: hidden;
       min-height: 100vh;
       background-image: 
-        radial-gradient(circle at 50% -10%, rgba(59, 130, 246, 0.04) 0%, transparent 60%),
-        radial-gradient(circle at 85% 30%, rgba(148, 163, 184, 0.03) 0%, transparent 50%),
+        radial-gradient(circle at 50% -10%, rgba(37, 99, 235, 0.04) 0%, transparent 60%),
+        radial-gradient(circle at 85% 30%, rgba(100, 116, 139, 0.03) 0%, transparent 50%),
         linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
         linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
       background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
     }
 
-    /* ── Responsive Neumorphic Header ── */
+    /* ── Responsive Neumorphic Header (ui-ux-pro-max standard) ── */
     header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 12px 24px;
+      padding: 10px 24px;
       border-bottom: 1px solid var(--border-color);
-      background: rgba(13, 17, 23, 0.92);
+      background: rgba(11, 15, 23, 0.90);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       position: sticky;
       top: 0;
       z-index: 100;
-      gap: 12px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+      gap: 16px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.50);
       transition: all 0.2s ease;
+    }
+
+    .header-main-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
     }
 
     .brand {
@@ -91,7 +100,7 @@
       font-size: 1.05rem;
       font-weight: 700;
       letter-spacing: -0.2px;
-      color: #f1f5f9;
+      color: #f8fafc;
       display: flex;
       align-items: center;
       gap: 8px;
@@ -100,9 +109,9 @@
       font-size: 0.68rem;
       padding: 2px 6px;
       border-radius: 4px;
-      background: rgba(59, 130, 246, 0.12);
-      border: 1px solid rgba(59, 130, 246, 0.25);
-      color: #60a5fa;
+      background: rgba(37, 99, 235, 0.15);
+      border: 1px solid rgba(37, 99, 235, 0.3);
+      color: #93c5fd;
       font-weight: 600;
       letter-spacing: 0.5px;
     }
@@ -113,11 +122,16 @@
       margin-top: 1px;
     }
 
+    .header-status-slot {
+      display: flex;
+      align-items: center;
+    }
+
     .header-actions {
       display: flex;
       align-items: center;
       gap: 8px;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       justify-content: flex-end;
     }
 
@@ -129,16 +143,17 @@
       border-radius: 20px;
       font-size: 0.78rem;
       font-weight: 600;
-      background: #0d1117;
+      background: #090d14;
       box-shadow: var(--inset-shadow);
       border: 1px solid rgba(16, 185, 129, 0.35);
       color: var(--green);
       transition: all 0.3s ease;
       white-space: nowrap;
+      flex-shrink: 0;
     }
     .topology-badge.local {
-      border-color: rgba(59, 130, 246, 0.35);
-      color: var(--primary);
+      border-color: rgba(37, 99, 235, 0.35);
+      color: #60a5fa;
     }
     .pulse-dot {
       width: 7px; height: 7px; border-radius: 50%;
@@ -151,28 +166,32 @@
     }
 
     .select-dropdown {
-      background: #0d1117;
+      background: #090d14;
       box-shadow: inset 3px 3px 6px rgba(0, 0, 0, 0.75), inset -2px -2px 4px rgba(255, 255, 255, 0.025);
       border: 1px solid rgba(255, 255, 255, 0.08);
       color: var(--text-main);
       padding: 7px 12px;
-      border-radius: 8px;
+      border-radius: 9px;
       font-size: 0.78rem;
       font-weight: 500;
       cursor: pointer;
       outline: none;
       transition: border-color 0.2s, box-shadow 0.2s;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
     .select-dropdown:focus {
       border-color: var(--primary);
-      box-shadow: inset 3px 3px 6px rgba(0, 0, 0, 0.75), 0 0 8px rgba(59, 130, 246, 0.3);
+      box-shadow: inset 3px 3px 6px rgba(0, 0, 0, 0.75), 0 0 8px rgba(37, 99, 235, 0.3);
     }
 
     /* ── Neumorphic Tactile Buttons ── */
     .btn {
-      background: linear-gradient(145deg, #161b26, #10141e);
+      background: linear-gradient(145deg, #171e2c, #101520);
       box-shadow: var(--btn-shadow);
-      border: 1px solid rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      border-left: 1px solid rgba(255, 255, 255, 0.08);
       color: var(--text-main);
       padding: 7px 14px;
       border-radius: 9px;
@@ -185,11 +204,12 @@
       gap: 6px;
       white-space: nowrap;
       text-decoration: none;
+      flex-shrink: 0;
     }
     .btn:hover {
-      background: linear-gradient(145deg, #1a2230, #131924);
+      background: linear-gradient(145deg, #1d2738, #131a28);
       border-color: rgba(255, 255, 255, 0.14);
-      box-shadow: 5px 5px 12px rgba(0, 0, 0, 0.65), -3px -3px 8px rgba(255, 255, 255, 0.045);
+      box-shadow: 5px 5px 14px rgba(0, 0, 0, 0.65), -3px -3px 8px rgba(255, 255, 255, 0.05);
       transform: translateY(-1px);
     }
     .btn:active {
@@ -199,7 +219,7 @@
     .btn-primary {
       background: linear-gradient(135deg, #2563eb, #1d4ed8);
       color: #ffffff;
-      border: 1px solid rgba(255, 255, 255, 0.16);
+      border: 1px solid rgba(255, 255, 255, 0.18);
       box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35), var(--btn-shadow);
     }
     .btn-primary:hover {
@@ -207,7 +227,7 @@
       box-shadow: 0 6px 18px rgba(37, 99, 235, 0.5), var(--btn-shadow);
     }
     .btn-connect-laptops {
-      background: linear-gradient(145deg, rgba(16, 185, 129, 0.10), rgba(6, 78, 59, 0.20));
+      background: linear-gradient(145deg, rgba(16, 185, 129, 0.12), rgba(5, 150, 105, 0.22));
       border: 1px solid rgba(16, 185, 129, 0.35);
       color: var(--green);
       font-weight: 700;
@@ -217,7 +237,7 @@
       box-shadow: 0 0 14px rgba(16, 185, 129, 0.25), var(--btn-shadow);
     }
     .btn-warn {
-      background: linear-gradient(145deg, rgba(245, 158, 11, 0.10), rgba(120, 53, 15, 0.20));
+      background: linear-gradient(145deg, rgba(245, 158, 11, 0.12), rgba(180, 83, 9, 0.22));
       border: 1px solid rgba(245, 158, 11, 0.35);
       color: var(--amber);
     }
@@ -226,7 +246,7 @@
       box-shadow: 0 0 14px rgba(245, 158, 11, 0.25), var(--btn-shadow);
     }
     .btn-danger {
-      background: linear-gradient(145deg, rgba(239, 68, 68, 0.10), rgba(127, 29, 29, 0.20));
+      background: linear-gradient(145deg, rgba(239, 68, 68, 0.12), rgba(185, 28, 28, 0.22));
       border: 1px solid rgba(239, 68, 68, 0.35);
       color: var(--red);
     }
@@ -236,84 +256,61 @@
     }
     .btn-sm { padding: 4px 10px; font-size: 0.72rem; }
 
-    /* ── Responsive Header Layout Breakpoints (Fluid on Compact/Minimized Screens) ── */
-    @media (max-width: 1100px) {
+    /* ── Responsive Header Breakpoints (Fluid across Ultrawide, Standard, Minimized & Mobile) ── */
+    @media (max-width: 1040px) {
       header {
+        flex-direction: column;
+        align-items: stretch;
         padding: 10px 16px;
-        gap: 10px;
+        gap: 8px;
+      }
+      .header-main-row {
+        width: 100%;
+        justify-content: space-between;
       }
       .brand-subtitle {
         display: none;
       }
-      .btn {
-        padding: 6px 11px;
-        font-size: 0.76rem;
+      .header-actions {
+        width: 100%;
+        justify-content: flex-start;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 2px;
       }
+      .header-actions::-webkit-scrollbar { display: none; }
       .select-dropdown {
-        padding: 6px 10px;
-        font-size: 0.76rem;
         max-width: 170px;
       }
     }
 
-    @media (max-width: 860px) {
+    @media (max-width: 640px) {
       header {
-        flex-wrap: wrap;
-        padding: 10px 14px;
-        gap: 8px;
-      }
-      .brand {
-        flex: 1 1 auto;
-      }
-      .header-actions {
-        width: 100%;
-        justify-content: flex-start;
-        display: flex;
+        padding: 8px 12px;
         gap: 6px;
-        overflow-x: auto;
-        padding-bottom: 2px;
-        scrollbar-width: none;
       }
-      .header-actions::-webkit-scrollbar { display: none; }
-      .select-dropdown {
-        flex: 1 1 140px;
-        min-width: 130px;
-      }
-      .topology-badge {
-        padding: 5px 10px;
-        font-size: 0.74rem;
-      }
-      .btn {
-        flex: 0 0 auto;
-      }
-    }
-
-    @media (max-width: 520px) {
-      header {
-        padding: 8px 10px;
+      .brand-logo {
+        width: 32px; height: 32px; font-size: 16px;
       }
       .brand-title {
         font-size: 0.95rem;
       }
-      .header-actions {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 6px;
-        overflow-x: visible;
+      .brand-ver {
+        font-size: 0.62rem;
       }
       .topology-badge {
-        grid-column: 1 / -1;
-        justify-content: center;
-      }
-      .select-dropdown {
-        grid-column: 1 / -1;
-        width: 100%;
+        padding: 4px 10px;
+        font-size: 0.72rem;
       }
       .btn {
-        justify-content: center;
-        padding: 7px 6px;
-        font-size: 0.72rem;
-        width: 100%;
+        padding: 6px 10px;
+        font-size: 0.74rem;
+      }
+      .select-dropdown {
+        padding: 6px 8px;
+        font-size: 0.74rem;
+        max-width: 145px;
       }
     }
 
@@ -529,25 +526,29 @@
 </head>
 <body>
 
-  <!-- Top Header Navigation -->
+  <!-- Top Header Navigation (Adaptive Multi-tier on Compact/Split Screens) -->
   <header>
-    <div class="brand">
-      <div class="brand-logo">⚡</div>
-      <div>
-        <div class="brand-title">
-          <span>Next-Gen Control Plane</span>
-          <span class="brand-ver">v2.4</span>
+    <div class="header-main-row">
+      <div class="brand">
+        <div class="brand-logo">⚡</div>
+        <div>
+          <div class="brand-title">
+            <span>Next-Gen Control Plane</span>
+            <span class="brand-ver">v2.4</span>
+          </div>
+          <div class="brand-subtitle">Distributed Autonomous Edge Orchestrator</div>
         </div>
-        <div class="brand-subtitle">Distributed Autonomous Edge Orchestrator</div>
+      </div>
+
+      <div class="header-status-slot">
+        <div id="topologyBadge" class="topology-badge local">
+          <span class="pulse-dot"></span>
+          <span id="topologyLabel">Detecting Topology...</span>
+        </div>
       </div>
     </div>
 
-    <div class="header-actions">
-      <div id="topologyBadge" class="topology-badge local">
-        <span class="pulse-dot"></span>
-        <span id="topologyLabel">Detecting Topology...</span>
-      </div>
-
+    <div class="header-actions" role="toolbar" aria-label="Control plane actions">
       <select id="topologySelect" class="select-dropdown" title="Topology Presentation Mode">
         <option value="auto">Mode: Live Auto-Detect</option>
         <option value="single">Preset: Single Machine (Same Laptop)</option>

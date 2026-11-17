@@ -45,10 +45,10 @@ NG.views.nodeJoin = {
                     color: var(--ng-text);
                 }
                 .ng-tab-btn.active {
-                    background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(0, 119, 255, 0.2));
+                    background: linear-gradient(135deg, rgba(37, 99, 235, 0.25), rgba(30, 64, 175, 0.25));
                     border-color: var(--ng-accent);
                     color: #fff;
-                    box-shadow: 0 0 14px rgba(0, 212, 255, 0.35);
+                    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25), var(--ng-btn-shadow);
                 }
 
                 /* Quick Share Radar Animation */
@@ -56,8 +56,8 @@ NG.views.nodeJoin = {
                     position: relative;
                     width: 100%;
                     padding: 24px;
-                    background: radial-gradient(circle at 50% 50%, rgba(14, 28, 54, 0.6) 0%, rgba(6, 10, 20, 0.8) 100%);
-                    border: 1px solid rgba(0, 212, 255, 0.2);
+                    background: radial-gradient(circle at 50% 50%, rgba(20, 26, 36, 0.6) 0%, rgba(11, 15, 23, 0.8) 100%);
+                    border: 1px solid rgba(255, 255, 255, 0.08);
                     border-radius: 16px;
                     margin-bottom: 20px;
                     text-align: center;
@@ -76,7 +76,7 @@ NG.views.nodeJoin = {
                 .ng-radar-circle {
                     position: absolute;
                     inset: 0;
-                    border: 1.5px solid rgba(0, 212, 255, 0.4);
+                    border: 1.5px solid rgba(59, 130, 246, 0.35);
                     border-radius: 50%;
                     animation: ng-radar-pulse 2.8s cubic-bezier(0.2, 0.8, 0.4, 1) infinite;
                 }
@@ -121,14 +121,14 @@ NG.views.nodeJoin = {
                     width: 44px;
                     height: 44px;
                     border-radius: 12px;
-                    background: linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(0, 255, 136, 0.15));
-                    border: 1px solid rgba(0, 212, 255, 0.3);
+                    background: linear-gradient(135deg, rgba(37, 99, 235, 0.15), rgba(16, 185, 129, 0.15));
+                    border: 1px solid rgba(37, 99, 235, 0.3);
                     display: flex;
                     align-items: center;
                     justify-content: center;
                     font-size: 22px;
                     flex-shrink: 0;
-                    box-shadow: 0 0 12px rgba(0, 212, 255, 0.2);
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
                 }
                 .ng-device-title {
                     font-size: 15px;
