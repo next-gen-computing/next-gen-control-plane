@@ -34,8 +34,8 @@ import java.util.function.BooleanSupplier;
 public class RiskMonitor implements Runnable {
     private static final Logger LOG = LoggerFactory.getLogger(RiskMonitor.class);
 
-    /** How often the monitor re-scores every alive node. */
-    public static final long DEFAULT_CHECK_INTERVAL_MS = 5_000;
+    /** How often the monitor re-scores every alive node (4-second cycle per user architecture). */
+    public static final long DEFAULT_CHECK_INTERVAL_MS = 4_000;
 
     private final NodeRegistry registry;
     private final NodeHistory history;

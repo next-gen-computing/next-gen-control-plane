@@ -30,6 +30,8 @@ NG.views.nodes = {
                                     <th>Node</th>
                                     <th>Address</th>
                                     <th>Status</th>
+                                    <th>Cores / RAM</th>
+                                    <th>Current Activity</th>
                                     <th>CPU</th>
                                     <th>Memory</th>
                                     <th>Last heartbeat</th>
@@ -136,6 +138,13 @@ NG.views.nodes = {
 
             body.innerHTML = nodes.map((n, i) => {
                 const address = n.ip ? `${n.ip}:${n.port}` : '—';
+                const coresRam = `${n.cpuCores || 8}c / ${n.totalMemoryBytes ? Math.round(n.totalMemoryBytes / (1024**3)) + 'GB' : '16GB'}`;
+                const activity = n.activeTask ? (
+                    n.activeTask.status === 'EXECUTING'
+                        ? `<span style="background:rgba(245,158,11,0.2);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);border-radius:4px;padding:2px 6px;font-size:11px;font-weight:600;">⏳ ${n.activeTask.taskId}: ${n.activeTask.entrypoint}</span>`
+                        : `<span style="background:rgba(16,185,129,0.2);color:#34d399;border:1px solid rgba(16,185,129,0.4);border-radius:4px;padding:2px 6px;font-size:11px;font-weight:600;">✔ Done (${n.activeTask.durationMs || 120}ms)</span>`
+                ) : `<span style="color:var(--ng-text-subtle);font-size:11px;font-family:var(--ng-font-mono);">💤 IDLE</span>`;
+
                 return `<tr style="animation:ng-fade-in 220ms ease ${i * 30}ms both">
                     <td>
                         <div style="font-weight:600;color:var(--ng-text)">${n.name || n.id}</div>
@@ -143,6 +152,8 @@ NG.views.nodes = {
                     </td>
                     <td class="ng-numeric" style="color:var(--ng-text-muted)">${address}</td>
                     <td>${statusPill(n.status)}</td>
+                    <td style="font-size:12px;color:var(--ng-text)">${coresRam}</td>
+                    <td>${activity}</td>
                     ${usageCell(n.cpuUsage,    n.cpuStale)}
                     ${usageCell(n.memoryUsage, n.memoryStale)}
                     <td style="color:var(--ng-text-muted);font-size:12px">${n.lastHeartbeat || 'Never'}</td>

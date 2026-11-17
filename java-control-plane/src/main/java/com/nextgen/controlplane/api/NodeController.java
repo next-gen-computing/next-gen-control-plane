@@ -96,22 +96,34 @@ public class NodeController {
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static Map<String, Object> nodeToMap(NodeRecord n, long now) {
-        return Map.ofEntries(
-                Map.entry("nodeId", n.getNodeId()),
-                Map.entry("hostname", n.getHostname()),
-                Map.entry("ip", n.getIp()),
-                Map.entry("port", n.getPort()),
-                Map.entry("status", n.getStatusName()),
-                Map.entry("agentVersion", n.getAgentVersion()),
-                Map.entry("cpuCores", n.getCapabilities().getCpuCores()),
-                Map.entry("totalMemoryBytes", n.getCapabilities().getTotalMemoryBytes()),
-                Map.entry("osName", n.getCapabilities().getOsName()),
-                Map.entry("cpuUsage", n.isCpuStale() ? null : n.getCpuUsage()),
-                Map.entry("memoryUsage", n.isMemoryStale() ? null : n.getMemoryUsage()),
-                Map.entry("cpuStale", n.isCpuStale()),
-                Map.entry("memoryStale", n.isMemoryStale()),
-                Map.entry("lastHeartbeatMs", n.getLastHeartbeatMillis()),
-                Map.entry("heartbeatAgeMs", now - n.getLastHeartbeatMillis())
-        );
+        Map<String, Object> map = new java.util.LinkedHashMap<>();
+        map.put("nodeId", n.getNodeId());
+        map.put("hostname", n.getHostname());
+        map.put("ip", n.getIp());
+        map.put("port", n.getPort());
+        map.put("status", n.getStatusName());
+        map.put("agentVersion", n.getAgentVersion());
+        map.put("cpuCores", n.getCapabilities().getCpuCores());
+        map.put("totalMemoryBytes", n.getCapabilities().getTotalMemoryBytes());
+        map.put("osName", n.getCapabilities().getOsName());
+        map.put("cpuUsage", n.isCpuStale() ? null : n.getCpuUsage());
+        map.put("memoryUsage", n.isMemoryStale() ? null : n.getMemoryUsage());
+        map.put("cpuStale", n.isCpuStale());
+        map.put("memoryStale", n.isMemoryStale());
+        map.put("lastHeartbeatMs", n.getLastHeartbeatMillis());
+        map.put("heartbeatAgeMs", now - n.getLastHeartbeatMillis());
+        map.put("riskScore", n.getRiskScore());
+        map.put("atRisk", n.isAtRisk());
+        map.put("riskReasons", n.getRiskReasons());
+        map.put("riskAssessedAtMillis", n.getRiskAssessedAtMillis());
+
+        Map<String, Object> active = CustomTaskExecutionController.getActiveTaskForNode(n.getNodeId());
+        if (active == null) {
+            active = CustomTaskExecutionController.getActiveTaskForNode(n.getHostname());
+        }
+        if (active != null) {
+            map.put("activeTask", active);
+        }
+        return map;
     }
 }
